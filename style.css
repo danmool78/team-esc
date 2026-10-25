@@ -246,6 +246,25 @@ label.btn{flex-direction:row;justify-content:center;align-items:center;gap:4px}
 .login .btn.google .ico{width:22px;height:22px}
 .login-alt{color:#c9cfe0;font-size:14px;margin:16px 0 4px}
 .login .msg{margin:6px 0 0}
+/* 세로 폰: 카드가 화면 높이의 2/3 정도로 — 글자·칸·버튼을 한 단계 작게, 위쪽 그림은 더 보이게 */
+@media (max-aspect-ratio: 1/1) {
+  .gate{padding-top:calc(env(safe-area-inset-top) + 62vw)}
+  .card.login{width:min(360px,100%);padding:16px 18px 12px;border-radius:18px}
+  .login-title{margin:2px 0 4px}
+  .login-title .logo-title{width:200px}
+  .login-sub{font-size:12.5px;margin-bottom:10px}
+  .login-form{gap:8px}
+  .fl{gap:4px;font-size:12.5px}
+  .field{height:40px;border-radius:9px}
+  .field input{font-size:14px}
+  .field i .ico,.eye .ico{width:18px;height:18px}
+  .login-opts{font-size:12.5px}
+  .check span{width:17px;height:17px}
+  .btn.goldbtn,.login .btn.google{height:42px;font-size:15px;border-radius:10px}
+  .login .btn.google .ico{width:19px;height:19px}
+  .login .or{margin:10px 0 8px;font-size:11px}
+  .login-alt{font-size:12.5px;margin:10px 0 2px}
+}
 /* 높이가 낮은 화면(가로로 눕힌 폰 등): 카드를 촘촘하게 (넘치면 카드째 위아래로 밀어 본다) */
 @media (max-height: 640px) {
   .card.login{padding:16px 20px 12px}
