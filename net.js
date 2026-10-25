@@ -1,7 +1,7 @@
 /* Firebase: 로그인(이메일·구글)과 실시간 데이터베이스.
    자료 구조 (database.rules.json과 같게)
      users/{uid}                 { name, gender, avatar }
-     games/{code}/meta           { name, host, hosts{uid:true}, mode: team|solo, center{lat,lng}, radius, layer, status: ready|live|ended, created }
+     games/{code}/meta           { name, host, hosts{uid:true}, mode: team|solo, endAt(끝나는 시각 ms), center{lat,lng}, radius, layer, status: ready|live|ended, created }
                                  host = 게임을 만든 진행자(바꿀 수 없음), hosts = 그가 회원 중에서 더한 진행자(host·hosts 말고는 똑같이 진행)
      games/{code}/teams/{tid}    { name, color }
      games/{code}/members/{uid}  { name, avatar, team, online, joined }

@@ -1,4 +1,4 @@
-/* 비전현장미션 — 팀 미션 앱.
+/* 비전 퀘스트 — 팀 미션 앱.
    흐름: 로그인(구글·이메일) → 별칭·인형(처음 한 번) → 게임 코드로 들어가기 / 진행자는 새 게임 만들기 → 팀 고르기 → 3D 지도
    지도: 실제 GPS 좌표를 몇 초마다 올리고, 모두의 좌표를 받아 미니미 인형이 그 자리까지 걸어가게 한다.
    점수판: 팀마다 해낸 미션 수와 점수를 위에 늘 보이고, 바뀌는 순간 반짝인다 */
@@ -143,6 +143,9 @@ $('#createForm').onsubmit = async e => {
 /* ---------- 게임 ---------- */
 const G = { code: null, meta: {}, teams: {}, members: {}, pos: {}, missions: {}, done: {}, pdone: {}, feed: [], off: null, areaKey: '' };
 const myTeam = () => G.members[net.me()]?.team || '';
+// 진행 중: 진행자가 시작했고, 끝나는 시간(endAt)이 있으면 아직 그 전 (규칙도 같은 조건으로 막는다)
+const timeUp = () => !!G.meta.endAt && Date.now() >= G.meta.endAt;
+const isLive = () => G.meta.status === 'live' && !timeUp();
 // 진행자: 게임을 만든 사람(host)과, 그가 회원 중에서 더한 사람들(hosts)
 const isOwner = () => G.meta.host === net.me();
 const isHostUid = uid => uid === G.meta.host || G.meta.hosts?.[uid] === true;
@@ -199,6 +202,10 @@ async function enter(code) {
 function onMeta() {
   $('#gName').textContent = G.meta.name || '';
   $('#gStatus').textContent = `${STATUS[G.meta.status] || ''} · 코드 ${G.code}`;
+  // 끝나는 시간이 새로 정해지거나 바뀌면 (처음 들어올 때 말고) 폰을 울려 알린다 — 글은 소식으로 함께 온다
+  if (G.endSeen !== undefined && G.meta.endAt !== G.endSeen) { navigator.vibrate?.([200, 100, 200]); warned = {}; }
+  G.endSeen = G.meta.endAt;
+  tickTimer();
   $('#hostTab').hidden = !isHost();
   if (tab === 'host' && !isHost()) { tab = 'missions'; renderTabs(); renderPanel(); } // 진행자에서 빠지면 진행 탭을 닫는다
   simHome();
@@ -572,7 +579,7 @@ const busy = new Set();
 // 미션을 할 수 있는 사람: 개인전은 누구나, 팀전은 팀이 있어야
 const canPlay = () => solo() || !!myTeam();
 function checkArrive() {
-  if (G.meta.status !== 'live' || !canPlay() || !myLL) return;
+  if (!isLive() || !canPlay() || !myLL) return;
   Object.entries(G.missions).forEach(([id, m]) => {
     if (m.type !== 'arrive' || m.open === false || myDone(id) || busy.has(id) || !near(m)) return;
     busy.add(id);
@@ -609,7 +616,7 @@ function openMission(id) {
   const m = G.missions[id];
   if (!m) return;
   W.flyTo(m, 160); W.follow(null); setFab();
-  const d = myDone(id), live = G.meta.status === 'live', each = isEach(m);
+  const d = myDone(id), live = isLive(), each = isEach(m);
   // 개인 미션은 팀마다 해낸 사람 수(개인전은 전체 수), 팀 미션은 팀마다 ✓
   const others = solo() ? `<span class="pill">${ic('check')} ${eachDone(id).length}명 해냈어요</span>` : Object.entries(G.teams).map(([tid, tm]) => {
     const x = G.done[tid]?.[id], n = eachDone(id).filter(([, y]) => y.team === tid).length;
@@ -619,7 +626,7 @@ function openMission(id) {
   if (d?.status === 'ok') act = `<div class="box">${ic('check')} ${each ? `해냈어요 (${clock(d.t)})` : `우리 팀이 해냈어요 (${esc(d.name)}, ${clock(d.t)})`}</div>`;
   else if (d?.status === 'wait') act = `<div class="box">${ic('wait')} 진행자가 확인하고 있어요.</div>`;
   else if (!canPlay()) act = `<div class="box">팀에 들어가야 미션을 할 수 있어요.</div>`;
-  else if (!live) act = `<div class="box">${G.meta.status === 'ended' ? '게임이 끝났어요.' : '진행자가 게임을 시작하면 열려요.'}</div>`;
+  else if (!live) act = `<div class="box">${G.meta.status === 'ended' || timeUp() ? '게임이 끝났어요.' : '진행자가 게임을 시작하면 열려요.'}</div>`;
   else if (!near(m)) act = `<div class="box">${myLL ? `${fmtDist(dist(myLL, m))} 남았어요. ` : '위치 공유를 켜 주세요. '}반경 ${m.r}m 안으로 가면 ${m.type === 'arrive' ? '저절로 완료돼요' : '열려요'}.</div>`;
   else if (m.type === 'quiz') act = `<div class="box">${esc(m.q)}</div><form class="row" id="qForm"><input id="qAns" placeholder="정답" autocomplete="off"><button class="btn primary">제출</button></form><p class="msg" id="qMsg"></p>`;
   else if (m.type === 'photo') act = `<label class="btn wide primary" style="text-align:center">${ic('camera')} 사진 찍어 올리기<input type="file" accept="image/*" capture="environment" id="photoIn" hidden></label><p class="msg" id="qMsg"></p>`;
@@ -691,6 +698,7 @@ function hostPanel() {
       ${st !== 'live' ? `<button class="btn primary small" id="hStart">${ic('play')} ${st === 'ended' ? '다시 시작' : '게임 시작'}</button>` : `<button class="btn small" id="hEnd">${ic('stop')} 게임 끝내기</button>`}
       <button class="btn small" id="hAdd">＋ 미션 더하기</button>
       <button class="btn small" id="hTeams">${solo() ? '방식·팀' : '팀 정하기'}</button>
+      <button class="btn small" id="hEndAt">${ic('clock')} 끝나는 시간</button>
       <button class="btn small" id="hNotice">${ic('megaphone')} 알림 보내기</button>
       <button class="btn small" id="hArea">${ic('map')} 지역 바꾸기</button>
       ${isOwner() ? `<button class="btn small" id="hHosts">${ic('crown')} 진행자 더하기</button>` : ''}
@@ -701,11 +709,13 @@ function hostPanel() {
 }
 function bindHost(el) {
   el.querySelector('#hCopy')?.addEventListener('click', e => { navigator.clipboard?.writeText(e.target.dataset.link); toast('초대 링크를 복사했어요.'); });
-  el.querySelector('#hStart')?.addEventListener('click', async () => { await net.setStatus(G.code, 'live'); net.say(G.code, '', '게임이 시작됐어요!'); });
+  // 다시 시작할 때 이미 지난 끝나는 시간은 지운다
+  el.querySelector('#hStart')?.addEventListener('click', async () => { if (timeUp()) await net.saveMeta(G.code, { endAt: null }); await net.setStatus(G.code, 'live'); net.say(G.code, '', '게임이 시작됐어요!'); });
   el.querySelector('#hEnd')?.addEventListener('click', async e => { if (!confirmIn(e.target)) return; await net.setStatus(G.code, 'ended'); net.say(G.code, '', '게임이 끝났어요. 수고하셨어요!'); });
   el.querySelector('#hAdd')?.addEventListener('click', () => missionForm());
   el.querySelector('#hTeams')?.addEventListener('click', teamEditor);
   el.querySelector('#hArea')?.addEventListener('click', areaEditor);
+  el.querySelector('#hEndAt')?.addEventListener('click', endEditor);
   el.querySelector('#hHosts')?.addEventListener('click', hostEditor);
   el.querySelector('#hNotice')?.addEventListener('click', () => openSheet(`<h3>모두에게 알림</h3><form class="stack" id="nf"><input id="nt" placeholder="예: 10분 뒤 광장에 모여요" required><button class="btn primary">보내기</button></form>`,
     s => (s.querySelector('#nf').onsubmit = async e => { e.preventDefault(); await net.say(G.code, '', s.querySelector('#nt').value.trim()); closeSheet(); })));
@@ -723,6 +733,52 @@ async function judgeSheet(kind, who, mid) {
     el.querySelector('#jOk').onclick = async () => { await judge(true); net.say(G.code, tid || '', `${label} — '${m.title}' 완료!`); closeSheet(); };
     el.querySelector('#jNo').onclick = async () => { await judge(false); await net.delPhoto(G.code, key, mid); net.say(G.code, tid || '', `${label} — '${m.title}' 다시 해 주세요`); closeSheet(); };
     if (m.type === 'photo') { const url = await net.getPhoto(G.code, key, mid); el.querySelector('#ph').innerHTML = url ? `<img class="photo" src="${url}" alt="">` : '<p class="fine">사진이 없어요.</p>'; }
+  });
+}
+/* ---------- 끝나는 시간 ---------- */
+const hhmm = t => new Date(t).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+const left = ms => { const s = Math.max(0, Math.ceil(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = String(s % 60).padStart(2, '0'); return h ? `${h}:${String(m).padStart(2, '0')}:${x}` : `${m}:${x}`; };
+// 위쪽에 남은 시간을 1초마다. 5분·1분 전에 알리고, 시간이 다 되면 진행자 화면이 게임을 끝낸다
+let warned = {};
+function tickTimer() {
+  const el = $('#gTimer'), end = G.meta.endAt;
+  el.hidden = !end || !G.code || G.meta.status === 'ended';
+  if (el.hidden) return;
+  const ms = end - Date.now();
+  el.className = 'timer' + (ms <= 0 ? ' over' : ms <= 5 * 60e3 ? ' warn' : '');
+  el.innerHTML = ic('clock') + (ms <= 0 ? '시간 끝' : G.meta.status === 'live' ? left(ms) : hhmm(end) + ' 끝');
+  if (G.meta.status !== 'live') return;
+  [[5 * 60e3, '5분'], [60e3, '1분']].forEach(([w, label]) => { if (ms <= w && ms > w - 3000 && !warned[w]) { warned[w] = 1; toast(`끝나기 ${label} 전이에요!`, 'clock'); navigator.vibrate?.(300); } });
+  if (ms <= 0 && !warned.end) {
+    warned.end = 1;
+    refresh();
+    // 게임을 만든 진행자가 끝낸다 (그가 없으면 다른 진행자가 15초 뒤에)
+    if (isHost()) setTimeout(async () => { if (G.meta.status === 'live') { await net.setStatus(G.code, 'ended'); net.say(G.code, '', '시간이 다 됐어요. 게임 끝! 수고하셨어요'); } }, isOwner() ? 0 : 15000);
+  }
+}
+setInterval(tickTimer, 1000);
+function endEditor() {
+  const end = G.meta.endAt, base = Math.max(Date.now(), end || 0);
+  const def = new Date(end || Date.now() + 60 * 60e3);
+  openSheet(`<h3>${ic('clock')} 끝나는 시간</h3><p class="fine">${end ? `지금: ${hhmm(end)}에 끝나요${end > Date.now() ? ` (남은 ${left(end - Date.now())})` : ''}` : '아직 정하지 않았어요.'} 정하면 바로 모두에게 알려요.</p>
+    <form class="stack" id="ef"><label>시각<input type="time" id="eT" value="${hhmm(def)}" required></label><button class="btn primary">이 시각으로 정하기</button></form>
+    <div class="group-h">${end ? '지금 끝나는 시간에서' : '지금부터'}</div>
+    <div class="quick">${[10, 30, 60].map(n => `<button class="btn small" data-add="${n}">+${n < 60 ? n + '분' : '1시간'}</button>`).join('')}${end ? '<button class="btn small" data-add="-10">-10분</button><button class="btn small danger" id="eClear">시간 없애기</button>' : ''}</div><p class="msg" id="eMsg"></p>`, el => {
+    const save = async t => {
+      if (t <= Date.now()) { el.querySelector('#eMsg').className = 'msg err'; el.querySelector('#eMsg').textContent = '지금보다 뒤의 시각으로 정해 주세요.'; return; }
+      await net.saveMeta(G.code, { endAt: t });
+      net.say(G.code, '', `끝나는 시간: ${hhmm(t)} (남은 ${left(t - Date.now())})`);
+      closeSheet();
+    };
+    el.querySelector('#ef').onsubmit = e => {
+      e.preventDefault();
+      const [h, m] = el.querySelector('#eT').value.split(':').map(Number), d = new Date();
+      d.setHours(h, m, 0, 0);
+      if (d.getTime() < Date.now() - 60e3) d.setDate(d.getDate() + 1); // 지난 시각을 고르면 다음 날로
+      save(d.getTime());
+    };
+    el.querySelectorAll('[data-add]').forEach(b => (b.onclick = () => save(base + +b.dataset.add * 60e3)));
+    el.querySelector('#eClear')?.addEventListener('click', async () => { await net.saveMeta(G.code, { endAt: null }); net.say(G.code, '', '끝나는 시간을 없앴어요'); closeSheet(); });
   });
 }
 // 게임 지역: 중심과 반경을 바꾸면 모두의 화면에서 지형을 새로 만든다 (예: 대전에서 시험하다가 행사 날 전주로)
@@ -858,7 +914,7 @@ function missionForm(id, draftM) {
       if (!id) { const r = await net.addMission(G.code, { ...v, open: true }); id = r?.key || Object.keys(G.missions).find(k => G.missions[k].title === v.title); }
       if (v.type === 'quiz' && ans.trim()) v.ah = await answerHash(id, ans);
       await net.saveMission(G.code, id, v);
-      if (G.meta.status === 'live' && isNew) net.say(G.code, '', `새 미션 — '${v.title}'`);
+      if (isLive() && isNew) net.say(G.code, '', `새 미션 — '${v.title}'`);
       closeSheet();
     };
   });

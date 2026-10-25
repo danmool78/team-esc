@@ -177,3 +177,8 @@ label.btn{flex-direction:row;justify-content:center;align-items:center;gap:4px}
 .rescue{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:var(--bg);text-align:center;padding:24px}
 .rescue b{font-size:18px;color:var(--gold2)}
 .rescue p{color:var(--muted);font-size:14px;margin:8px 0 18px}
+/* 끝나는 시간까지 남은 시간 */
+.timer{display:inline-flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:#22190c;background:#ffd34e;border-radius:999px;padding:2px 10px 2px 6px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.timer.warn{background:#ff6b6b;color:#fff;animation:bump 1s infinite}
+.timer.over{background:var(--panel2);color:var(--muted)}
+.quick{display:flex;gap:8px;flex-wrap:wrap}
