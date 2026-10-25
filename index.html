@@ -37,7 +37,7 @@
   <img class="sp-hero" src="assets/hero.svg" alt="">
   <div class="sp-title vq-title">비전 퀘스트<span>비전 퀘스트</span></div>
   <div class="sp-sub">VISION QUEST</div>
-  <div class="sp-tag">전주에서 팀별로 걷는 미션 게임</div>
+  <div class="sp-tag">사람이 모이는 곳 어디서나, 팀으로 걷는 미션 게임</div>
 </div>
 <script>
   // 시작 화면 걷기: 너무 빨리 사라지면 등장이 안 보이니 연 뒤 2.8초는 둔다 (다 등장한 화면을 1초쯤 보게)
@@ -61,7 +61,7 @@
     <img class="gate-logo" src="assets/hero.svg" alt="">
     <p class="eyebrow">VISION QUEST</p>
     <h1 class="gate-title vq-title">비전 퀘스트<span aria-hidden="true">비전 퀘스트</span></h1>
-    <p class="gate-sub">전주에서 팀별로 걷는 미션 게임</p>
+    <p class="gate-sub">사람이 모이는 곳 어디서나, 팀으로 걷는 미션 게임</p>
     <div class="gate-types"><span data-ic="pin">도착</span><span data-ic="quiz">퀴즈</span><span data-ic="camera">사진</span><span data-ic="flag">현장 미션</span></div>
   </div>
   <div class="card narrow">
@@ -112,7 +112,7 @@
         <input id="cName" placeholder="게임 이름 (예: 한옥마을 팀 미션)" required>
         <label>방식 — 팀 수는 게임 중에도 바꿀 수 있어요 <select id="cTeams"><option value="solo">개인전 (각자 점수)</option><option value="2">팀전 2팀</option><option value="3" selected>팀전 3팀</option><option value="4">팀전 4팀</option><option value="5">팀전 5팀</option><option value="6">팀전 6팀</option><option value="7">팀전 7팀</option><option value="8">팀전 8팀</option><option value="9">팀전 9팀</option><option value="10">팀전 10팀</option></select></label>
         <label>게임 지역 중심
-          <select id="cCenter"><option value="jeonju">전주 한옥마을</option><option value="here">지금 내 위치</option><option value="custom">직접 입력 (위도, 경도)</option></select>
+          <select id="cCenter"><option value="here">지금 내 위치</option><option value="jeonju">전주 한옥마을</option><option value="custom">직접 입력 (위도, 경도)</option></select>
         </label>
         <input id="cLL" placeholder="35.8155, 127.1525" hidden>
         <label>반경 — 작을수록 위성사진이 선명해요 <select id="cRadius"><option value="200">200m</option><option value="300">300m</option><option value="500" selected>500m (권장)</option><option value="800">800m</option><option value="1000">1km</option></select></label>
@@ -139,7 +139,7 @@
   </div>
   <div class="gpsbar" id="gpsBar">
     <button class="btn primary small" id="gpsBtn" data-ic="pin">위치 공유 켜기</button>
-    <button class="btn small" id="simBtn" title="GPS 대신 게임 현장(전주) 가운데에 서고, 지도를 누르면 그리로 걸어가요 (현장 밖에서 시험할 때)" data-ic="flask">테스트 모드</button>
+    <button class="btn small" id="simBtn" title="GPS 대신 게임 현장 가운데에 서고, 지도를 누르면 그리로 걸어가요 (현장 밖에서 시험할 때)" data-ic="flask">테스트 모드</button>
     <button class="btn small" id="offBtn" hidden>위치 공유 끄기</button>
     <span id="gpsText"></span>
   </div>
