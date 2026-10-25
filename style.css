@@ -215,7 +215,7 @@ label.btn{flex-direction:row;justify-content:center;align-items:center;gap:4px}
 @keyframes fall{0%{transform:translateY(0) rotate(0)}100%{transform:translateY(520px) rotate(540deg);opacity:0}}
 /* 대문 (로그인 화면) */
 .gate{display:flex;flex-direction:column;align-items:center;gap:18px;overflow:hidden auto;padding:calc(env(safe-area-inset-top) + 34px) 16px 24px;
-  background:linear-gradient(rgba(14,10,6,.5),rgba(14,10,6,.82) 55%,#0e0a06),url(assets/splash-bg.jpg) center top/cover no-repeat fixed,#15110d}
+  background:linear-gradient(rgba(14,10,6,.5),rgba(14,10,6,.82) 55%,#0e0a06),url(assets/splash-bg.webp) center 30%/cover no-repeat fixed,#15110d}
 @keyframes spin{to{transform:rotate(360deg)}}
 .gate-hero{position:relative;text-align:center}
 .gate-logo{width:210px;margin:-10px 0 -14px;filter:drop-shadow(0 18px 22px rgba(0,0,0,.5));animation:pop .7s cubic-bezier(.3,1.6,.5,1) both}
@@ -231,9 +231,19 @@ label.btn{flex-direction:row;justify-content:center;align-items:center;gap:4px}
 /* 시작 화면 — 로고가 톡, 제목이 쾅 */
 .splash{position:fixed;inset:0;z-index:70;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;overflow:hidden;
   background:#120d08;transition:opacity .45s,transform .45s}
-/* 시작 화면 배경: Canva로 그린 떠 있는 마을 그림을 꽉 채워 깔고, 제목은 아래쪽 어두운 자리에 (위쪽 그림은 가리지 않는다) */
-.splash.paint{justify-content:flex-end;padding-bottom:calc(env(safe-area-inset-bottom) + 9vh);
-  background:linear-gradient(transparent 52%,rgba(10,7,4,.75) 80%,#0a0704),url(assets/splash-bg.jpg) center top/cover no-repeat,#120d08}
+/* 시작 화면 배경 그림(떠 있는 마을, 가로 1672px). 세로 폰: 그림을 위쪽에 크게(폭 160%, 실제 픽셀보다 크게 늘리지 않을 만큼) 두고
+   가장자리는 녹이며, 나머지는 같은 그림을 흐리게 깐다. 가로 화면(PC·태블릿): 화면을 꽉 채운다. 제목은 아래쪽 */
+.splash.paint{justify-content:flex-end;padding-bottom:calc(env(safe-area-inset-bottom) + 8vh);background:#0a0704}
+.splash.paint::before{content:'';position:absolute;inset:-60px;background:url(assets/splash-bg.webp) center/cover;filter:blur(28px) brightness(.45)}
+.sp-art{position:absolute;left:50%;top:9%;width:160%;transform:translateX(-50%);pointer-events:none;animation:artIn 1.2s ease-out both;
+  -webkit-mask-image:radial-gradient(ellipse 50% 50% at 50% 50%,#000 62%,transparent 100%);mask-image:radial-gradient(ellipse 50% 50% at 50% 50%,#000 62%,transparent 100%)}
+@keyframes artIn{from{opacity:0;transform:translateX(-50%) scale(1.06)}}
+.splash.paint>:not(.sp-art){z-index:1}
+@media (min-aspect-ratio: 1/1) {
+  .sp-art{inset:0;top:0;left:0;width:100%;height:100%;object-fit:cover;transform:none;animation:artIn2 1.2s ease-out both;
+    -webkit-mask-image:linear-gradient(#000 55%,transparent 98%);mask-image:linear-gradient(#000 55%,transparent 98%)}
+  @keyframes artIn2{from{opacity:0;transform:scale(1.04)}}
+}
 .splash.paint .sp-hero,.splash.paint .ripples{display:none}
 .splash.out{opacity:0;transform:scale(1.06);pointer-events:none}
 .sp-hero{position:relative;width:min(92vw,400px);margin:0 0 -18px;filter:drop-shadow(0 26px 30px rgba(0,0,0,.55));
