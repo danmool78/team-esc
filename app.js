@@ -6,6 +6,14 @@ import { JEONJU, dist, fmtDist } from './geo.js';
 import * as W from './world.js';
 import { ic, iconImage, iconURL } from './icons.js';
 
+// 판 번호: 배포 때 GitHub Actions가 index.html과 같이 커밋 번호로 바꾼다. 홈 화면 앱이 예전 index.html을 들고 있으면
+// 새 app.js가 없는 단추를 찾다 멈춰 빈 화면이 된다 — 판이 다르면 주소를 바꿔 한 번 새로 불러온다
+const BUILD = '__BUILD__';
+if (document.querySelector('meta[name=build]')?.content !== BUILD) {
+  let tried = false;
+  try { tried = sessionStorage.getItem('reload-' + BUILD); sessionStorage.setItem('reload-' + BUILD, 1); } catch {}
+  if (!tried) { const u = new URL(location.href); u.searchParams.set('v', BUILD); location.replace(u); await new Promise(() => {}); }
+}
 const DEMO = new URLSearchParams(location.search).has('demo');
 // 시험용 가짜 GPS: ?fakegps=36.3504,127.3845 — 그 좌표를 GPS가 준 것처럼 쓴다 (클라우드 컴퓨터·데스크톱에서 확인할 때)
 const FAKE = (() => { const v = new URLSearchParams(location.search).get('fakegps')?.split(',').map(Number); return v?.length === 2 && v.every(isFinite) ? { lat: v[0], lng: v[1], acc: 5 } : null; })();
@@ -38,7 +46,8 @@ const STATUS = { ready: '시작 전', live: '진행 중', ended: '끝남' };
 const STALE = 90e3; // 이만큼 좌표가 안 오면 흐리게
 
 const screens = ['auth', 'profile', 'lobby', 'game'];
-const show = id => screens.forEach(s => ($('#' + s).hidden = s !== id));
+// 첫 화면이 뜨면 시작 성공 — index.html의 비상구를 닫는다
+const show = id => { screens.forEach(s => ($('#' + s).hidden = s !== id)); window.__booted = true; if ($('#rescue')) $('#rescue').hidden = true; };
 let user = null, profile = null;
 
 /* ---------- 로그인 ---------- */
@@ -284,7 +293,7 @@ document.querySelectorAll('.tabs button[data-tab]').forEach(b => (b.onclick = ()
 // 아래 창 접기/펴기 (탭을 누르면 펴진다 — 단추 글자도 같이 바꾼다)
 const setDock = min => { $('#dock').classList.toggle('min', min); $('#grip').innerHTML = (min ? '펴기 ' : '접기 ') + ic(min ? 'up' : 'down'); };
 setDock(false);
-$('#grip').onclick = $('#handle').onclick = () => setDock(!$('#dock').classList.contains('min'));
+$('#grip').onclick = () => setDock(!$('#dock').classList.contains('min'));
 function renderTabs() {
   const waits = isHost() ? pendings().length : 0;
   document.querySelectorAll('.tabs button[data-tab]').forEach(b => {
