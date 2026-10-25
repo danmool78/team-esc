@@ -38,7 +38,7 @@ const TEAM_PRESET = [['청팀', '#3d7be0'], ['홍팀', '#e0503d'], ['녹팀', '#
 // 개인전: 사람마다 색 (uid로 늘 같은 색)
 const PERSON_COLORS = ['#3d7be0', '#e0503d', '#3dae6a', '#d9a520', '#8e5bd6', '#e8862e', '#3fbfd9', '#e06aa8', '#7fae3a', '#c0763f', '#5a6fd6', '#d6455f'];
 const personColor = uid => PERSON_COLORS[[...uid].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % PERSON_COLORS.length];
-const TYPES = { arrive: ['pin', '도착'], quiz: ['quiz', '퀴즈'], photo: ['camera', '사진'], task: ['flag', '현장 미션'] };
+const TYPES = { arrive: ['pin', '도착'], quiz: ['quiz', '퀴즈'], photo: ['camera', '사진'], task: ['flag', '현장 미션'], tag: ['tag', '술래잡기'] };
 const tic = type => ic(TYPES[type]?.[0] || 'pin');
 // 알림(팀 없는 소식)은 확성기 아이콘으로 — 예전 소식 앞의 이모티콘은 떼어 낸다
 const plain = t => String(t || '').replace(/^📣\s*/u, '');
@@ -185,7 +185,7 @@ async function enter(code) {
     meta: v => { G.meta = v; onMeta(); },
     teams: v => { G.teams = v; refresh(); },
     members: v => { G.members = v; refresh(); },
-    pos: v => { G.pos = v; syncPlayers(); if (tab === 'people') renderPanel(); },
+    pos: v => { G.pos = v; syncPlayers(); checkTag(); if (tab === 'people') renderPanel(); },
     missions: v => { G.missions = v; refresh(); checkArrive(); },
     done: v => { G.done = v; refresh(); },
     pdone: v => { G.pdone = v; refresh(); },
@@ -279,7 +279,9 @@ function syncPlayers() {
     const p = G.pos[uid];
     if (!p) { W.removePlayer(uid); return; }
     const stale = !m.online || now - (p.t || 0) > STALE;
-    W.upsertPlayer({ uid, name: m.name, avatar: m.avatar, color: colorOf(uid), team: m.team, me: uid === net.me(), sub: stale ? ago(p.t) : '' });
+    // 술래잡기 중인 술래는 이름표 아래에 '술래'
+    const it = isIt(uid);
+    W.upsertPlayer({ uid, name: m.name, avatar: m.avatar, color: colorOf(uid), team: m.team, me: uid === net.me(), sub: [it ? '술래' : '', stale ? ago(p.t) : ''].filter(Boolean).join(' · ') });
     W.movePlayer(uid, p, stale);
   });
 }
@@ -621,6 +623,7 @@ function setMyPos(p) {
   sendPos(p);
   if (first) { startCompass(); W.follow(net.me()); W.flyTo(p, 140); setFab(); }
   checkArrive();
+  checkTag();
   if (tab === 'missions') renderPanel();
 }
 
@@ -629,6 +632,40 @@ const near = m => myLL && (!m.r || dist(myLL, m) <= m.r + Math.min(myLL.acc || 0
 const busy = new Set();
 // 미션을 할 수 있는 사람: 개인전은 누구나, 팀전은 팀이 있어야
 const canPlay = () => solo() || !!myTeam();
+/* ---------- 술래잡기 ----------
+   진행자가 팀마다 술래를 한 명씩 정한다(mission.it = {팀: uid}). 반경(놀이 구역) 안에서 술래가 다른 팀 사람에게
+   잡기 거리(catchR) 안으로 먼저 다가가면 그 팀이 이긴다. 판정은 술래의 폰이 한다 — 규칙도 그 팀 술래만 '완료'를 쓸 수 있게 막는다 */
+const tagWinner = id => Object.keys(G.teams).find(t => G.done[t]?.[id]?.status === 'ok');
+const tagLive = ([id, m]) => m.type === 'tag' && m.open !== false && !tagWinner(id);
+const isIt = uid => isLive() && Object.entries(G.missions).some(e => tagLive(e) && Object.values(e[1].it || {}).includes(uid));
+function checkTag() {
+  if (!isLive() || !myLL || solo()) return;
+  const me = net.me(), t = myTeam(), now = Date.now();
+  Object.entries(G.missions).forEach(([id, m]) => {
+    if (!tagLive([id, m]) || m.it?.[t] !== me || busy.has(id)) return;
+    const inArea = ll => !m.r || dist(ll, m) <= m.r + 15; // GPS 오차를 15m까지 봐준다
+    if (!inArea(myLL)) return;
+    const caught = Object.entries(G.members).find(([u, mm]) => {
+      const p = G.pos[u];
+      return u !== me && mm.team && mm.team !== t && G.teams[mm.team] && p && now - (p.t || 0) < 30e3 && inArea(p) && dist(myLL, p) <= (m.catchR || 6);
+    });
+    if (!caught) return;
+    const [u, mm] = caught;
+    busy.add(id);
+    net.complete(G.code, t, id, { name: profile.name, pts: m.pts || 0, status: 'ok', caught: u })
+      .then(() => net.say(G.code, t, `${teamOf(t).name} 술래 ${profile.name} — ${teamOf(mm.team).name} ${mm.name} 잡았다! '${m.title}' 승리`))
+      .catch(() => {}).finally(() => busy.delete(id));
+  });
+}
+function tagInfo(id, m, live) {
+  const its = Object.entries(m.it || {}).map(([tid, u]) => `<span class="pill"><span class="dot" style="background:${esc(teamOf(tid).color)}"></span> ${esc(teamOf(tid).name)} ${esc(G.members[u]?.name || '?')}</span>`).join('');
+  const win = tagWinner(id), me = net.me(), t = myTeam();
+  const role = win ? `${ic('trophy')} <b>${esc(teamOf(win).name)}</b> 승리! (${esc(G.done[win][id].name)} 술래가 잡았어요)`
+    : !live ? (G.meta.status === 'ended' || timeUp() ? '게임이 끝났어요.' : '진행자가 게임을 시작하면 열려요.')
+    : m.it?.[t] === me ? `${ic('tag')} <b>내가 술래!</b> 반경 ${m.r}m 안에서 다른 팀 사람에게 ${m.catchR || 6}m 안으로 다가가면 잡아요.`
+    : `우리 팀 술래는 <b>${esc(G.members[m.it?.[t]]?.name || '없음')}</b> — 다른 팀 술래는 피하고, 우리 술래를 도와요!`;
+  return `<div class="teamrow">${its}</div><div class="box">${role}</div>`;
+}
 function checkArrive() {
   if (!isLive() || !canPlay() || !myLL) return;
   Object.entries(G.missions).forEach(([id, m]) => {
@@ -674,7 +711,8 @@ function openMission(id) {
     return `<span class="pill ${each ? (n ? 'ok' : '') : x?.status || ''}"><span class="dot" style="background:${esc(tm.color)}"></span> ${esc(tm.name)} ${each ? n + '명' : x?.status === 'ok' ? ic('check') : x ? ic('wait') : '—'}</span>`;
   }).join('');
   let act = '';
-  if (d?.status === 'ok') act = `<div class="box">${ic('check')} ${each ? `해냈어요 (${clock(d.t)})` : `우리 팀이 해냈어요 (${esc(d.name)}, ${clock(d.t)})`}</div>`;
+  if (m.type === 'tag') act = tagInfo(id, m, live);
+  else if (d?.status === 'ok') act = `<div class="box">${ic('check')} ${each ? `해냈어요 (${clock(d.t)})` : `우리 팀이 해냈어요 (${esc(d.name)}, ${clock(d.t)})`}</div>`;
   else if (d?.status === 'wait') act = `<div class="box">${ic('wait')} 진행자가 확인하고 있어요.</div>`;
   else if (!canPlay()) act = `<div class="box">팀에 들어가야 미션을 할 수 있어요.</div>`;
   else if (!live) act = `<div class="box">${G.meta.status === 'ended' || timeUp() ? '게임이 끝났어요.' : '진행자가 게임을 시작하면 열려요.'}</div>`;
@@ -957,7 +995,10 @@ function missionForm(id, draftM) {
   const m = draftM || (id ? { ...G.missions[id] } : { type: 'arrive', r: 25, pts: 10, open: true, order: Object.keys(G.missions).length });
   openSheet(`<h3>${id ? '미션 고치기' : '새 미션'}</h3><form class="stack" id="mf">
     <input name="title" placeholder="미션 이름 (예: 경기전 홍살문)" value="${esc(m.title || '')}" required>
-    <label>종류<select name="type">${Object.entries(TYPES).map(([k, [, n]]) => `<option value="${k}" ${m.type === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+    <label>종류<select name="type">${Object.entries(TYPES).filter(([k]) => k !== 'tag' || !solo() || m.type === 'tag').map(([k, [, n]]) => `<option value="${k}" ${m.type === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+    <div class="tagset stack"><p class="fine">팀마다 술래를 한 명씩 정해요. 반경 안에서 술래가 다른 팀 사람에게 잡기 거리 안으로 먼저 다가가면 그 팀이 이겨요.</p>
+      ${Object.entries(G.teams).map(([tid, t]) => `<label><span><span class="dot" style="background:${esc(t.color)}"></span> ${esc(t.name)} 술래</span><select name="it_${tid}"><option value="">정하지 않음</option>${Object.entries(G.members).filter(([, mm]) => mm.team === tid).map(([u, mm]) => `<option value="${u}" ${m.it?.[tid] === u ? 'selected' : ''}>${esc(mm.name)}</option>`).join('')}</select></label>`).join('')}
+      <label>잡기 거리(m) — GPS 오차가 있어 너무 짧으면 안 잡혀요<input name="catchR" type="number" min="2" value="${m.catchR ?? 6}"></label></div>
     ${solo() ? '' : `<label class="check"><input type="checkbox" name="each" ${m.each ? 'checked' : ''}><span>개인 미션 — 팀원 각자 해서 점수를 팀에 보태요</span></label>`}
     <textarea name="desc" placeholder="설명 (무엇을 하면 되는지)">${esc(m.desc || '')}</textarea>
     <div class="qa stack"><input name="q" placeholder="문제" value="${esc(m.q || '')}"><input name="ans" placeholder="${m.ah ? '정답 (바꿀 때만 적기)' : '정답 — 띄어쓰기·대소문자는 무시해요'}"></div>
@@ -966,10 +1007,11 @@ function missionForm(id, draftM) {
     <div class="grid2"><button type="button" class="btn" id="pickMap">지도에서 고르기</button><button type="button" class="btn" id="pickMe">내 자리로</button></div>
     <button class="btn primary">저장</button><p class="msg" id="mfMsg"></p></form>`, el => {
     const f = el.querySelector('#mf');
-    const qa = () => (el.querySelector('.qa').hidden = f.type.value !== 'quiz');
+    const qa = () => { el.querySelector('.qa').hidden = f.type.value !== 'quiz'; el.querySelector('.tagset').hidden = f.type.value !== 'tag'; if (f.each) f.each.closest('label').hidden = f.type.value === 'tag'; };
     f.type.onchange = qa; qa();
     // 개인전에선 개인 미션 칸이 없으니 원래 값을 둔다
-    const read = () => ({ ...m, each: solo() ? m.each : !!f.each?.checked, title: f.title.value.trim(), type: f.type.value, desc: f.desc.value.trim(), q: f.q.value.trim(), r: +f.r.value || 0, pts: +f.pts.value || 0, _ans: f.ans.value });
+    const read = () => ({ ...m, each: solo() ? m.each : !!f.each?.checked, title: f.title.value.trim(), type: f.type.value, desc: f.desc.value.trim(), q: f.q.value.trim(), r: +f.r.value || 0, pts: +f.pts.value || 0, _ans: f.ans.value,
+      it: Object.fromEntries(Object.keys(G.teams).map(tid => [tid, f['it_' + tid]?.value]).filter(([, u]) => u)), catchR: Math.max(2, +f.catchR.value || 6) });
     el.querySelector('#pickMap').onclick = () => {
       const cur = read();
       $('#sheet').hidden = true; $('#placing').hidden = false;
@@ -983,6 +1025,8 @@ function missionForm(id, draftM) {
       if (v.type === 'quiz' && !v.ah && !v._ans.trim()) { el.querySelector('#mfMsg').textContent = '정답을 적어 주세요.'; return; }
       const ans = v._ans; delete v._ans; delete v.ans;
       if (v.type !== 'quiz') { delete v.q; delete v.ah; }
+      if (v.type === 'tag') { delete v.each; if (Object.keys(v.it).length < 2) { el.querySelector('#mfMsg').textContent = '술래를 두 팀 넘게 정해 주세요.'; return; } }
+      else { delete v.it; delete v.catchR; }
       if (!v.each) delete v.each;
       // 새 미션은 id를 먼저 받아야 정답 해시를 만들 수 있다
       const isNew = !id;

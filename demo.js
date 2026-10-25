@@ -78,6 +78,8 @@ function seed() {
   ];
   const missions = {};
   M.forEach(([title, type, lat, lng, q, a, each], i) => { missions['m' + i] = { title, type, lat, lng, r: 25, pts: type === 'arrive' ? 10 : 20, order: i, open: true, desc: '데모 미션', ...(q ? { q, ans: a } : {}), ...(each ? { each, pts: 5 } : {}) }; });
+  // 술래잡기: 한옥마을 가운데 400m 안에서, 팀마다 술래 (청팀은 나)
+  missions.mtag = { title: '술래잡기: 한옥마을 한바퀴', type: 'tag', lat: JEONJU.lat, lng: JEONJU.lng, r: 400, pts: 30, order: 99, open: true, desc: '데모 술래잡기', it: { t1: ME, t2: 'b4', t3: 'b7' }, catchR: 6 };
   const members = { [ME]: { name: '데모', avatar: 'disciple', team: 't1', online: true } };
   const pos = { [ME]: { ...at(0, 0), acc: 5, t: now() } };
   BOTS.forEach(([id, name, avatar, team], i) => { members[id] = { name, avatar, team, online: true }; pos[id] = { ...at(Math.sin(i) * 200, Math.cos(i) * 200), acc: 6, t: now() }; });
@@ -109,7 +111,7 @@ function seed() {
       const p = g.pos[id];
       let mid = goals[id];
       if (!mid || g.done[team]?.[mid]) {
-        const left = Object.keys(g.missions).filter(k => !g.missions[k].each && !g.done[team]?.[k]); // 가짜 참가자는 팀 미션만
+        const left = Object.keys(g.missions).filter(k => !g.missions[k].each && g.missions[k].type !== 'tag' && !g.done[team]?.[k]); // 가짜 참가자는 팀 미션만 (술래잡기는 빼고)
         mid = goals[id] = left[Math.floor(Math.random() * left.length)];
         if (!mid) return;
       }
