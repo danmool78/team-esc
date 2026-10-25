@@ -97,7 +97,10 @@ summary{cursor:pointer;color:var(--gold2);font-size:14px;margin-bottom:10px}
 .tabs button{border:0;background:none;padding:11px 12px;color:var(--muted);cursor:pointer;position:relative}
 .tabs button.on{color:var(--ink);font-weight:700}
 .tabs button.on::after{content:'';position:absolute;left:12px;right:12px;bottom:-1px;height:2px;background:var(--gold)}
-.tabs .grip{margin-left:auto}
+/* 아래 창 접기/펴기: 작은 ▾ 하나로는 못 찾아서, 금색 테 단추에 글자로 쓰고 창 위에도 손잡이를 붙인다 */
+.tabs .grip{margin:7px 0 7px auto;padding:4px 13px;border:1px solid var(--gold);border-radius:999px;background:rgba(217,180,106,.14);color:var(--gold2);font-size:13px;font-weight:700}
+.handle{position:absolute;left:50%;top:-18px;transform:translateX(-50%);width:72px;height:24px;border:1px solid var(--line);border-bottom:0;border-radius:12px 12px 0 0;background:rgba(21,17,13,.95);cursor:pointer;display:grid;place-items:center;padding:0}
+.handle i{display:block;width:34px;height:4px;border-radius:2px;background:var(--gold2);opacity:.85}
 .tabs .badge{display:inline-block;min-width:17px;height:17px;padding:0 5px;border-radius:9px;background:var(--bad);color:#fff;font-size:11px;line-height:17px;margin-left:4px;font-weight:700}
 .panel{flex:1;overflow:auto;padding:6px 12px 14px}
 
@@ -158,3 +161,6 @@ summary{cursor:pointer;color:var(--gold2);font-size:14px;margin-bottom:10px}
 .pkhold{width:120px;height:3px;border-radius:2px;background:#1c1914;margin:8px 0 2px;overflow:hidden}
 .pkhold i{display:block;height:100%;width:0;background:#8a7445}
 .pocket.hold .pkhold i{width:100%;transition:width 1s linear}
+/* 아래 창을 접으면 지도 출처 글씨도 함께 내려간다 (--dock은 창 안에서만 바뀌므로) */
+.screen:has(.dock.min) .credit{bottom:122px}
+@media (min-width:900px){ .screen:has(.dock.min) .credit{bottom:4px} }
