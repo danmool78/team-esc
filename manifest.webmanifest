@@ -1,6 +1,6 @@
 {
-  "name": "함께 걷는 지도 — 팀 미션",
-  "short_name": "팀 미션",
+  "name": "비전현장미션",
+  "short_name": "비전현장미션",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#15110d",

@@ -1,6 +1,7 @@
 /* 3D 세계: 지형 위에 참가자 인형과 미션 표지를 세우고, 비스듬히 내려다보는 카메라로 그린다.
    조작은 그 길(the-way-jesus)의 3D 지형 모드와 같게 — 마우스: 끌면 옮기고, 오른쪽 버튼(또는 Shift)으로 끌면 돌리고 기울이고, 바퀴로 당긴다.
    손가락: 하나로 옮기고, 둘로 벌려 당기고 비틀어 돌리고 함께 위아래로 밀어 기울인다.
+   내 위치 따라가기(◎): 나는 늘 화면 가운데, 진행 방향이 화면 위로 오게 지도가 돌고 움직인다.
    지형은 카메라가 보는 곳 둘레를 조각조각 이어 받아 그린다 (terrain.js) — 지도를 끌어 옮기면 그쪽 땅이 따라 생긴다.
    인형은 실제 크기로는 점처럼 작아 보여서, 카메라가 멀어질수록 함께 키운다 (자리는 그대로, 크기만) */
 import { THREE, damp, glowTexture } from './stage/kit.js';
@@ -32,9 +33,10 @@ if (renderer) {
 
 let T = null; // 지형 {group, heightAt, frame, want, radius}
 const players = new Map(), missions = new Map();
-const cam = { tx: 0, tz: 0, dist: 520, pitch: 0.85, yaw: 0, follow: null };
+const cam = { tx: 0, tz: 0, dist: 520, pitch: 0.85, yaw: 0, follow: null, headUp: false };
 const goal = { ...cam };
-const hooks = { tapPlayer: null, tapMission: null, tapGround: null };
+const hooks = { tapPlayer: null, tapMission: null, tapGround: null, unfollow: null };
+let compass = null; // 폰 나침반이 알려 준 내 방위 (북에서 시계 방향, 라디안). 없으면 걸어간 방향을 쓴다
 export const on = (k, f) => (hooks[k] = f);
 
 /* ---------- 지형 ---------- */
@@ -130,7 +132,26 @@ export function upsertPlayer(info) {
     const hit = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 1.1, 8), new THREE.MeshBasicMaterial({ visible: false }));
     hit.position.y = 0.55; hit.userData.uid = info.uid;
     actor.p.root.add(hit);
-    p = { ...(p || {}), uid: info.uid, actor, g, ring, hit, acc: null, cur: p?.cur || null, face: 0 }; // 오차 원은 새 묶음에 다시 단다
+    // 진행 방향: 발밑에서 앞으로 퍼지는 빛살(구글 지도처럼) + 그 끝의 화살촉. 나에게만 보인다.
+    // 카메라가 내 뒤에 있어 인형과 이름표에 가리지 않을 만큼 길게 뻗고, 땅 굴곡에 묻히지 않게 늘 위에 그린다
+    const arrow = new THREE.Group();
+    const blue = { color: 0x3d8bff, transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide };
+    const fan = [0, 0, 0], col = [0.24, 0.55, 1, 0.5], N = 16, R = 3, A = 0.6;
+    for (let i = 0; i <= N; i++) { const t = -A + (2 * A * i) / N; fan.push(Math.sin(t) * R, 0, -Math.cos(t) * R); col.push(0.24, 0.55, 1, 0); }
+    const beamG = new THREE.BufferGeometry();
+    beamG.setAttribute('position', new THREE.Float32BufferAttribute(fan, 3));
+    beamG.setAttribute('color', new THREE.Float32BufferAttribute(col, 4));
+    beamG.setIndex([...Array(N)].flatMap((_, i) => [0, i + 1, i + 2]));
+    const beam = new THREE.Mesh(beamG, new THREE.MeshBasicMaterial({ ...blue, color: 0xffffff, vertexColors: true, depthTest: true, polygonOffset: true, polygonOffsetFactor: -4 })); // 빛살은 인형 뒤로
+    beam.position.y = 0.05; beam.renderOrder = 2;
+    arrow.add(beam);
+    const tri = new THREE.Shape([new THREE.Vector2(0, 2.75), new THREE.Vector2(0.36, 2.1), new THREE.Vector2(0, 2.26), new THREE.Vector2(-0.36, 2.1)]);
+    const head = new THREE.Mesh(new THREE.ShapeGeometry(tri), new THREE.MeshBasicMaterial({ ...blue, opacity: 0.95 }));
+    head.renderOrder = 3;
+    head.rotation.x = -Math.PI / 2; head.position.y = 0.05; // 도형의 +y가 땅 위 -z(북)를 가리킨다
+    arrow.add(head); arrow.visible = false;
+    g.add(arrow);
+    p = { ...(p || {}), uid: info.uid, actor, g, ring, hit, arrow, acc: null, cur: p?.cur || null, face: 0, hd: p?.hd ?? null }; // 오차 원은 새 묶음에 다시 단다
     scene.add(g);
     players.set(info.uid, p);
     p.tag = null;
@@ -157,6 +178,9 @@ function placePlayer(p, ll, snap) {
   const [x, z] = T.frame.toXZ(ll.lat, ll.lng);
   p.to = new THREE.Vector2(x, z);
   if (snap || !p.cur) p.cur = p.to.clone();
+  // 진행 방향: 받은 좌표가 3m 넘게 옮겨 갈 때마다 그 방향 (북에서 시계 방향). 제자리 GPS 흔들림은 무시
+  if (snap || !p.hdFrom) p.hdFrom = p.to.clone();
+  else if (p.to.distanceTo(p.hdFrom) > 3) { p.hd = Math.atan2(p.to.x - p.hdFrom.x, -(p.to.y - p.hdFrom.y)); p.hdFrom = p.to.clone(); }
 }
 // 새 좌표가 오면 그 자리까지 걸어간다. stale: 오래 소식이 없으면 흐리게
 export function movePlayer(uid, ll, stale = false) {
@@ -232,15 +256,22 @@ export function removeMission(id) {
 }
 
 /* ---------- 카메라 ---------- */
-export function follow(uid) { cam.follow = uid; goal.follow = uid; }
+// headUp: 그 사람의 진행 방향이 화면 위로 오게 지도를 돌린다 (내 위치 따라가기)
+export function follow(uid, headUp = false) { cam.follow = uid; cam.headUp = !!uid && headUp; }
 export const following = () => cam.follow;
+// 폰 나침반 방위(도, 북에서 시계 방향). null이면 걸어간 방향으로 돌아간다
+export function setCompass(deg) { compass = deg == null || !isFinite(deg) ? null : deg * Math.PI / 180; }
+// 진행 방향(북에서 시계 방향, 라디안): 내 것은 나침반 우선, 아니면 마지막으로 걸어간 방향
+const headingOf = p => (p.me && compass != null ? compass : p.hd);
+// 각도를 기준 각도 가까이로 옮긴다 (359°→1°로 돌 때 한 바퀴 거꾸로 돌지 않게)
+const near = (a, ref) => ref + Math.atan2(Math.sin(a - ref), Math.cos(a - ref));
 export function flyTo(ll, dist) {
   if (!T) return;
   const [x, z] = T.frame.toXZ(ll.lat, ll.lng);
   Object.assign(goal, { tx: x, tz: z });
   if (dist) goal.dist = dist;
 }
-export function resetView() { cam.follow = null; Object.assign(goal, { tx: 0, tz: 0, yaw: 0, pitch: 0.85, dist: T ? T.radius * 1.5 : 520 }); }
+export function resetView() { cam.follow = null; cam.headUp = false; Object.assign(goal, { tx: 0, tz: 0, yaw: 0, pitch: 0.85, dist: T ? T.radius * 1.5 : 520 }); }
 export const viewDist = () => cam.dist;
 
 function clampGoal() {
@@ -257,8 +288,14 @@ function pan(dx, dy) {
   const c = Math.cos(cam.yaw), s = Math.sin(cam.yaw);
   goal.tx -= (dx * c + dy * s) * k;
   goal.tz -= (-dx * s + dy * c) * k;
-  cam.follow = null;
+  unfollow();
   clampGoal();
+}
+// 손으로 지도를 옮기면 따라가기를 멈추고 app.js에 알린다 (◎ 단추 불 끄기)
+function unfollow() {
+  if (!cam.follow) return;
+  cam.follow = null; cam.headUp = false;
+  hooks.unfollow?.();
 }
 
 /* ---------- 손가락·마우스 ---------- */
@@ -293,6 +330,7 @@ if (renderer) {
     goal.dist *= before.d / Math.max(after.d, 1);
     let da = after.ang - before.ang;
     if (da > Math.PI) da -= Math.PI * 2; if (da < -Math.PI) da += Math.PI * 2;
+    if (Math.abs(da) > 0.004 && cam.headUp) cam.headUp = false; // 손으로 돌리면 진행 방향 맞추기를 멈춘다 (가운데 따라가기는 그대로)
     goal.yaw -= da;
     goal.pitch += (after.my - before.my) * 0.004;
     clampGoal();
@@ -344,8 +382,16 @@ function frameLoop(now) {
   resize();
 
   const fp = cam.follow && players.get(cam.follow);
-  if (fp && fp.cur) { goal.tx = fp.cur.x; goal.tz = fp.cur.y; }
+  goal.yaw = near(goal.yaw, cam.yaw);
   for (const k of ['tx', 'tz', 'dist', 'pitch', 'yaw']) cam[k] = damp(cam[k], goal[k], 6, dt);
+  if (fp && fp.cur) {
+    // 따라가는 사람은 늘 화면 한가운데 — 뒤늦게 쫓지 않고 바로 붙인다 (처음 날아가는 동안만 부드럽게)
+    goal.tx = fp.cur.x; goal.tz = fp.cur.y;
+    if (Math.hypot(cam.tx - goal.tx, cam.tz - goal.tz) < 8) { cam.tx = goal.tx; cam.tz = goal.tz; }
+    // 진행 방향이 화면 위로: 카메라를 그 사람 뒤에 둔다 (yaw 0 = 북쪽을 봄, 방위 h면 yaw = -h)
+    const h = cam.headUp ? headingOf(fp) : null;
+    if (h != null) goal.yaw = near(-h, cam.yaw);
+  }
   const ty = T.heightAt(cam.tx, cam.tz);
   const cp = Math.cos(cam.pitch);
   camera.position.set(cam.tx + Math.sin(cam.yaw) * cp * cam.dist, ty + Math.sin(cam.pitch) * cam.dist, cam.tz + Math.cos(cam.yaw) * cp * cam.dist);
@@ -369,6 +415,9 @@ function frameLoop(now) {
     else if (len > 0.05) p.cur.addScaledVector(d.normalize(), Math.min(len, Math.max(1.6, len * 1.5) * dt));
     const moving = len > 0.6;
     if (moving) p.face = Math.atan2(d.x, d.y);
+    const h = p.me ? headingOf(p) : null;
+    p.arrow.visible = h != null;
+    if (h != null) { p.arrow.rotation.y = damp(p.arrow.rotation.y, near(-h, p.arrow.rotation.y), 10, dt); p.arrow.scale.setScalar(big); }
     const a = p.actor;
     a.pos.set(0, 0); a.goal.set(0, 0);
     a.faceT = p.face;
