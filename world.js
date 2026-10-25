@@ -322,8 +322,10 @@ export function removeMission(id) {
    자동차: 시속 25km(7m/s)를 넘으면 팀 색 오픈카에 태우고, 15km(4m/s) 밑으로 5분 넘게 있으면 내린다.
    오픈버스: 4명 넘게 25m 안에서 비슷한 속도로 20초 넘게 함께 움직이면 버스에 두 줄로 줄 세워 태운다. 멈춰도 5분까지는 그대로.
    크기는 인형 한 명 키를 1로 그리고, 인형처럼 카메라가 멀어지면 함께 키운다 */
-// VEH: 차·버스와 탄 사람의 크기 — 걷는 인형처럼 멀어질수록 키우지 않고 지도와 함께 줄어든다 (인형 한 명 키 2.5m 남짓, 차 길이 4m 남짓)
-const VEH = 2.5;
+// 차·버스와 탄 사람의 크기 — 가까이선 실제 크기(VEH: 인형 한 명 키 2.5m 남짓, 차 길이 4m 남짓)로 지도와 함께 줄어들고,
+// 멀리 빼서 점처럼 사라질 만큼 작아지면 그때부터는 화면에서 알아볼 만한 크기를 지킨다 (걷는 인형보다는 작게)
+const VEH = 2.5, VEH_MIN = 0.022;
+let veh = VEH;
 const CAR_ON = 7, CAR_OFF = 4, BUS_MIN = 4, BUS_R = 25, BUS_DV = 1.5, BUS_AFTER = 20000;
 const box = (w, h, d, color) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color }));
 const wheel = (x, z, r = 0.17) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.12, 14), new THREE.MeshLambertMaterial({ color: '#2b2522' })); m.rotation.z = Math.PI / 2; m.position.set(x, r, z); return m; };
@@ -423,7 +425,7 @@ function settle(obj, x, z, ang, hl, hw) {
 }
 // 매 장면: 버스를 사람들 가운데로 옮기고, 앞을 함께 가는 방향으로 돌리고, 자리마다 인형을 세운다
 function placeBuses(dt) {
-  const big = VEH; // 버스는 지도와 함께 줄어드는 실제 크기
+  const big = veh; // 버스는 지도와 함께 줄어드는 크기 (최소 크기는 지킨다)
   buses.forEach(b => {
     const m = b.members.filter(p => p.cur);
     if (!m.length) return;
@@ -609,6 +611,7 @@ function frameLoop(now) {
 
   // 인형 크기: 가까이선 사람 크기(1.7m 남짓)로, 멀어지면 화면에서 알아볼 만큼 키운다
   const big = Math.max(2.5, cam.dist * 0.05);
+  veh = Math.max(VEH, cam.dist * VEH_MIN);
   const t = now / 1000;
   if (now - groupAt > 1000) { groupAt = now; updateGroups(now); }
   players.forEach(p => (p.seat = null));
@@ -634,21 +637,21 @@ function frameLoop(now) {
     if (p.carG) {
       p.carG.visible = p.car;
       if (p.car) {
-        p.carG.scale.setScalar(VEH);
+        p.carG.scale.setScalar(veh);
         if (p.spd > 0.5) p.carAng = damp(p.carAng || 0, near(-Math.atan2(p.vx, -p.vz), p.carAng || 0), 6, dt); // 서 있을 땐 방향 그대로
         // 인형 묶음은 차 안에 서도록 0.3만큼 올렸으니, 차는 그만큼 내리고 비탈에 맞춰 기울인다
-        const y = settle(p.carG, p.cur.x, p.cur.y, p.carAng || 0, 0.8 * VEH, 0.45 * VEH);
-        p.carG.position.y = y - T.heightAt(p.cur.x, p.cur.y) - 0.3 * VEH;
+        const y = settle(p.carG, p.cur.x, p.cur.y, p.carAng || 0, 0.8 * veh, 0.45 * veh);
+        p.carG.position.y = y - T.heightAt(p.cur.x, p.cur.y) - 0.3 * veh;
       }
     }
     const a = p.actor;
     a.pos.set(0, 0); a.goal.set(0, 0);
     a.faceT = p.seat ? p.seat.face : p.face;
     a.set(moving && !p.seat && !p.car ? 'walk' : 'idle');
-    a.big = p.seat ? VEH * p.seat.k : p.car ? VEH : big; // 탄 사람은 차·버스와 같은 크기 (버스에 많이 타면 더 작게)
+    a.big = p.seat ? veh * p.seat.k : p.car ? veh : big; // 탄 사람은 차·버스와 같은 크기 (버스에 많이 타면 더 작게)
     a.update(t, dt);
     if (p.seat) p.g.position.set(p.seat.x, p.seat.y, p.seat.z);
-    else p.g.position.set(p.cur.x, T.heightAt(p.cur.x, p.cur.y) + (p.car ? 0.3 * VEH : 0), p.cur.y);
+    else p.g.position.set(p.cur.x, T.heightAt(p.cur.x, p.cur.y) + (p.car ? 0.3 * veh : 0), p.cur.y);
     const s = cam.dist * 0.019 * p.tag.userData.h;
     p.tag.scale.set(s * p.tag.userData.aspect, s, 1);
     p.tag.position.y = a.big * 1.05 + s * 0.7;
