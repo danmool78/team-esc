@@ -1,0 +1,25 @@
+name: Deploy to Firebase on merge
+on:
+  push:
+    branches: [main]
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # 데이터베이스 보안 규칙(database.rules.json)도 함께 올린다 — 앱과 규칙이 어긋나면 쓰기가 막힌다
+      - name: Deploy Realtime Database rules
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TEAM_ESC }}
+        run: |
+          echo "$SA" > "$RUNNER_TEMP/sa.json"
+          GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json" npx -y firebase-tools@14 deploy --only database --project team-esc --non-interactive
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TEAM_ESC }}
+          channelId: live
+          projectId: team-esc
