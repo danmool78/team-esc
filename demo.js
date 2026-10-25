@@ -39,6 +39,7 @@ export function watch(code, h) {
 const feed = (code, team, text) => { const f = { id: 'f' + now() + Math.random(), team, text, t: now() }; S.games[code].feed.push(f); (subs.get(code) || []).forEach(h => h.feed?.(f, true)); };
 
 export const writePos = async (code, p) => { S.games[code].pos[ME] = { ...p, t: now() }; fire(code); };
+export const clearPos = async code => { delete S.games[code].pos[ME]; fire(code); };
 export const setStatus = async (code, s) => { S.games[code].meta.status = s; fire(code); };
 export const saveMeta = async (code, p) => { Object.assign(S.games[code].meta, p); fire(code); };
 export const saveTeams = async (code, t) => { S.games[code].teams = t; fire(code); };

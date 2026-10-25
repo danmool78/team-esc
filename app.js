@@ -151,13 +151,16 @@ async function enter(code) {
     },
   });
   W.follow(net.me());
-  if (DEMO) { sim = true; $('#gpsBtn').hidden = true; gpsText('데모: 지도를 누르면 내 인형이 그리로 걸어가요'); }
+  // 지난번 방식(GPS·테스트)을 이어 간다. 데모는 늘 테스트
+  const mode = DEMO ? 'sim' : store.get('posMode');
+  if (mode) setMode(mode);
 }
 
 function onMeta() {
   $('#gName').textContent = G.meta.name || '';
   $('#gStatus').textContent = `${STATUS[G.meta.status] || ''} · 코드 ${G.code}`;
   $('#hostTab').hidden = !isHost();
+  simHome();
   const key = [G.meta.center?.lat, G.meta.center?.lng, G.meta.radius, G.meta.layer].join();
   if (key !== G.areaKey && G.meta.center) {
     G.areaKey = key;
@@ -354,13 +357,36 @@ W.on('tapGround', ll => {
   if (sim) setMyPos({ lat: ll.lat, lng: ll.lng, acc: 3 });
 });
 
-/* ---------- 내 위치 (GPS) ---------- */
+/* ---------- 내 위치: 끔 · GPS · 지도로 테스트 ---------- */
+// 지도로 테스트: 게임 지역 밖(예: 대전에서 전주 게임)에서 시험할 때 GPS 대신 지도를 눌러 내 자리를 정한다.
+// 다음에 들어올 때도 같은 방식으로 이어지게 기기에 기억한다
 let watchId = null, lastSent = null, wake = null, sim = false;
-$('#gpsBtn').onclick = startGPS;
-function startGPS() {
-  if (DEMO) { sim = true; gpsText('데모: 지도를 누르면 내 인형이 그리로 걸어가요'); $('#gpsBtn').hidden = true; return; }
-  if (!navigator.geolocation) { gpsText('이 기기는 위치를 알 수 없어요.'); return; }
-  $('#gpsBtn').hidden = true;
+$('#gpsBtn').onclick = () => setMode('gps');
+$('#simBtn').onclick = () => setMode('sim');
+$('#offBtn').onclick = () => setMode('off');
+function setMode(mode) {
+  if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+  wake?.release?.().catch(() => {}); wake = null;
+  sim = mode === 'sim';
+  W.setGroundFirst(sim);
+  $('#gpsBtn').hidden = mode === 'gps';
+  $('#simBtn').hidden = mode === 'sim';
+  $('#offBtn').hidden = mode === 'off';
+  if (!DEMO) store.set('posMode', mode === 'off' ? null : mode);
+  if (mode === 'off') {
+    // 끄면 내 좌표를 지워 다른 사람 지도에서도 내 인형이 사라진다
+    myLL = null; lastSent = null;
+    if (G.code) net.clearPos(G.code);
+    gpsText('위치 공유가 꺼져 있어요');
+    return;
+  }
+  if (mode === 'sim') {
+    gpsText('테스트: 지도를 누르면 내 인형이 그리로 걸어가요');
+    // 아직 자리가 없으면 게임 지역 가운데에 세운다 (GPS로 받은 먼 좌표도 버린다)
+    simHome();
+    return;
+  }
+  if (!navigator.geolocation) { gpsText('이 기기는 위치를 알 수 없어요.'); setMode('off'); return; }
   gpsText('위치를 찾는 중…');
   watchId = navigator.geolocation.watchPosition(
     p => setMyPos({ lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy) }),
@@ -372,10 +398,17 @@ function startGPS() {
 // 다른 앱에 다녀오면 화면 켜 두기가 풀리므로 다시 건다
 document.addEventListener('visibilitychange', () => { if (!document.hidden && watchId != null) navigator.wakeLock?.request('screen').then(w => (wake = w)).catch(() => {}); });
 const gpsText = t => ($('#gpsText').textContent = t);
+// 게임 정보(meta)가 아직 안 왔으면 onMeta에서 다시 부른다
+function simHome() {
+  const c = G.meta.center;
+  if (sim && c && (!myLL || dist(myLL, c) > (G.meta.radius || 600) * 1.5)) setMyPos({ lat: c.lat, lng: c.lng, acc: 3 });
+}
 function setMyPos(p) {
   myLL = p;
   const first = !lastSent;
-  gpsText(`위치 공유 중 · 오차 ${p.acc}m`);
+  const away = !sim && G.meta.center ? dist(p, G.meta.center) - (G.meta.radius || 600) : 0;
+  gpsText(sim ? '테스트: 지도를 누르면 내 인형이 그리로 걸어가요'
+    : away > 0 ? `게임 지역에서 ${fmtDist(away)} 떨어져 있어요 — 🧪 지도로 테스트를 써 보세요` : `위치 공유 중 · 오차 ${p.acc}m`);
   // 3m 넘게 움직였거나 8초가 지났을 때만 올린다 (배터리·데이터 아끼기)
   const moved = !lastSent || dist(lastSent, p) > 3 || Date.now() - lastSent.at > 8000;
   if (moved) { lastSent = { ...p, at: Date.now() }; net.writePos(G.code, p); }
@@ -437,6 +470,8 @@ function openMission(id) {
   else if (m.type === 'photo') act = `<label class="btn wide primary" style="text-align:center">📷 사진 찍어 올리기<input type="file" accept="image/*" capture="environment" id="photoIn" hidden></label><p class="msg" id="qMsg"></p>`;
   else if (m.type === 'task') act = `<button class="btn wide primary" id="taskBtn">🙌 해냈어요 — 진행자에게 확인 요청</button>`;
   else act = `<div class="box">도착! 곧 완료돼요.</div>`;
+  // 지도로 테스트 중: 미션 자리로 바로 옮겨 가 본다
+  if (sim && !d) act += `<button class="btn wide" id="simGo">🧪 여기로 이동 (테스트)</button>`;
   const host = isHost() ? `<div class="hostgrid"><button class="btn small" id="mEdit">수정</button><button class="btn small" id="mToggle">${m.open === false ? '열기' : '닫기'}</button><button class="btn small danger" id="mDel">삭제</button></div>` : '';
   openSheet(`<p class="eyebrow">${TYPES[m.type]?.[0]} ${TYPES[m.type]?.[1]} · ${m.pts || 0}점</p><h3>${esc(m.title)}</h3>
     ${m.desc ? `<p class="fine">${esc(m.desc)}</p>` : ''}<div class="teamrow">${others}</div>${act}${host}`, el => {
@@ -455,6 +490,7 @@ function openMission(id) {
       await finish(id, m, 'wait');
       closeSheet(); toast('사진을 올렸어요. 진행자가 확인하면 점수가 올라가요.');
     });
+    el.querySelector('#simGo')?.addEventListener('click', () => { closeSheet(); setMyPos({ lat: m.lat, lng: m.lng, acc: 3 }); setTimeout(() => openMission(id), 300); });
     el.querySelector('#taskBtn')?.addEventListener('click', async () => { await finish(id, m, 'wait'); closeSheet(); toast('확인을 요청했어요.'); });
     el.querySelector('#mEdit')?.addEventListener('click', () => missionForm(id));
     el.querySelector('#mToggle')?.addEventListener('click', async () => { await net.saveMission(G.code, id, { ...m, open: m.open === false }); closeSheet(); });

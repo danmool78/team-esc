@@ -271,12 +271,15 @@ if (renderer) {
   el.addEventListener('wheel', e => { e.preventDefault(); goal.dist *= Math.exp(e.deltaY * 0.0012); clampGoal(); }, { passive: false });
 }
 
+let groundFirst = false;
+export const setGroundFirst = v => (groundFirst = v);
 function tap(cx, cy) {
   const r = renderer.domElement.getBoundingClientRect();
   ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const hits = ray.intersectObjects([...[...players.values()].map(p => p.hit), ...[...missions.values()].map(m => m.hit)], false);
-  if (hits[0]) {
+  // 지도로 테스트 중에는 사람 위를 눌러도 땅으로 친다 (사람이 서 있는 곳으로도 옮겨 가야 하니까)
+  if (hits[0] && !(groundFirst && hits[0].object.userData.uid)) {
     const u = hits[0].object.userData;
     if (u.uid && hooks.tapPlayer) return hooks.tapPlayer(u.uid);
     if (u.mid && hooks.tapMission) return hooks.tapMission(u.mid);

@@ -87,6 +87,7 @@ export function watch(code, h) {
 
 /* ---------- 쓰기 ---------- */
 export const writePos = (code, p) => set(G(code, 'pos/' + uid()), { ...p, t: serverTimestamp() });
+export const clearPos = code => remove(G(code, 'pos/' + uid()));
 export const setStatus = (code, status) => set(G(code, 'meta/status'), status);
 export const saveMeta = (code, patch) => update(G(code, 'meta'), patch);
 export const saveTeams = (code, teams) => set(G(code, 'teams'), teams);
