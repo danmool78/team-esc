@@ -8,6 +8,9 @@ import * as W from './world.js';
 const DEMO = new URLSearchParams(location.search).has('demo');
 // 시험용 가짜 GPS: ?fakegps=36.3504,127.3845 — 그 좌표를 GPS가 준 것처럼 쓴다 (클라우드 컴퓨터·데스크톱에서 확인할 때)
 const FAKE = (() => { const v = new URLSearchParams(location.search).get('fakegps')?.split(',').map(Number); return v?.length === 2 && v.every(isFinite) ? { lat: v[0], lng: v[1], acc: 5 } : null; })();
+// 화면 크기 고정: 아이폰 사파리는 확대 금지(user-scalable=no)를 무시하므로 두 손가락 확대를 직접 막는다 (3D 지도 위의 두 손가락은 지도가 쓴다)
+['gesturestart', 'gesturechange'].forEach(k => document.addEventListener(k, e => e.preventDefault()));
+document.addEventListener('touchmove', e => { if (e.touches.length > 1 && !e.target.closest('#world')) e.preventDefault(); }, { passive: false });
 const net = await import(DEMO ? './demo.js' : './net.js');
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
