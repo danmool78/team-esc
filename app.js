@@ -567,27 +567,34 @@ function simHome() {
   if (sim && c && (!myLL || dist(myLL, c) > (G.meta.radius || 600) * 1.5)) setMyPos({ lat: c.lat, lng: c.lng, acc: 3 });
 }
 const INAPP = /KAKAOTALK|NAVER|Instagram|FBAN|FBAV|Line\/|DaumApps/i.test(navigator.userAgent);
-// GPS 다듬기: 이상한 값을 먼저 거르고, 남은 최근 4초 값을 정확도로 가중 평균해(1/오차²) 흔들리지 않게 한다 (걸을 때 2~3m 늦는 정도)
+// GPS 다듬기: 이상한 값을 먼저 거르고, 걸을 땐 최근 4초 값을 정확도로 가중 평균해(1/오차²) 흔들리지 않게 한다
 //  ① 오차가 튀는 값: 좋은 값(30m 이내)을 받은 지 20초 안에 오차가 그 세 배 넘고 50m 넘는 값, 1분 안에 좋은 값이 있었는데 150m 넘는 값
-//  ② 순간이동: 바로 앞 값에서 시속 160km(45m/s)보다 빨라야 닿는 자리 — 단, 그런 값이 세 번 연달아 서로 가까우면 정말 옮긴 것으로 받는다
+//  ② 순간이동: 앞 값에서 (두 값의 오차를 빼고도) 시속 160km(45m/s)보다 빨라야 닿는 자리. 단 그런 값이 연달아 세 번 오고
+//     그 셋끼리는 말이 되는 속도로 이어지면(차로 달리는 중이어도) 정말 옮긴 것으로 받는다
+//     — 예전엔 셋이 30m 안에 모여야 받아서, 앱을 켤 때의 기지국 값에 걸린 채 차로 달리면 처음 자리에 계속 멈춰 있었다
 //  ③ 4초 묶음에서 혼자 튀는 값: 묶음 가운데(중앙값)에서 오차의 두 배(최소 8m)보다 먼 값은 평균에서 뺀다
+//  빠르게 움직이면(초속 3m 넘게, 차·버스) 평균 내지 않고 방금 값을 그대로 쓴다 — 평균하면 수십 m씩 늦는다
 let fixes = [], goodAt = 0, goodAcc = Infinity, odd = [];
 const median = a => { const b = [...a].sort((x, y) => x - y), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
+const tooFast = (a, b) => Math.max(0, dist(a, b) - (a.acc || 0) - (b.acc || 0)) / Math.max(0.5, Math.abs(b.t - a.t) / 1000) > 45;
 function cleanFix(p) {
-  const now = Date.now();
+  const now = Date.now(), f0 = { ...p, t: now };
   if (p.acc <= 30) { goodAt = now; goodAcc = p.acc; }
   else if ((now - goodAt < 20000 && p.acc > goodAcc * 3 && p.acc > 50) || (now - goodAt < 60000 && p.acc > 150)) return null;
   const prev = fixes[fixes.length - 1];
-  if (prev) {
-    const d = dist(prev, p), dt = Math.max(0.5, (now - prev.t) / 1000);
-    if (d > 30 && d / dt > 45) {
-      odd.push({ ...p, t: now });
-      if (odd.length < 3 || odd.some(o => dist(o, odd[odd.length - 1]) > 30)) { if (odd.length >= 3) odd.shift(); return null; }
-      fixes = odd; odd = []; // 세 번 연달아 같은 곳 — 정말 옮겼다 (방금 값도 이 안에 있다)
-    } else odd = [];
+  if (prev && tooFast(prev, f0)) {
+    odd.push(f0);
+    if (odd.length > 3) odd.shift();
+    const chain = odd.length === 3 && !tooFast(odd[0], odd[1]) && !tooFast(odd[1], odd[2]);
+    if (!chain) return null;
+    fixes = odd; odd = []; // 세 번 이어서 같은 쪽 — 정말 옮겼다 (방금 값도 이 안에 있다)
+  } else {
+    odd = [];
+    fixes.push(f0);
   }
-  if (odd.length === 0 && fixes[fixes.length - 1]?.t !== now) fixes.push({ ...p, t: now });
   fixes = fixes.filter(f => now - f.t < 4000);
+  const first = fixes[0], v = first && first !== fixes[fixes.length - 1] ? dist(first, f0) / Math.max(0.5, (now - first.t) / 1000) : 0;
+  if (p.v > 3 || v > 3) return { lat: p.lat, lng: p.lng, acc: Math.max(1, Math.round(p.acc)) };
   const mLat = median(fixes.map(f => f.lat)), mLng = median(fixes.map(f => f.lng));
   let keep = fixes.filter(f => dist({ lat: mLat, lng: mLng }, f) <= Math.max(8, f.acc * 2));
   if (!keep.length) keep = [fixes[fixes.length - 1]];
