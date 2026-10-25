@@ -1,16 +1,17 @@
 /* 3D 지형: 지도를 옮기는 대로 이어 받아 그리는 조각 지형.
-   조각 하나 = 웹 메르카토르 줌 16 타일 하나 (전주에서 한 변 약 500m).
+   조각 하나 = 웹 메르카토르 줌 17 타일 하나 (전주에서 한 변 약 250m) = 위성사진 타일 한 장.
+   작은 조각을 여럿 동시에 받아 가까운 곳부터 바로바로 채운다 (500m 조각에 타일 넷을 기다릴 때보다 빨리 보인다).
    카메라가 보는 곳 둘레의 조각을 가까운 것부터 받아 만들고, 멀어진 조각은 버린다.
    높이: AWS Open Data의 Terrain Tiles(terrarium, SRTM 등 공개 고도 자료) 줌 15.
-   겉그림: 위성사진(Esri World Imagery의 Clarity — 기본 영상은 전주 상공이 줌마다 구름에 덮여 있었다) 또는 지도(OpenStreetMap) 줌 17 타일 넷.
+   겉그림: 위성사진(Esri World Imagery의 Clarity — 기본 영상은 전주 상공이 줌마다 구름에 덮여 있었다) 또는 지도(OpenStreetMap) 줌 17.
    조각 경계의 높이는 모두 같은 함수(elevAt)로 구하므로 이웃 조각과 틈 없이 맞물린다 */
 import { THREE } from './stage/kit.js';
 import { makeFrame, lngPx, latPx } from './geo.js';
 
 export const EXAG = 1.6; // 높이 과장 배율 — 전주는 낮은 언덕이라 실제 비율로는 밋밋하다
-const ZD = 15, ZC = 16, ZI = 17; // 높이 · 조각 · 겉그림 줌
-const N = 40;                    // 조각 하나의 격자 칸 수 (≈ 12m 간격)
-const BUSY = 4;                  // 한꺼번에 만드는 조각 수
+const ZD = 15, ZC = 17;          // 높이 · 조각(=겉그림) 줌
+const N = 24;                    // 조각 하나의 격자 칸 수 (≈ 10m 간격)
+const BUSY = 8;                  // 한꺼번에 받는 조각 수
 
 export const LAYERS = {
   sat: { url: (z, x, y) => `https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`, credit: '위성사진 © Esri, Maxar, Earthstar Geographics' },
@@ -74,14 +75,11 @@ export async function buildTerrain({ center, layer = 'sat' }) {
 
   async function make(tx, ty, c) {
     // 오른쪽·아래 경계는 이웃 타일의 첫 픽셀이라, 거기 걸친 고도 타일까지 기다린다
-    const dx = [Math.floor(tx / 2), Math.floor((tx + 1) / 2)], dy = [Math.floor(ty / 2), Math.floor((ty + 1) / 2)];
+    const s = ZC - ZD, dx = [tx >> s, (tx + 1) >> s], dy = [ty >> s, (ty + 1) >> s];
     const jobs = [];
     for (const x of new Set(dx)) for (const y of new Set(dy)) jobs.push(dem(x, y));
-    const cv = document.createElement('canvas'); cv.width = cv.height = 512;
-    const g = cv.getContext('2d');
-    let got = 0;
-    for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++)
-      jobs.push(loadImg(L.url(ZI, tx * 2 + i, ty * 2 + j)).then(im => { if (im) { g.drawImage(im, i * 256, j * 256); got++; } }));
+    let img = null;
+    jobs.push(loadImg(L.url(ZC, tx, ty)).then(im => (img = im)));
     await Promise.all(jobs);
     if (c.dead) return;
     demOk ||= demData.size > 0;
@@ -106,7 +104,7 @@ export async function buildTerrain({ center, layer = 'sat' }) {
     geo.setIndex(idx);
     geo.computeVertexNormals();
     let map = null;
-    if (got) { map = new THREE.CanvasTexture(cv); map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; }
+    if (img) { map = new THREE.Texture(img); map.needsUpdate = true; map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; }
     const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map, color: map ? 0xffffff : 0x8f9a6c, roughness: 0.95 }));
     mesh.receiveShadow = true;
     Object.assign(c, { mesh, H, ready: true });

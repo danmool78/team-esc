@@ -43,12 +43,12 @@ export async function loadArea(area) {
   // 지역을 연달아 바꾸면 늦게 끝난 옛 지역이 새 지역을 덮어쓰지 않게, 마지막 요청만 받아들인다
   const seq = ++loadSeq;
   const t = await buildTerrain(area);
-  await t.prime(Math.min(area.radius * 1.3, 900));
+  await t.prime(300); // 가운데만 받으면 바로 띄우고, 나머지는 가까운 순서로 채워 넣는다
   if (seq !== loadSeq) { t.dispose(); return null; }
-  if (T) { scene.remove(T.group); T.dispose(); if (T.edge) scene.remove(T.edge); }
+  if (T) { scene.remove(T.group); T.dispose(); if (T.edge) { scene.remove(T.edge); T.edge.geometry.dispose(); } }
   T = t;
   T.radius = area.radius;
-  T.edgeR = area.edge ?? area.radius;
+  T.edgeR = area.radius;
   T.edgeVer = -1;
   scene.add(T.group);
   Object.assign(goal, { tx: 0, tz: 0, dist: area.radius * 1.5 });
@@ -59,22 +59,30 @@ export async function loadArea(area) {
   return T;
 }
 export const frame = () => T && T.frame;
-// 지역 테두리: 게임 반경을 땅 위에 점선으로. 조각이 새로 생길 때마다 땅 높이에 다시 맞춘다
+// 게임 반경: 땅 위에 깔린 금색 띠(폭 EDGE m). 지도는 반경과 상관없이 어디로든 옮겨 볼 수 있고, 이 띠만 게임 지역을 알려 준다.
+// 조각이 새로 생길 때마다 띠를 땅 높이에 다시 맞춘다
+const EDGE = 5, edgeMat = new THREE.MeshBasicMaterial({ color: 0xffd36a, transparent: true, opacity: 0.75, depthWrite: false, side: THREE.DoubleSide });
 let edgeAt = 0;
 function drawEdge(now) {
   if (!T.edgeR || T.edgeVer === T.version || now - edgeAt < 500) return;
   edgeAt = now; T.edgeVer = T.version;
   if (T.edge) { scene.remove(T.edge); T.edge.geometry.dispose(); }
-  const pts = [];
-  for (let a = 0; a <= 128; a++) {
-    const x = Math.sin(a / 128 * Math.PI * 2) * T.edgeR, z = Math.cos(a / 128 * Math.PI * 2) * T.edgeR;
-    pts.push(new THREE.Vector3(x, T.heightAt(x, z) + 2, z));
+  const S = 256, pos = new Float32Array((S + 1) * 6), idx = [];
+  for (let a = 0; a <= S; a++) {
+    const sx = Math.sin(a / S * Math.PI * 2), cz = Math.cos(a / S * Math.PI * 2);
+    [T.edgeR - EDGE / 2, T.edgeR + EDGE / 2].forEach((r, k) => {
+      const x = sx * r, z = cz * r;
+      pos.set([x, T.heightAt(x, z) + 1.5, z], (a * 2 + k) * 3);
+    });
+    if (a < S) idx.push(a * 2, a * 2 + 1, a * 2 + 2, a * 2 + 1, a * 2 + 3, a * 2 + 2);
   }
-  T.edge = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), edgeMat);
-  T.edge.computeLineDistances();
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setIndex(idx);
+  T.edge = new THREE.Mesh(geo, edgeMat);
+  T.edge.renderOrder = 2;
   scene.add(T.edge);
 }
-const edgeMat = new THREE.LineDashedMaterial({ color: 0xfff0c0, dashSize: 14, gapSize: 10, transparent: true, opacity: 0.8 });
 
 /* ---------- 이름표: 캔버스 글씨를 스프라이트로 ---------- */
 function label(text, color = '#1d1813', sub = '') {
@@ -236,8 +244,8 @@ export function resetView() { cam.follow = null; Object.assign(goal, { tx: 0, tz
 export const viewDist = () => cam.dist;
 
 function clampGoal() {
-  // 어디로든 옮길 수 있다 (가는 곳마다 지형을 받아 그린다). 평면 근사가 크게 틀어지지 않는 30km까지만
-  const lim = 30000;
+  // 어디로든 옮길 수 있다 (가는 곳마다 지형을 받아 그린다). 게임 지역 둘레 150km까지 — 그 밖은 기기 위치 오류로 본다(app.js WILD)
+  const lim = 150000;
   goal.tx = Math.max(-lim, Math.min(lim, goal.tx));
   goal.tz = Math.max(-lim, Math.min(lim, goal.tz));
   goal.dist = Math.max(25, Math.min(2500, goal.dist));

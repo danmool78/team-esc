@@ -165,11 +165,11 @@ function onMeta() {
   $('#gStatus').textContent = `${STATUS[G.meta.status] || ''} · 코드 ${G.code}`;
   $('#hostTab').hidden = !isHost();
   simHome();
-  const center = localArea || G.meta.center;
+  const center = G.meta.center;
   const key = [center?.lat, center?.lng, G.meta.radius, G.meta.layer].join();
   if (key !== G.areaKey && center) {
     G.areaKey = key;
-    W.loadArea({ center, radius: G.meta.radius || 600, edge: localArea ? 0 : null, layer: G.meta.layer || 'sat' }).then(t => {
+    W.loadArea({ center, radius: G.meta.radius || 600, layer: G.meta.layer || 'sat' }).then(t => {
       if (!t) return; // 그 사이 다른 지역을 요청했다
       $('#credit').textContent = [t.credit, t.demOk ? '고도 © Mapzen/AWS Terrain Tiles' : ''].filter(Boolean).join(' · ');
       syncPlayers(); syncMissions();
@@ -379,7 +379,6 @@ function setMode(mode) {
   $('#simBtn').hidden = mode === 'sim';
   $('#offBtn').hidden = mode === 'off';
   if (!DEMO && !FAKE) store.set('posMode', mode);
-  if (localArea && mode !== 'gps') { localArea = null; onMeta(); }
   if (mode === 'off') {
     // 끄면 내 좌표를 지워 다른 사람 지도에서도 내 인형이 사라진다
     myLL = null; lastSent = null;
@@ -411,35 +410,6 @@ function simHome() {
   const c = G.meta.center;
   if (sim && c && (!myLL || dist(myLL, c) > (G.meta.radius || 600) * 1.5)) setMyPos({ lat: c.lat, lng: c.lng, acc: 3 });
 }
-// 내 주변 지도: GPS로 받은 내 자리가 게임 지역 밖이면(예: 대전에서 전주 게임) 내 자리를 원점으로 지형을 새로 받아
-// 내 화면에서만 보여 준다. 지형은 카메라를 따라 이어 받으므로 걸어 다녀도 다시 만들 필요는 없고,
-// 원점에서 20km 넘게 가면(평면 근사가 틀어지기 전에) 한 번 옮긴다. 게임 지역에 들어오면 원래 지도로 돌아간다
-let localArea = null;
-function followArea(p) {
-  const c = G.meta.center, R = G.meta.radius || 600;
-  if (!c) return;
-  const out = dist(p, c) > R * 1.2;
-  if (out && (!localArea || dist(p, localArea) > 20000)) {
-    const first = !localArea;
-    localArea = { lat: p.lat, lng: p.lng };
-    onMeta();
-    if (first) toast('게임 지역 밖이라 지금 계신 곳의 지도를 보여 드려요');
-  } else if (!out && localArea) { localArea = null; onMeta(); }
-}
-// GPS 다듬기: 폰은 처음이나 실내에서 와이파이·기지국으로 잡은 큰 오차 값을 섞어 준다.
-// 좋은 값(30m 이내)을 받은 지 20초 안에 오차가 그 세 배 넘고 50m 넘는 값이 오면 버리고,
-// 최근 4초의 값을 정확도로 가중 평균해(1/오차²) 흔들림을 줄인다. 걷는 사람 기준 몇 m 늦는 정도
-let fixes = [], goodAt = 0, goodAcc = Infinity;
-function cleanFix(p) {
-  const now = Date.now();
-  if (p.acc <= 30) { goodAt = now; goodAcc = p.acc; }
-  else if (now - goodAt < 20000 && p.acc > goodAcc * 3 && p.acc > 50) return null;
-  fixes = fixes.filter(f => now - f.t < 4000);
-  fixes.push({ ...p, t: now });
-  let w = 0, lat = 0, lng = 0;
-  fixes.forEach(f => { const k = 1 / (f.acc * f.acc); w += k; lat += f.lat * k; lng += f.lng * k; });
-  return { lat: lat / w, lng: lng / w, acc: Math.max(1, Math.round(Math.min(p.acc, 1 / Math.sqrt(w)))) };
-}
 // 게임 지역에서 이만큼 넘게 떨어진 위치는 기기가 잘못 알려 준 것으로 본다 (PC 브라우저의 와이파이 위치가 베이징으로 잡힌 일이 있었다)
 const WILD = 100e3;
 function setMyPos(p) {
@@ -449,13 +419,12 @@ function setMyPos(p) {
   }
   myLL = p;
   W.setAccuracy(net.me(), sim ? 0 : p.acc);
-  if (!sim) followArea(p);
   const first = !lastSent;
   const away = !sim && G.meta.center ? dist(p, G.meta.center) - (G.meta.radius || 600) : 0;
   gpsText(sim ? '테스트: 지도를 누르면 내 인형이 그리로 걸어가요'
     // 수백 m 오차는 대개 '대략적 위치'만 허용된 것 (안드로이드 12+, iOS '정확한 위치' 끔)
     : p.acc > 300 ? `위치가 대략적으로만 잡혀요 (오차 ${fmtDist(p.acc)}) — 폰 설정에서 이 사이트의 '정확한 위치'를 켜 주세요`
-    : away > 0 ? `내 주변 지도 · 게임 지역에서 ${fmtDist(away)} · 오차 ${p.acc}m` : `위치 공유 중 · 오차 ${p.acc}m${p.acc > 40 ? ' (실내면 커요)' : ''}`);
+    : away > 0 ? `게임 지역에서 ${fmtDist(away)} 밖 · 오차 ${p.acc}m` : `위치 공유 중 · 오차 ${p.acc}m${p.acc > 40 ? ' (실내면 커요)' : ''}`);
   // 3m 넘게 움직였거나 8초가 지났을 때만 올린다 (배터리·데이터 아끼기)
   const moved = !lastSent || dist(lastSent, p) > 3 || Date.now() - lastSent.at > 8000;
   if (moved) { lastSent = { ...p, at: Date.now() }; net.writePos(G.code, p); }
