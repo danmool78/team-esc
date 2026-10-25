@@ -65,8 +65,8 @@ summary{cursor:pointer;color:var(--gold2);font-size:14px;margin-bottom:10px}
 .nogl{position:absolute;top:40%;left:16px;right:16px;text-align:center;color:var(--muted)}
 .hud{position:absolute;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top) + 10px) 12px 10px;display:flex;flex-direction:column;gap:8px;pointer-events:none;
   background:linear-gradient(to bottom,rgba(21,17,13,.82),rgba(21,17,13,0))}
-.gtitle{display:flex;align-items:baseline;gap:10px;pointer-events:auto;align-self:flex-start;max-width:100%}
-.gtitle b{font-family:var(--serif);font-size:18px;color:var(--gold2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gtitle{display:flex;align-items:baseline;gap:10px;pointer-events:auto;align-self:stretch;max-width:100%;min-width:0}
+.gtitle b{font-family:var(--serif);font-size:18px;color:var(--gold2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .gtitle small{font-size:12px;color:var(--muted);white-space:nowrap}
 .scores{display:flex;gap:6px;overflow-x:auto;pointer-events:auto;scrollbar-width:none}
 .score{flex:0 0 auto;display:flex;align-items:center;gap:8px;background:rgba(29,24,19,.9);border:1px solid var(--line);border-radius:14px;padding:6px 12px 6px 8px;cursor:pointer;transition:transform .3s}
@@ -84,10 +84,15 @@ summary{cursor:pointer;color:var(--gold2);font-size:14px;margin-bottom:10px}
 .fab.nav{border-color:#3b8bff;background:rgba(30,60,120,.92);box-shadow:0 0 0 3px rgba(59,139,255,.35)}
 .gpsbar{position:absolute;left:12px;top:calc(env(safe-area-inset-top) + 112px);display:flex;gap:8px;align-items:center;font-size:12px;color:var(--ink);
   text-shadow:0 1px 3px #000;max-width:calc(100% - 80px);flex-wrap:wrap}
-.send{background:rgba(20,60,30,.85);color:#bff5c8;border-radius:999px;padding:3px 9px;font-size:11px;white-space:nowrap}
-.send::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:#4ade80;margin-right:5px;vertical-align:1px}
-.send.late{background:rgba(120,20,20,.92);color:#ffd2d2}
-.send.late::before{background:#ff5a5a;animation:twinkle .6s infinite alternate}
+/* 위치 전송 표시 (제목 줄 오른쪽 끝): 서버가 받을 때마다 초록 전파가 한 번 퍼지고, 30초 넘게 안 가면 빨갛게 깜빡인다. 누르면 위치를 다시 요청 */
+.sig{margin-left:auto;align-self:center;flex:0 0 auto;width:30px;height:30px;border-radius:50%;border:1px solid var(--line);background:rgba(29,24,19,.85);display:grid;place-items:center;cursor:pointer;padding:0}
+.sig .ico{width:22px;height:22px;vertical-align:0}
+.sig .sg-c{fill:#4ade80}.sig path{stroke:#4ade80;opacity:.25}
+.sig.ping .sg-1{animation:sgwave .9s ease-out}.sig.ping .sg-2{animation:sgwave .9s .18s ease-out}
+@keyframes sgwave{0%{opacity:.25}35%{opacity:1}100%{opacity:.25}}
+.sig.late{border-color:#ff5a5a;background:rgba(120,20,20,.9);animation:sglate .7s infinite alternate}
+.sig.late .sg-c{fill:#ff6b6b}.sig.late path{stroke:#ff6b6b;opacity:.9}
+@keyframes sglate{to{box-shadow:0 0 0 5px rgba(255,90,90,.35)}}
 .placing{position:absolute;top:calc(env(safe-area-inset-top) + 160px);left:50%;transform:translateX(-50%);background:var(--gold);color:#22190c;padding:9px 16px;border-radius:999px;font-weight:700;font-size:13.5px;white-space:nowrap}
 .placing .link{color:#22190c;text-decoration:underline;margin-left:6px}
 .credit{position:absolute;right:8px;bottom:calc(var(--dock,46vh) + 4px);font-size:10px;color:rgba(255,255,255,.75);text-shadow:0 1px 2px #000;pointer-events:none}
