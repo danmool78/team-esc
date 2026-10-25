@@ -14,6 +14,7 @@ export const onUser = cb => { userCb = cb; setTimeout(() => cb({ uid: ME, email:
 export const signUp = async () => {};
 export const signIn = async () => {};
 export const google = async () => {};
+export const setRemember = async () => {};
 export const resetPw = async () => {};
 export const signOut = async () => { userCb?.(null); };
 export const getProfile = async () => S.users[ME] || null;
