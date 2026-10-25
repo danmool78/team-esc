@@ -78,8 +78,12 @@ $('#resetBtn').onclick = async () => {
 
 /* ---------- 별칭·인형 ---------- */
 let draft = { gender: 'm', avatar: pick(OUTFITS.m) };
+// 고르는 화면의 인형도 지도와 같은 알록달록 옷으로: 겉옷은 지금 내 팀 색(팀이 아직 없으면 밝은 미색), 망토는 나만의 색
+const myLook = () => (G.code && G.members[net.me()]?.team || (G.code && solo()) ? colorOf(net.me()) : '#efe4c8');
+const myThumb = t => W.avatarThumb(t, myLook(), net.me() || '');
 function drawDraft() {
-  $('#avatarImg').src = W.avatarThumb(draft.avatar);
+  $('#avatarImg').src = myThumb(draft.avatar);
+  $('#lookNote').textContent = G.code && (solo() || G.members[net.me()]?.team) ? '' : '겉옷은 팀이 정해지면 팀 색으로 바뀌어요';
   document.querySelectorAll('#genderSeg button').forEach(b => b.classList.toggle('on', b.dataset.g === draft.gender));
 }
 document.querySelectorAll('#genderSeg button').forEach(b => (b.onclick = () => { draft.gender = b.dataset.g; draft.avatar = pick(OUTFITS[draft.gender]); drawDraft(); }));
@@ -106,7 +110,7 @@ $('#profSave').onclick = async () => {
 
 /* ---------- 게임 고르기 ---------- */
 function toLobby() {
-  $('#lobbyAvatar').src = W.avatarThumb(profile.avatar);
+  $('#lobbyAvatar').src = myThumb(profile.avatar);
   $('#lobbyName').textContent = profile.name;
   $('#lobbyEmail').textContent = user.email || '';
   show('lobby');
