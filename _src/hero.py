@@ -1,4 +1,4 @@
-# 시작 화면 그림: 공중에 뜬 전주 한옥마을 땅 조각 + 미션 빛기둥 + 세 팀 미니미
+# 시작 화면 그림: 공중에 뜬 작은 마을 땅 조각 (어느 동네든 사람이 모이면 된다) + 미션 빛기둥 + 세 팀 미니미
 # 만들기: python3 _src/hero.py assets/hero.svg
 import math, sys
 U = (1.0, 0.5); V = (-1.0, 0.5)          # 등각: 동쪽(오른쪽 뒤→앞), 남쪽(왼쪽 앞)
@@ -11,45 +11,35 @@ def G(a, b, h=0): return P(CX, CY - R*0.5 - 0, a, b, h)  # 땅 북쪽 꼭짓점 
 # 땅 꼭짓점: 북 (0,0) 동 (R,0) 남 (R,R) 서 (0,R)
 N, E, S, Wst = G(0,0), G(R,0), G(R,R), G(0,R)
 D = 22  # 두께
-def hanok(a, b, w, d, h, s=1.0):
-    # 바닥 네 귀퉁이
+def house(a, b, w, d, h, roof='#e0503d', wall='#fff3dc', side='#e8d6b4', s=1.0):
+    # 어느 동네에나 있을 법한 작은 집: 밝은 벽, 박공지붕(앞으로 비탈, 옆은 세모 벽)
     p0, p1, p2, p3 = G(a,b), G(a+w,b), G(a+w,b+d), G(a,b+d)
     up = lambda p, hh: (p[0], p[1]-hh)
     W(f'<ellipse cx="{(p0[0]+p2[0])/2:.1f}" cy="{(p0[1]+p2[1])/2+3:.1f}" rx="{w*1.15:.1f}" ry="{w*0.5:.1f}" fill="#000" opacity=".22"/>')
-    # 기단(돌)
-    st = 4
-    W(f'<polygon points="{pts(p3, p2, up(p2,st), up(p3,st))}" fill="#9a8f7d"/>')
-    W(f'<polygon points="{pts(p2, p1, up(p1,st), up(p2,st))}" fill="#7c7262"/>')
-    q0,q1,q2,q3 = [up(p,st) for p in (p0,p1,p2,p3)]
-    # 벽: 앞(남) 흰 벽 + 나무 기둥, 옆(동)
-    W(f'<polygon points="{pts(q3, q2, up(q2,h), up(q3,h))}" fill="#f1e6cc"/>')
-    W(f'<polygon points="{pts(q2, q1, up(q1,h), up(q2,h))}" fill="#d6c7a6"/>')
-    for t in (0, 0.33, 0.66, 1):
-        x = q3[0] + (q2[0]-q3[0])*t; y = q3[1] + (q2[1]-q3[1])*t
-        W(f'<line x1="{x:.1f}" y1="{y:.1f}" x2="{x:.1f}" y2="{y-h:.1f}" stroke="#7a4a26" stroke-width="2.4"/>')
-    for t in (0.5, 1):
-        x = q2[0] + (q1[0]-q2[0])*t; y = q2[1] + (q1[1]-q2[1])*t
-        W(f'<line x1="{x:.1f}" y1="{y:.1f}" x2="{x:.1f}" y2="{y-h:.1f}" stroke="#6a3f20" stroke-width="2.2"/>')
-    # 문살 창 (앞벽 가운데 칸)
-    m0 = (q3[0]+(q2[0]-q3[0])*0.4, q3[1]+(q2[1]-q3[1])*0.4); m1 = (q3[0]+(q2[0]-q3[0])*0.6, q3[1]+(q2[1]-q3[1])*0.6)
-    W(f'<polygon points="{pts((m0[0],m0[1]-h*0.15),(m1[0],m1[1]-h*0.15),(m1[0],m1[1]-h*0.8),(m0[0],m0[1]-h*0.8))}" fill="#ffd98a" stroke="#7a4a26" stroke-width="1.4"/>')
-    # 지붕: 처마를 내밀고 끝을 들어 올린 기와지붕 (팔작 비슷하게)
-    o = 7*s; rh = h*0.95
-    e0, e1, e2, e3 = G(a-o, b-o*0.6), G(a+w+o, b-o*0.6), G(a+w+o, b+d+o*0.6), G(a-o, b+d+o*0.6)
-    e0,e1,e2,e3 = [up(p, st+h) for p in (e0,e1,e2,e3)]
-    r0 = up(G(a+w*0.18, b+d/2), st+h+rh); r1 = up(G(a+w*0.82, b+d/2), st+h+rh)
-    lift = 7*s
-    # 앞 지붕면 (남쪽 처마 e3→e2, 용마루 r0→r1) — 처마 끝을 들어 올림
-    W(f'<path d="M{e3[0]:.1f},{e3[1]-lift:.1f} Q{(e3[0]+e2[0])/2:.1f},{(e3[1]+e2[1])/2+4:.1f} {e2[0]:.1f},{e2[1]-lift:.1f} L{r1[0]:.1f},{r1[1]:.1f} L{r0[0]:.1f},{r0[1]:.1f} Z" fill="#3b3f4a"/>')
-    # 동쪽 지붕면 (합각)
-    W(f'<path d="M{e2[0]:.1f},{e2[1]-lift:.1f} Q{(e2[0]+e1[0])/2:.1f},{(e2[1]+e1[1])/2+3:.1f} {e1[0]:.1f},{e1[1]-lift:.1f} L{r1[0]:.1f},{r1[1]:.1f} Z" fill="#2a2d36"/>')
-    # 기와 골
-    for t in (0.2, 0.4, 0.6, 0.8):
-        x0 = e3[0]+(e2[0]-e3[0])*t; y0 = e3[1]+(e2[1]-e3[1])*t
-        x1 = r0[0]+(r1[0]-r0[0])*t; y1 = r0[1]+(r1[1]-r0[1])*t
-        W(f'<line x1="{x0:.1f}" y1="{y0+1:.1f}" x2="{x1:.1f}" y2="{y1:.1f}" stroke="#555b6a" stroke-width="1.2" opacity=".8"/>')
-    W(f'<line x1="{r0[0]:.1f}" y1="{r0[1]:.1f}" x2="{r1[0]:.1f}" y2="{r1[1]:.1f}" stroke="#1c1e25" stroke-width="4" stroke-linecap="round"/>')
-    W(f'<path d="M{e3[0]:.1f},{e3[1]-lift:.1f} Q{(e3[0]+e2[0])/2:.1f},{(e3[1]+e2[1])/2+4:.1f} {e2[0]:.1f},{e2[1]-lift:.1f}" fill="none" stroke="#8a93a6" stroke-width="1.6" opacity=".7"/>')
+    W(f'<polygon points="{pts(p3, p2, up(p2,h), up(p3,h))}" fill="{wall}"/>')
+    W(f'<polygon points="{pts(p2, p1, up(p1,h), up(p2,h))}" fill="{side}"/>')
+    # 옆 세모 벽 (용마루는 동서로, 옆면 가운데 위)
+    mid = up(((p1[0]+p2[0])/2, (p1[1]+p2[1])/2), h + h*0.75)
+    W(f'<polygon points="{pts(up(p2,h), up(p1,h), mid)}" fill="{side}"/>')
+    # 문과 창
+    def at(t, hh): return (p3[0]+(p2[0]-p3[0])*t, p3[1]+(p2[1]-p3[1])*t-hh)
+    W(f'<polygon points="{pts(at(.18,0), at(.36,0), at(.36,h*.62), at(.18,h*.62))}" fill="#8a5a34"/>')
+    W(f'<polygon points="{pts(at(.52,h*.3), at(.8,h*.3), at(.8,h*.75), at(.52,h*.75))}" fill="#ffd98a" stroke="#fff" stroke-width="1.6"/>')
+    sx = lambda t, hh: (p2[0]+(p1[0]-p2[0])*t, p2[1]+(p1[1]-p2[1])*t-hh)
+    W(f'<polygon points="{pts(sx(.35,h*.3), sx(.65,h*.3), sx(.65,h*.7), sx(.35,h*.7))}" fill="#ffd98a" opacity=".85"/>')
+    # 지붕: 처마를 조금 내밀고, 앞 비탈과 용마루
+    o = 4*s
+    e3 = up(G(a-o, b+d+o), h-1); e2 = up(G(a+w+o, b+d+o), h-1)
+    r0 = up(G(a-o, b+d/2), h + h*0.75); r1 = up(G(a+w+o, b+d/2), h + h*0.75)
+    W(f'<polygon points="{pts(e3, e2, r1, r0)}" fill="{roof}"/>')
+    for t in (.25, .5, .75):
+        x0 = e3[0]+(e2[0]-e3[0])*t; y0 = e3[1]+(e2[1]-e3[1])*t; x1 = r0[0]+(r1[0]-r0[0])*t; y1 = r0[1]+(r1[1]-r0[1])*t
+        W(f'<line x1="{x0:.1f}" y1="{y0:.1f}" x2="{x1:.1f}" y2="{y1:.1f}" stroke="#000" stroke-width="1" opacity=".12"/>')
+    W(f'<line x1="{e3[0]:.1f}" y1="{e3[1]:.1f}" x2="{e2[0]:.1f}" y2="{e2[1]:.1f}" stroke="#fff" stroke-width="1.6" opacity=".35"/>')
+    W(f'<line x1="{r0[0]:.1f}" y1="{r0[1]:.1f}" x2="{r1[0]:.1f}" y2="{r1[1]:.1f}" stroke="#000" stroke-width="2.4" opacity=".25" stroke-linecap="round"/>')
+    # 굴뚝 하나
+    c0 = up(G(a+w*0.7, b+d*0.3), h + h*0.55)
+    W(f'<rect x="{c0[0]-3:.1f}" y="{c0[1]-12:.1f}" width="6" height="14" fill="#b0705a"/>')
 def tree(a, b, r=11, c='#4f8a3a'):
     x, y = G(a, b)
     W(f'<ellipse cx="{x:.1f}" cy="{y+2:.1f}" rx="{r:.1f}" ry="{r*0.45:.1f}" fill="#000" opacity=".22"/>')
@@ -105,12 +95,12 @@ d = f'M{pa[0][0]:.1f},{pa[0][1]:.1f} C{pa[1][0]:.1f},{pa[1][1]:.1f} {pa[2][0]:.1
 W(f'<path d="{d}" fill="none" stroke="#c8b285" stroke-width="18" stroke-linecap="round" opacity=".9"/>')
 W(f'<path d="{d}" fill="none" stroke="url(#path)" stroke-width="13" stroke-linecap="round"/>')
 W(f'<path d="{d}" fill="none" stroke="#fff3c8" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="1 9" opacity=".9"/>')
-# 한옥들·나무 (뒤에서 앞으로 그린다)
-hanok(14, 8, 34, 20, 15)
-hanok(64, 6, 28, 18, 13, 0.85)
+# 집들·나무 (뒤에서 앞으로 그린다)
+house(14, 8, 34, 20, 16, '#e0503d')
+house(64, 6, 28, 18, 14, '#2fa39a', '#f4f8ff', '#d6dde8', 0.85)
 tree(108, 18, 10, '#5c9a40')
 tree(6, 40, 9)
-hanok(28, 46, 30, 18, 13, 0.9)
+house(28, 46, 30, 18, 14, '#f29a2e', '#fffaf0', '#eadcc0', 0.9)
 # 미션 빛기둥 + 반경 고리
 bx, by = G(100, 62)
 W(f'<ellipse cx="{bx:.1f}" cy="{by:.1f}" rx="44" ry="22" fill="url(#glow)"/>')
