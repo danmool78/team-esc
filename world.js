@@ -394,11 +394,9 @@ function makeCar(color) {
   sh.lineTo(-0.7, 0.5); sh.quadraticCurveTo(-0.9, 0.48, -0.89, 0.32); sh.quadraticCurveTo(-0.88, 0.19, -0.8, 0.18);
   g.add(bodyFrom(sh, 0.84, color));
   put(g, 0.18, 0.012, 0.62, '#ffffff', 0, 0.535, -0.55).rotation.x = -0.06; // 보닛 줄
-  // 앞 유리: 금테 + 하늘빛 유리
+  // 앞 유리: 하늘빛 유리
   const glass = new THREE.Mesh(new THREE.PlaneGeometry(0.84, 0.26), new THREE.MeshBasicMaterial({ color: '#bfe9ff', transparent: true, opacity: 0.55, side: THREE.DoubleSide }));
   glass.position.set(0, 0.66, -0.2); glass.rotation.x = 0.45; g.add(glass); // 위쪽이 뒤(실내 쪽)로 눕게 (앞은 -z)
-  put(g, 0.9, 0.035, 0.035, '#ffd34e', 0, 0.78, -0.15).rotation.x = 0.45;
-  [-0.44, 0.44].forEach(x => put(g, 0.035, 0.3, 0.035, '#ffd34e', x, 0.64, -0.2).rotation.x = 0.45);
   // 좌석 (크림색 등받이)
   [-0.2, 0.2].forEach(x => { put(g, 0.3, 0.08, 0.26, '#fff4e0', x, 0.48, 0.05); put(g, 0.3, 0.26, 0.07, '#fff4e0', x, 0.6, 0.2); });
   put(g, 0.72, 0.22, 0.07, '#fff4e0', 0, 0.58, 0.5);
