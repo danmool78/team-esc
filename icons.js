@@ -43,6 +43,8 @@ const ICONS = {
   search: `<circle cx="10.5" cy="10.5" r="6" fill="#bfe9ff"/><path d="M15 15l5 5" stroke="#ffa24c" stroke-width="3"/>${shine(8.6, 8.4, 1.2)}`,
   // 끝나는 시간: 자명종
   clock: `<path d="M5 4.5L3 6.5M19 4.5l2 2" stroke="#ff6b6b" stroke-width="2.2"/><circle cx="12" cy="13" r="7.5" fill="#fff4e0"/><path d="M12 9v4.2l2.8 1.8" stroke="#3b6fd6" stroke-width="2"/><path d="M7 19.5l-1.2 1.6M17 19.5l1.2 1.6"/><circle cx="12" cy="13" r=".9" fill="${O}" stroke="none"/>`,
+  // 내 위치 (따라가지 않을 때): 회색 빈 과녁
+  locateOff: `<circle cx="12" cy="12" r="7" fill="#4a4038" stroke="#bfb3a3" stroke-width="1.8"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" stroke="#bfb3a3" stroke-width="2"/><circle cx="12" cy="12" r="2.2" fill="none" stroke="#bfb3a3" stroke-width="1.6"/>`,
   // 진행 방향 고정: 파란 동그라미에 흰 화살촉
   nav: `<circle cx="12" cy="12" r="9" fill="#3b8bff"/><path d="M12 6.2l4.2 10.4L12 14.3l-4.2 2.3z" fill="#fff" stroke="#fff" stroke-width="1.2"/>${shine(8, 7.8, 1)}`,
   // 더하기: 민트 동그라미에 흰 십자
