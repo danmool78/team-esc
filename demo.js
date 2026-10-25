@@ -7,7 +7,7 @@ const ME = 'me';
 const S = { users: {}, games: {} };
 const subs = new Map(); // code → [h]
 const now = () => Date.now();
-const fire = code => (subs.get(code) || []).forEach(h => { const g = S.games[code]; ['meta', 'teams', 'members', 'pos', 'missions', 'done'].forEach(k => h[k]?.(structuredClone(g[k] || {}))); });
+const fire = code => (subs.get(code) || []).forEach(h => { const g = S.games[code]; ['meta', 'teams', 'members', 'pos', 'missions', 'done', 'pdone'].forEach(k => h[k]?.(structuredClone(g[k] || {}))); });
 let userCb = null;
 
 export const onUser = cb => { userCb = cb; setTimeout(() => cb({ uid: ME, email: 'demo@example.com', name: '데모' }), 0); };
@@ -21,7 +21,7 @@ export const saveProfile = async p => { S.users[ME] = p; };
 
 export async function createGame(meta, teams, me) {
   const code = 'DEMO' + (Object.keys(S.games).length + 1);
-  S.games[code] = { meta: { ...meta, host: ME, status: 'ready', created: now() }, teams, members: { [ME]: { name: me.name, avatar: me.avatar, team: '', online: true } }, pos: {}, missions: {}, done: {}, feed: [], photos: {} };
+  S.games[code] = { meta: { ...meta, host: ME, status: 'ready', created: now() }, teams, members: { [ME]: { name: me.name, avatar: me.avatar, team: '', online: true } }, pos: {}, missions: {}, done: {}, pdone: {}, feed: [], photos: {} };
   return code;
 }
 export const gameMeta = async code => S.games[code]?.meta || (code === 'DEMO' ? (seed(), S.games.DEMO.meta) : null);
@@ -48,6 +48,8 @@ export const addMission = async (code, m) => { S.games[code].missions['m' + now(
 export const saveMission = async (code, id, m) => { S.games[code].missions[id] = m; fire(code); };
 export const delMission = async (code, id) => { delete S.games[code].missions[id]; fire(code); };
 export const complete = async (code, tid, mid, d) => { const g = S.games[code]; (g.done[tid] ||= {})[mid] = { ...d, by: ME, t: now() }; fire(code); };
+export const completeMine = async (code, mid, d) => { const g = S.games[code]; (g.pdone[ME] ||= {})[mid] = { ...d, t: now() }; fire(code); };
+export const judgeMine = async (code, who, mid, ok) => { const g = S.games[code]; if (ok) g.pdone[who][mid].status = 'ok'; else delete g.pdone[who][mid]; fire(code); };
 export const judge = async (code, tid, mid, ok) => { const g = S.games[code]; if (ok) g.done[tid][mid].status = 'ok'; else delete g.done[tid][mid]; fire(code); };
 export const savePhoto = async (code, tid, mid, url) => { S.games[code].photos[tid + '_' + mid] = url; };
 export const getPhoto = async (code, tid, mid) => S.games[code].photos[tid + '_' + mid];
@@ -67,17 +69,17 @@ function seed() {
   // 실제 자리 (OpenStreetMap Nominatim으로 찾은 좌표, 최명희문학관·홍살문은 지도에서 어림)
   const M = [
     ['경기전 홍살문', 'arrive', 35.8153, 127.1506], ['전동성당 앞', 'arrive', 35.81333, 127.14946], ['오목대 정자', 'quiz', 35.81404, 127.15415, '오목대에서 잔치를 연 사람은? (힌트: 조선을 세움)', '이성계'],
-    ['향교 은행나무', 'photo', 35.81258, 127.15715], ['남천교 청연루', 'task', 35.81079, 127.15328], ['최명희문학관', 'arrive', 35.8152, 127.1527], ['자만벽화마을', 'quiz', 35.81414, 127.15716, '벽화마을 이름 두 글자', '자만'],
+    ['향교 은행나무', 'photo', 35.81258, 127.15715], ['개인: 한옥마을 정문 찾기', 'arrive', 35.8162, 127.1517, null, null, true], ['남천교 청연루', 'task', 35.81079, 127.15328], ['최명희문학관', 'arrive', 35.8152, 127.1527], ['자만벽화마을', 'quiz', 35.81414, 127.15716, '벽화마을 이름 두 글자', '자만'],
   ];
   const missions = {};
-  M.forEach(([title, type, lat, lng, q, a], i) => { missions['m' + i] = { title, type, lat, lng, r: 25, pts: type === 'arrive' ? 10 : 20, order: i, open: true, desc: '데모 미션', ...(q ? { q, ans: a } : {}) }; });
+  M.forEach(([title, type, lat, lng, q, a, each], i) => { missions['m' + i] = { title, type, lat, lng, r: 25, pts: type === 'arrive' ? 10 : 20, order: i, open: true, desc: '데모 미션', ...(q ? { q, ans: a } : {}), ...(each ? { each, pts: 5 } : {}) }; });
   const members = { [ME]: { name: '데모', avatar: 'disciple', team: 't1', online: true } };
   const pos = { [ME]: { ...at(0, 0), acc: 5, t: now() } };
   BOTS.forEach(([id, name, avatar, team], i) => { members[id] = { name, avatar, team, online: true }; pos[id] = { ...at(Math.sin(i) * 200, Math.cos(i) * 200), acc: 6, t: now() }; });
   S.games.DEMO = {
     meta: { name: '한옥마을 팀 미션 (데모)', host: ME, center: JEONJU, radius: 600, layer: 'sat', status: 'live', created: now() },
     teams: { t1: { name: '청팀', color: '#3d7be0' }, t2: { name: '홍팀', color: '#e0503d' }, t3: { name: '녹팀', color: '#3dae6a' } },
-    members, pos, missions, done: {}, feed: [], photos: {},
+    members, pos, missions, done: {}, pdone: {}, feed: [], photos: {},
   };
   // 가짜 참가자: 아직 자기 팀이 못 한 미션을 골라 걸어간다 (초당 약 4m — 화면에서 보이게 사람보다 빠르게)
   const goals = {};
@@ -88,7 +90,7 @@ function seed() {
       const p = g.pos[id];
       let mid = goals[id];
       if (!mid || g.done[team]?.[mid]) {
-        const left = Object.keys(g.missions).filter(k => !g.done[team]?.[k]);
+        const left = Object.keys(g.missions).filter(k => !g.missions[k].each && !g.done[team]?.[k]); // 가짜 참가자는 팀 미션만
         mid = goals[id] = left[Math.floor(Math.random() * left.length)];
         if (!mid) return;
       }

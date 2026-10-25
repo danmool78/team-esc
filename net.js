@@ -1,14 +1,16 @@
 /* Firebase: 로그인(이메일·구글)과 실시간 데이터베이스.
    자료 구조 (database.rules.json과 같게)
      users/{uid}                 { name, gender, avatar }
-     games/{code}/meta           { name, host, hosts{uid:true}, center{lat,lng}, radius, layer, status: ready|live|ended, created }
+     games/{code}/meta           { name, host, hosts{uid:true}, mode: team|solo, center{lat,lng}, radius, layer, status: ready|live|ended, created }
                                  host = 게임을 만든 진행자(바꿀 수 없음), hosts = 그가 회원 중에서 더한 진행자(host·hosts 말고는 똑같이 진행)
      games/{code}/teams/{tid}    { name, color }
      games/{code}/members/{uid}  { name, avatar, team, online, joined }
      games/{code}/pos/{uid}      { lat, lng, acc, t }      — 걸을 때마다 몇 초에 한 번
-     games/{code}/missions/{mid} { title, desc, type: arrive|quiz|photo|task, lat, lng, r, q, ah, pts, order, open }
+     games/{code}/missions/{mid} { title, desc, type: arrive|quiz|photo|task, each, lat, lng, r, q, ah, pts, order, open }
+                                 each = 개인 미션 (팀원 각자 해서 점수를 팀에 보탠다). 개인전(mode solo)이면 모든 미션이 개인 미션
      games/{code}/done/{tid}/{mid} { by, name, t, pts, status: ok|wait }
-     games/{code}/photos/{tid}_{mid}  사진(작게 줄인 JPEG data URL) — done을 가볍게 두려고 따로
+     games/{code}/pdone/{uid}/{mid} { name, team, t, pts, status: ok|wait } — 개인 미션·개인전의 완료
+     games/{code}/photos/{tid}_{mid}  사진 (개인 완료는 u_{uid}_{mid})(작게 줄인 JPEG data URL) — done을 가볍게 두려고 따로
      games/{code}/feed/{push}    { t, team, text } */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js';
 import {
@@ -77,9 +79,9 @@ export function presence(code) {
 }
 
 /* ---------- 실시간 구독 ---------- */
-// h: { meta, teams, members, pos, missions, done, feed(item, isNew) } — 각 값이 바뀔 때마다 전체를 넘긴다
+// h: { meta, teams, members, pos, missions, done, pdone, feed(item, isNew) } — 각 값이 바뀔 때마다 전체를 넘긴다
 export function watch(code, h) {
-  const offs = ['meta', 'teams', 'members', 'pos', 'missions', 'done'].map(k => onValue(G(code, k), s => h[k]?.(s.val() || {})));
+  const offs = ['meta', 'teams', 'members', 'pos', 'missions', 'done', 'pdone'].map(k => onValue(G(code, k), s => h[k]?.(s.val() || {})));
   let primed = false;
   offs.push(onChildAdded(query(G(code, 'feed'), limitToLast(40)), s => h.feed?.({ id: s.key, ...s.val() }, primed)));
   get(G(code, 'feed')).then(() => setTimeout(() => (primed = true), 300));
@@ -98,6 +100,9 @@ export const addMission = (code, m) => push(G(code, 'missions'), m);
 export const saveMission = (code, id, m) => set(G(code, 'missions/' + id), m);
 export const delMission = (code, id) => remove(G(code, 'missions/' + id));
 export const complete = (code, tid, mid, d) => set(G(code, `done/${tid}/${mid}`), { ...d, by: uid(), t: serverTimestamp() });
+// 개인 완료 (개인 미션·개인전)
+export const completeMine = (code, mid, d) => set(G(code, `pdone/${uid()}/${mid}`), { ...d, t: serverTimestamp() });
+export const judgeMine = (code, who, mid, ok) => (ok ? set(G(code, `pdone/${who}/${mid}/status`), 'ok') : remove(G(code, `pdone/${who}/${mid}`)));
 export const judge = (code, tid, mid, ok) => (ok ? set(G(code, `done/${tid}/${mid}/status`), 'ok') : remove(G(code, `done/${tid}/${mid}`)));
 export const savePhoto = (code, tid, mid, url) => set(G(code, `photos/${tid}_${mid}`), url);
 export const getPhoto = async (code, tid, mid) => (await get(G(code, `photos/${tid}_${mid}`))).val();

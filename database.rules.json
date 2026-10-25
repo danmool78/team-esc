@@ -47,8 +47,20 @@
           ".write": "auth != null && (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true)",
           "$tid": {
             "$mid": {
-              ".write": "auth != null && !data.exists() && root.child('games/' + $g + '/members/' + auth.uid + '/team').val() === $tid && root.child('games/' + $g + '/meta/status').val() === 'live' && root.child('games/' + $g + '/missions/' + $mid).exists()",
+              ".write": "auth != null && !data.exists() && root.child('games/' + $g + '/members/' + auth.uid + '/team').val() === $tid && root.child('games/' + $g + '/meta/status').val() === 'live' && root.child('games/' + $g + '/missions/' + $mid).exists() && !(root.child('games/' + $g + '/missions/' + $mid + '/each').val() === true || root.child('games/' + $g + '/meta/mode').val() === 'solo')",
               ".validate": "newData.child('by').val() === auth.uid || (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true) || !newData.child('by').exists()",
+              "status": { ".validate": "newData.val() === 'wait' || (newData.val() === 'ok' && ((root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true) || root.child('games/' + $g + '/missions/' + $mid + '/type').val() === 'arrive' || root.child('games/' + $g + '/missions/' + $mid + '/type').val() === 'quiz'))" },
+              "pts": { ".validate": "newData.val() === root.child('games/' + $g + '/missions/' + $mid + '/pts').val()" }
+            }
+          }
+        },
+        "pdone": {
+          ".read": "auth != null && root.child('games/' + $g + '/members/' + auth.uid).exists()",
+          ".write": "auth != null && (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true)",
+          "$uid": {
+            "$mid": {
+              ".write": "auth != null && auth.uid === $uid && !data.exists() && root.child('games/' + $g + '/members/' + auth.uid).exists() && root.child('games/' + $g + '/meta/status').val() === 'live' && root.child('games/' + $g + '/missions/' + $mid).exists() && (root.child('games/' + $g + '/missions/' + $mid + '/each').val() === true || root.child('games/' + $g + '/meta/mode').val() === 'solo')",
+              ".validate": "newData.child('team').val() === root.child('games/' + $g + '/members/' + $uid + '/team').val() || (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true)",
               "status": { ".validate": "newData.val() === 'wait' || (newData.val() === 'ok' && ((root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true) || root.child('games/' + $g + '/missions/' + $mid + '/type').val() === 'arrive' || root.child('games/' + $g + '/missions/' + $mid + '/type').val() === 'quiz'))" },
               "pts": { ".validate": "newData.val() === root.child('games/' + $g + '/missions/' + $mid + '/pts').val()" }
             }
@@ -57,7 +69,7 @@
         "photos": {
           ".read": "auth != null && (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true)",
           "$key": {
-            ".write": "auth != null && ((root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true) || ($key.beginsWith(root.child('games/' + $g + '/members/' + auth.uid + '/team').val() + '_') && !data.exists()))",
+            ".write": "auth != null && ((root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true) || (($key.beginsWith(root.child('games/' + $g + '/members/' + auth.uid + '/team').val() + '_') || $key.beginsWith('u_' + auth.uid + '_')) && !data.exists()))",
             ".validate": "newData.isString() && newData.val().length < 400000"
           }
         },
