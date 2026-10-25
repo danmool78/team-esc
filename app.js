@@ -47,7 +47,7 @@ const STALE = 90e3; // 이만큼 좌표가 안 오면 흐리게
 
 const screens = ['auth', 'profile', 'lobby', 'game'];
 // 첫 화면이 뜨면 시작 성공 — index.html의 비상구를 닫는다
-const show = id => { screens.forEach(s => ($('#' + s).hidden = s !== id)); window.__booted = true; if ($('#rescue')) $('#rescue').hidden = true; };
+const show = id => { screens.forEach(s => ($('#' + s).hidden = s !== id)); window.__booted = true; if ($('#rescue')) $('#rescue').hidden = true; window.hideSplash?.(); };
 let user = null, profile = null;
 
 /* ---------- 로그인 ---------- */

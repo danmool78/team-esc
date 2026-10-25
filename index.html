@@ -11,7 +11,7 @@
   // 비상구: 앱이 시작하다 오류가 나거나 20초 안에 첫 화면이 안 뜨면 '다시 불러오기'를 보인다 (행사 중 진갈색 빈 화면에 갇히지 않게)
   addEventListener('error', function () { if (!window.__booted) setTimeout(rescue, 300); });
   setTimeout(function () { if (!window.__booted) rescue(); }, 20000);
-  function rescue() { var r = document.getElementById('rescue'); if (r && !window.__booted) r.hidden = false; }
+  function rescue() { var r = document.getElementById('rescue'); if (r && !window.__booted) { r.hidden = false; window.hideSplash && hideSplash(true); } }
   async function hardReload() {
     try { (await navigator.serviceWorker?.getRegistrations() || []).forEach(function (x) { x.unregister(); }); } catch (e) {}
     try { (await caches.keys()).filter(function (k) { return k.indexOf('tiles') < 0; }).forEach(function (k) { caches.delete(k); }); } catch (e) {}
@@ -30,6 +30,24 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<!-- 시작 화면: 앱을 열 때마다 로고와 '비전 퀘스트'가 등장한다. 앱을 불러오는 동안의 빈 화면도 이것으로 덮는다.
+     앱을 연 뒤 2.8초쯤 지나면 사라진다(누르면 바로). 시작에 실패해 비상구가 뜰 땐 그 전에 걷는다 -->
+<div class="splash" id="splash" onclick="window.hideSplash && hideSplash(true)">
+  <div class="sp-rays"></div>
+  <img class="sp-logo" src="assets/icon-512.png" alt="">
+  <div class="sp-title">비전 퀘스트</div>
+  <div class="sp-sub">VISION QUEST</div>
+  <div class="sp-tag">전주에서 팀별로 걷는 미션 게임</div>
+</div>
+<script>
+  // 시작 화면 걷기: 너무 빨리 사라지면 등장이 안 보이니 연 뒤 2.8초는 둔다 (다 등장한 화면을 1초쯤 보게)
+  window.hideSplash = function (now) {
+    var s = document.getElementById('splash'); if (!s || s.classList.contains('out')) return;
+    var wait = now ? 0 : Math.max(0, 2800 - performance.now());
+    setTimeout(function () { s.classList.add('out'); setTimeout(function () { s.remove(); }, 500); }, wait);
+  };
+  setTimeout(function () { window.hideSplash(true); }, 19000); // 비상구(20초)보다 먼저
+</script>
 
 <!-- 로그인 -->
 <!-- 대문: 금빛 햇살 위에 앱 아이콘과 게임 제목, 둘레에 미션 아이콘들이 떠 있다 -->
