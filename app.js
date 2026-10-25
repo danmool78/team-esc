@@ -4,6 +4,7 @@
    점수판: 팀마다 해낸 미션 수와 점수를 위에 늘 보이고, 바뀌는 순간 반짝인다 */
 import { JEONJU, dist, fmtDist } from './geo.js';
 import * as W from './world.js';
+import { ic, iconImage, iconURL } from './icons.js';
 
 const DEMO = new URLSearchParams(location.search).has('demo');
 // 시험용 가짜 GPS: ?fakegps=36.3504,127.3845 — 그 좌표를 GPS가 준 것처럼 쓴다 (클라우드 컴퓨터·데스크톱에서 확인할 때)
@@ -13,6 +14,9 @@ const FAKE = (() => { const v = new URLSearchParams(location.search).get('fakegp
 document.addEventListener('touchmove', e => { if (e.touches.length > 1 && !e.target.closest('#world')) e.preventDefault(); }, { passive: false });
 const net = await import(DEMO ? './demo.js' : './net.js');
 const $ = s => document.querySelector(s);
+// 이모티콘 대신 귀여운 SVG 아이콘: data-ic가 붙은 단추 앞에 넣고, 찾기 칸에는 돋보기를 깐다
+document.querySelectorAll('[data-ic]').forEach(el => el.insertAdjacentHTML('afterbegin', ic(el.dataset.ic)));
+$('#find').style.backgroundImage = iconURL('search');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} } };
 
@@ -26,7 +30,10 @@ const TEAM_PRESET = [['청팀', '#3d7be0'], ['홍팀', '#e0503d'], ['녹팀', '#
 // 개인전: 사람마다 색 (uid로 늘 같은 색)
 const PERSON_COLORS = ['#3d7be0', '#e0503d', '#3dae6a', '#d9a520', '#8e5bd6', '#e8862e', '#3fbfd9', '#e06aa8', '#7fae3a', '#c0763f', '#5a6fd6', '#d6455f'];
 const personColor = uid => PERSON_COLORS[[...uid].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % PERSON_COLORS.length];
-const TYPES = { arrive: ['📍', '도착'], quiz: ['❓', '퀴즈'], photo: ['📷', '사진'], task: ['🙌', '현장 미션'] };
+const TYPES = { arrive: ['pin', '도착'], quiz: ['quiz', '퀴즈'], photo: ['camera', '사진'], task: ['flag', '현장 미션'] };
+const tic = type => ic(TYPES[type]?.[0] || 'pin');
+// 알림(팀 없는 소식)은 확성기 아이콘으로 — 예전 소식 앞의 이모티콘은 떼어 낸다
+const plain = t => String(t || '').replace(/^📣\s*/u, '');
 const STATUS = { ready: '시작 전', live: '진행 중', ended: '끝남' };
 const STALE = 90e3; // 이만큼 좌표가 안 오면 흐리게
 
@@ -171,7 +178,7 @@ async function enter(code) {
     feed: (f, isNew) => {
       G.feed.unshift(f);
       if (G.feed.length > 60) G.feed.pop();
-      if (isNew) { toast(f.text); if (tab !== 'feed') unseen++; }
+      if (isNew) { toast(plain(f.text), f.team ? null : 'megaphone'); if (tab !== 'feed') unseen++; }
       if (tab === 'feed') renderPanel(); else renderTabs();
     },
   });
@@ -258,7 +265,7 @@ function syncMissions() {
     seen.add(id);
     const st = myDone(id)?.status;
     const by = isEach(m) ? (eachDone(id).length ? eachDone(id).length + '명' : '') : Object.keys(G.teams).filter(t => G.done[t]?.[id]?.status === 'ok').map(t => G.teams[t].name).join('·');
-    W.upsertMission({ id, title: `${TYPES[m.type]?.[0] || '📍'} ${m.title}${m.each && !solo() ? ' (개인)' : ''}`, lat: m.lat, lng: m.lng, r: m.r, dim: st === 'ok' || m.open === false,
+    W.upsertMission({ id, icon: iconImage(TYPES[m.type]?.[0] || 'pin'), title: `${m.title}${m.each && !solo() ? ' (개인)' : ''}`, lat: m.lat, lng: m.lng, r: m.r, dim: st === 'ok' || m.open === false,
       color: st === 'ok' ? '#7fdc8f' : st === 'wait' ? '#f0d79a' : '#ffcf6a', sub: `${m.pts || 0}점${by ? ' · ✓ ' + by : ''}` });
   });
   removedMissions(seen);
@@ -275,7 +282,8 @@ const ago = t => {
 /* ---------- 아래 판: 미션 · 사람 · 소식 · 진행 ---------- */
 document.querySelectorAll('.tabs button[data-tab]').forEach(b => (b.onclick = () => { tab = b.dataset.tab; if (tab === 'feed') unseen = 0; setDock(false); renderTabs(); renderPanel(); }));
 // 아래 창 접기/펴기 (탭을 누르면 펴진다 — 단추 글자도 같이 바꾼다)
-const setDock = min => { $('#dock').classList.toggle('min', min); $('#grip').textContent = min ? '펴기 ▴' : '접기 ▾'; };
+const setDock = min => { $('#dock').classList.toggle('min', min); $('#grip').innerHTML = (min ? '펴기 ' : '접기 ') + ic(min ? 'up' : 'down'); };
+setDock(false);
 $('#grip').onclick = $('#handle').onclick = () => setDock(!$('#dock').classList.contains('min'));
 function renderTabs() {
   const waits = isHost() ? pendings().length : 0;
@@ -290,7 +298,7 @@ function renderPanel() {
   const el = $('#panel');
   if (tab === 'missions') el.innerHTML = missionList();
   if (tab === 'people') el.innerHTML = peopleList();
-  if (tab === 'feed') el.innerHTML = G.feed.length ? G.feed.map(f => `<div class="feed"><time>${clock(f.t)}</time><span><span class="dot" style="background:${esc(teamOf(f.team).color)}"></span> ${esc(f.text)}</span></div>`).join('') : '<p class="empty">아직 소식이 없어요.</p>';
+  if (tab === 'feed') el.innerHTML = G.feed.length ? G.feed.map(f => `<div class="feed"><time>${clock(f.t)}</time><span>${f.team ? `<span class="dot" style="background:${esc(teamOf(f.team).color)}"></span>` : ic('megaphone')} ${esc(plain(f.text))}</span></div>`).join('') : '<p class="empty">아직 소식이 없어요.</p>';
   if (tab === 'host') el.innerHTML = hostPanel();
   el.querySelectorAll('[data-m]').forEach(n => (n.onclick = () => openMission(n.dataset.m)));
   el.querySelectorAll('[data-u]').forEach(n => (n.onclick = () => focusPlayer(n.dataset.u)));
@@ -306,9 +314,9 @@ function missionList() {
     const st = myDone(id)?.status;
     const d = myLL ? fmtDist(dist(myLL, m)) : '';
     // 해낸 팀은 팀 색 점으로, 개인 미션은 해낸 사람 수로
-    const dots = isEach(m) ? (eachDone(id).length ? ` · ✓ ${eachDone(id).length}명` : '') : Object.entries(G.teams).filter(([t]) => G.done[t]?.[id]?.status === 'ok').map(([, t]) => `<i style="background:${esc(t.color)}"></i>`).join('');
+    const dots = isEach(m) ? (eachDone(id).length ? ` · ${ic('check')} ${eachDone(id).length}명` : '') : Object.entries(G.teams).filter(([t]) => G.done[t]?.[id]?.status === 'ok').map(([, t]) => `<i style="background:${esc(t.color)}"></i>`).join('');
     return `<div class="item" data-m="${id}">
-      <div class="ic ${st || ''}">${st === 'ok' ? '✓' : st === 'wait' ? '⏳' : TYPES[m.type]?.[0] || '📍'}</div>
+      <div class="ic ${st || ''}">${ic(st === 'ok' ? 'check' : st === 'wait' ? 'wait' : TYPES[m.type]?.[0] || 'pin')}</div>
       <div class="tx"><b>${esc(m.title)}</b><small>${TYPES[m.type]?.[1] || ''}${m.each && !solo() ? ' · 개인' : ''} · ${m.pts || 0}점${m.open === false ? ' · 닫힘' : ''}<span class="dots">${dots}</span></small></div>
       <div class="rt">${d}</div></div>`;
   }).join('');
@@ -528,7 +536,7 @@ function cleanFix(p) {
 const WILD = 100e3;
 function setMyPos(p) {
   if (!sim && G.meta.center && dist(p, G.meta.center) > WILD) {
-    gpsText(`기기가 알려 준 위치가 이상해요 (게임 지역에서 ${fmtDist(dist(p, G.meta.center))}) — 폰에서 '정확한 위치'를 켜거나 🧪 테스트 모드를 써 주세요`);
+    gpsText(`기기가 알려 준 위치가 이상해요 (게임 지역에서 ${fmtDist(dist(p, G.meta.center))}) — 폰에서 '정확한 위치'를 켜거나 테스트 모드를 써 주세요`);
     return;
   }
   myLL = p;
@@ -594,30 +602,30 @@ function openMission(id) {
   W.flyTo(m, 160); W.follow(null); setFab();
   const d = myDone(id), live = G.meta.status === 'live', each = isEach(m);
   // 개인 미션은 팀마다 해낸 사람 수(개인전은 전체 수), 팀 미션은 팀마다 ✓
-  const others = solo() ? `<span class="pill">✓ ${eachDone(id).length}명 해냈어요</span>` : Object.entries(G.teams).map(([tid, tm]) => {
+  const others = solo() ? `<span class="pill">${ic('check')} ${eachDone(id).length}명 해냈어요</span>` : Object.entries(G.teams).map(([tid, tm]) => {
     const x = G.done[tid]?.[id], n = eachDone(id).filter(([, y]) => y.team === tid).length;
-    return `<span class="pill ${each ? (n ? 'ok' : '') : x?.status || ''}"><span class="dot" style="background:${esc(tm.color)}"></span> ${esc(tm.name)} ${each ? n + '명' : x?.status === 'ok' ? '✓' : x ? '⏳' : '—'}</span>`;
+    return `<span class="pill ${each ? (n ? 'ok' : '') : x?.status || ''}"><span class="dot" style="background:${esc(tm.color)}"></span> ${esc(tm.name)} ${each ? n + '명' : x?.status === 'ok' ? ic('check') : x ? ic('wait') : '—'}</span>`;
   }).join('');
   let act = '';
-  if (d?.status === 'ok') act = `<div class="box">✓ ${each ? `해냈어요 (${clock(d.t)})` : `우리 팀이 해냈어요 (${esc(d.name)}, ${clock(d.t)})`}</div>`;
-  else if (d?.status === 'wait') act = `<div class="box">⏳ 진행자가 확인하고 있어요.</div>`;
+  if (d?.status === 'ok') act = `<div class="box">${ic('check')} ${each ? `해냈어요 (${clock(d.t)})` : `우리 팀이 해냈어요 (${esc(d.name)}, ${clock(d.t)})`}</div>`;
+  else if (d?.status === 'wait') act = `<div class="box">${ic('wait')} 진행자가 확인하고 있어요.</div>`;
   else if (!canPlay()) act = `<div class="box">팀에 들어가야 미션을 할 수 있어요.</div>`;
   else if (!live) act = `<div class="box">${G.meta.status === 'ended' ? '게임이 끝났어요.' : '진행자가 게임을 시작하면 열려요.'}</div>`;
   else if (!near(m)) act = `<div class="box">${myLL ? `${fmtDist(dist(myLL, m))} 남았어요. ` : '위치 공유를 켜 주세요. '}반경 ${m.r}m 안으로 가면 ${m.type === 'arrive' ? '저절로 완료돼요' : '열려요'}.</div>`;
   else if (m.type === 'quiz') act = `<div class="box">${esc(m.q)}</div><form class="row" id="qForm"><input id="qAns" placeholder="정답" autocomplete="off"><button class="btn primary">제출</button></form><p class="msg" id="qMsg"></p>`;
-  else if (m.type === 'photo') act = `<label class="btn wide primary" style="text-align:center">📷 사진 찍어 올리기<input type="file" accept="image/*" capture="environment" id="photoIn" hidden></label><p class="msg" id="qMsg"></p>`;
-  else if (m.type === 'task') act = `<button class="btn wide primary" id="taskBtn">🙌 해냈어요 — 진행자에게 확인 요청</button>`;
+  else if (m.type === 'photo') act = `<label class="btn wide primary" style="text-align:center">${ic('camera')} 사진 찍어 올리기<input type="file" accept="image/*" capture="environment" id="photoIn" hidden></label><p class="msg" id="qMsg"></p>`;
+  else if (m.type === 'task') act = `<button class="btn wide primary" id="taskBtn">${ic('flag')} 해냈어요 — 진행자에게 확인 요청</button>`;
   else act = `<div class="box">도착! 곧 완료돼요.</div>`;
   // 테스트 모드: 미션 자리로 바로 옮겨 가 본다
-  if (sim && !d) act += `<button class="btn wide" id="simGo">🧪 여기로 이동 (테스트)</button>`;
+  if (sim && !d) act += `<button class="btn wide" id="simGo">${ic('flask')} 여기로 이동 (테스트)</button>`;
   const host = isHost() ? `<div class="hostgrid"><button class="btn small" id="mEdit">수정</button><button class="btn small" id="mToggle">${m.open === false ? '열기' : '닫기'}</button><button class="btn small danger" id="mDel">삭제</button></div>` : '';
-  openSheet(`<p class="eyebrow">${TYPES[m.type]?.[0]} ${TYPES[m.type]?.[1]}${m.each && !solo() ? ' · 개인 미션 — 각자 해서 팀 점수에 보태요' : ''} · ${m.pts || 0}점</p><h3>${esc(m.title)}</h3>
+  openSheet(`<p class="eyebrow">${tic(m.type)} ${TYPES[m.type]?.[1]}${m.each && !solo() ? ' · 개인 미션 — 각자 해서 팀 점수에 보태요' : ''} · ${m.pts || 0}점</p><h3>${esc(m.title)}</h3>
     ${m.desc ? `<p class="fine">${esc(m.desc)}</p>` : ''}<div class="teamrow">${others}</div>${act}${host}`, el => {
     el.querySelector('#qForm')?.addEventListener('submit', async e => {
       e.preventDefault();
       const a = el.querySelector('#qAns').value;
       const ok = m.ah ? (await answerHash(id, a)) === m.ah : norm(a) === norm(m.ans || '');
-      if (ok) { await finish(id, m, 'ok'); closeSheet(); toast('정답이에요! 🎉'); }
+      if (ok) { await finish(id, m, 'ok'); closeSheet(); toast('정답이에요!', 'party'); }
       else { const q = el.querySelector('#qMsg'); q.className = 'msg err'; q.textContent = '아니에요. 다시 생각해 보세요.'; }
     });
     el.querySelector('#photoIn')?.addEventListener('change', async e => {
@@ -671,27 +679,27 @@ function hostPanel() {
   const waits = pendings();
   return `<div class="code">${G.code}</div><p class="fine" style="text-align:center">참가자에게 이 코드를 알려 주세요 · <button class="link" id="hCopy" data-link="${esc(link)}">초대 링크 복사</button></p>
     <div class="hostgrid">
-      ${st !== 'live' ? `<button class="btn primary small" id="hStart">▶ ${st === 'ended' ? '다시 시작' : '게임 시작'}</button>` : `<button class="btn small" id="hEnd">■ 게임 끝내기</button>`}
+      ${st !== 'live' ? `<button class="btn primary small" id="hStart">${ic('play')} ${st === 'ended' ? '다시 시작' : '게임 시작'}</button>` : `<button class="btn small" id="hEnd">${ic('stop')} 게임 끝내기</button>`}
       <button class="btn small" id="hAdd">＋ 미션 더하기</button>
       <button class="btn small" id="hTeams">${solo() ? '방식·팀' : '팀 정하기'}</button>
-      <button class="btn small" id="hNotice">📣 알림 보내기</button>
-      <button class="btn small" id="hArea">🗺 지역 바꾸기</button>
-      ${isOwner() ? '<button class="btn small" id="hHosts">🧑‍✈️ 진행자 더하기</button>' : ''}
+      <button class="btn small" id="hNotice">${ic('megaphone')} 알림 보내기</button>
+      <button class="btn small" id="hArea">${ic('map')} 지역 바꾸기</button>
+      ${isOwner() ? `<button class="btn small" id="hHosts">${ic('crown')} 진행자 더하기</button>` : ''}
     </div>
     <div class="group-h">확인을 기다리는 미션 ${waits.length}</div>
-    ${waits.length ? waits.map(({ kind, who, tid, mid, d }) => `<div class="item" data-judge="${kind}|${who}|${mid}"><div class="ic wait">${TYPES[G.missions[mid]?.type]?.[0] || '⏳'}</div>
+    ${waits.length ? waits.map(({ kind, who, tid, mid, d }) => `<div class="item" data-judge="${kind}|${who}|${mid}"><div class="ic wait">${tic(G.missions[mid]?.type)}</div>
       <div class="tx"><b>${esc(G.missions[mid]?.title || mid)}${kind === 'u' && !solo() ? ' (개인)' : ''}</b><small><span class="dot" style="background:${esc(kind === 'u' && solo() ? personColor(who) : teamOf(tid).color)}"></span> ${solo() ? '' : esc(teamOf(tid).name) + ' · '}${esc(d.name)} · ${clock(d.t)}</small></div><div class="rt">보기 ›</div></div>`).join('') : '<p class="empty">없어요.</p>'}`;
 }
 function bindHost(el) {
   el.querySelector('#hCopy')?.addEventListener('click', e => { navigator.clipboard?.writeText(e.target.dataset.link); toast('초대 링크를 복사했어요.'); });
-  el.querySelector('#hStart')?.addEventListener('click', async () => { await net.setStatus(G.code, 'live'); net.say(G.code, '', '📣 게임이 시작됐어요!'); });
-  el.querySelector('#hEnd')?.addEventListener('click', async e => { if (!confirmIn(e.target)) return; await net.setStatus(G.code, 'ended'); net.say(G.code, '', '📣 게임이 끝났어요. 수고하셨어요!'); });
+  el.querySelector('#hStart')?.addEventListener('click', async () => { await net.setStatus(G.code, 'live'); net.say(G.code, '', '게임이 시작됐어요!'); });
+  el.querySelector('#hEnd')?.addEventListener('click', async e => { if (!confirmIn(e.target)) return; await net.setStatus(G.code, 'ended'); net.say(G.code, '', '게임이 끝났어요. 수고하셨어요!'); });
   el.querySelector('#hAdd')?.addEventListener('click', () => missionForm());
   el.querySelector('#hTeams')?.addEventListener('click', teamEditor);
   el.querySelector('#hArea')?.addEventListener('click', areaEditor);
   el.querySelector('#hHosts')?.addEventListener('click', hostEditor);
   el.querySelector('#hNotice')?.addEventListener('click', () => openSheet(`<h3>모두에게 알림</h3><form class="stack" id="nf"><input id="nt" placeholder="예: 10분 뒤 광장에 모여요" required><button class="btn primary">보내기</button></form>`,
-    s => (s.querySelector('#nf').onsubmit = async e => { e.preventDefault(); await net.say(G.code, '', '📣 ' + s.querySelector('#nt').value.trim()); closeSheet(); })));
+    s => (s.querySelector('#nf').onsubmit = async e => { e.preventDefault(); await net.say(G.code, '', s.querySelector('#nt').value.trim()); closeSheet(); })));
   el.querySelectorAll('[data-judge]').forEach(n => (n.onclick = () => judgeSheet(...n.dataset.judge.split('|'))));
 }
 async function judgeSheet(kind, who, mid) {
@@ -734,7 +742,7 @@ function areaEditor() {
           center = { lat, lng };
         }
         await net.saveMeta(G.code, { center, radius: +el.querySelector('#aR').value });
-        net.say(G.code, '', '📣 게임 지역이 바뀌었어요');
+        net.say(G.code, '', '게임 지역이 바뀌었어요');
         closeSheet();
         // 테스트 중이면 내 인형도 새 지역 가운데로
         if (sim) setMyPos({ lat: center.lat, lng: center.lng, acc: 3 });
@@ -753,7 +761,7 @@ function hostEditor() {
       const uid = b.dataset.host, on = !isHostUid(uid);
       try {
         await net.setCohost(G.code, uid, on);
-        net.say(G.code, '', `📣 ${G.members[uid]?.name} 님이 진행자${on ? '가 됐어요' : '에서 빠졌어요'}`);
+        net.say(G.code, '', `${G.members[uid]?.name} 님이 진행자${on ? '가 됐어요' : '에서 빠졌어요'}`);
         el.querySelector('#hl').innerHTML = draw(); bind();
       } catch { toast('바꾸지 못했어요.'); }
     }));
@@ -776,7 +784,7 @@ function teamEditor() {
       await net.saveMeta(G.code, { mode: b.dataset.mode });
       // 팀전으로 돌아왔는데 팀이 없으면 두 팀을 만들어 둔다
       if (b.dataset.mode === 'team' && !Object.keys(G.teams).length) await net.saveTeams(G.code, { t1: { name: TEAM_PRESET[0][0], color: TEAM_PRESET[0][1] }, t2: { name: TEAM_PRESET[1][0], color: TEAM_PRESET[1][1] } });
-      net.say(G.code, '', `📣 ${b.dataset.mode === 'solo' ? '개인전' : '팀전'}으로 바뀌었어요`);
+      net.say(G.code, '', `${b.dataset.mode === 'solo' ? '개인전' : '팀전'}으로 바뀌었어요`);
       teamEditor();
     }));
     el.querySelectorAll('[data-mem]').forEach(s => (s.onchange = () => net.setTeam(G.code, s.dataset.mem, s.value)));
@@ -809,12 +817,12 @@ function missionForm(id, draftM) {
   const m = draftM || (id ? { ...G.missions[id] } : { type: 'arrive', r: 25, pts: 10, open: true, order: Object.keys(G.missions).length });
   openSheet(`<h3>${id ? '미션 고치기' : '새 미션'}</h3><form class="stack" id="mf">
     <input name="title" placeholder="미션 이름 (예: 경기전 홍살문)" value="${esc(m.title || '')}" required>
-    <label>종류<select name="type">${Object.entries(TYPES).map(([k, [ic, n]]) => `<option value="${k}" ${m.type === k ? 'selected' : ''}>${ic} ${n}</option>`).join('')}</select></label>
+    <label>종류<select name="type">${Object.entries(TYPES).map(([k, [, n]]) => `<option value="${k}" ${m.type === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
     ${solo() ? '' : `<label class="check"><input type="checkbox" name="each" ${m.each ? 'checked' : ''}><span>개인 미션 — 팀원 각자 해서 점수를 팀에 보태요</span></label>`}
     <textarea name="desc" placeholder="설명 (무엇을 하면 되는지)">${esc(m.desc || '')}</textarea>
     <div class="qa stack"><input name="q" placeholder="문제" value="${esc(m.q || '')}"><input name="ans" placeholder="${m.ah ? '정답 (바꿀 때만 적기)' : '정답 — 띄어쓰기·대소문자는 무시해요'}"></div>
     <div class="grid2"><label>반경(m)<input name="r" type="number" min="0" value="${m.r ?? 25}"></label><label>점수<input name="pts" type="number" min="0" value="${m.pts ?? 10}"></label></div>
-    <div class="box" id="where">${m.lat ? `📍 ${m.lat.toFixed(5)}, ${m.lng.toFixed(5)}` : '위치를 정해 주세요'}</div>
+    <div class="box" id="where">${m.lat ? `${ic('pin')} ${m.lat.toFixed(5)}, ${m.lng.toFixed(5)}` : '위치를 정해 주세요'}</div>
     <div class="grid2"><button type="button" class="btn" id="pickMap">지도에서 고르기</button><button type="button" class="btn" id="pickMe">내 자리로</button></div>
     <button class="btn primary">저장</button><p class="msg" id="mfMsg"></p></form>`, el => {
     const f = el.querySelector('#mf');
@@ -841,16 +849,17 @@ function missionForm(id, draftM) {
       if (!id) { const r = await net.addMission(G.code, { ...v, open: true }); id = r?.key || Object.keys(G.missions).find(k => G.missions[k].title === v.title); }
       if (v.type === 'quiz' && ans.trim()) v.ah = await answerHash(id, ans);
       await net.saveMission(G.code, id, v);
-      if (G.meta.status === 'live' && isNew) net.say(G.code, '', `📣 새 미션 — '${v.title}'`);
+      if (G.meta.status === 'live' && isNew) net.say(G.code, '', `새 미션 — '${v.title}'`);
       closeSheet();
     };
   });
 }
 
 /* ---------- 알림 ---------- */
-function toast(text) {
+function toast(text, icon) {
   const t = document.createElement('div');
   t.className = 'toast'; t.textContent = text;
+  if (icon) t.insertAdjacentHTML('afterbegin', ic(icon) + ' ');
   $('#toasts').appendChild(t);
   setTimeout(() => t.remove(), 4300);
   while ($('#toasts').children.length > 3) $('#toasts').firstChild.remove();
