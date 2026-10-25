@@ -225,6 +225,9 @@ function onMeta() {
   tickTimer();
   checkResults();
   $('#hostTab').hidden = !isHost();
+  // 테스트 모드 단추도 진행자에게만. 진행자에서 빠졌는데 테스트 모드였으면 GPS로 돌아간다 (데모는 그대로)
+  $('#simBtn').hidden = sim || !isHost();
+  if (sim && !isHost() && !DEMO && G.meta.host) setMode('gps');
   if (tab === 'host' && !isHost()) { tab = 'missions'; renderTabs(); renderPanel(); } // 진행자에서 빠지면 진행 탭을 닫는다
   simHome();
   // 3D 건물 단추는 지도 모드일 때만 (지도 단추 바로 밑)
@@ -543,7 +546,7 @@ function setMode(mode) {
   sim = mode === 'sim';
   W.setGroundFirst(sim);
   $('#gpsBtn').hidden = mode === 'gps';
-  $('#simBtn').hidden = mode === 'sim';
+  $('#simBtn').hidden = mode === 'sim' || !isHost(); // 테스트 모드는 진행자만 (참가자가 잘못 눌러 현장에 없는 것처럼 되지 않게)
   if (!DEMO && !FAKE) store.set('posMode', mode);
   if (mode === 'off') {
     // 끄면 내 좌표를 지워 다른 사람 지도에서도 내 인형이 사라진다
