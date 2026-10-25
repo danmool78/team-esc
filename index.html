@@ -44,7 +44,7 @@
   <div class="card narrow">
     <p class="eyebrow">내 인형</p>
     <h2 class="title sm">지도 위에서 나를 대신할 인형</h2>
-    <div class="avatarbox"><img id="avatarImg" alt=""><button class="btn ghost small" id="reroll">🎲 다시 뽑기</button></div>
+    <div class="avatarbox"><img id="avatarImg" alt=""><button class="btn ghost small" id="reroll" data-ic="dice">다시 뽑기</button></div>
     <div class="seg" id="genderSeg"><button data-g="m" class="on">남자</button><button data-g="f">여자</button></div>
     <label class="fine">별칭 — 지도 이름표와 검색에 쓰여요
       <input id="profName" placeholder="별칭 (2~12자)" maxlength="12" minlength="2"></label>
@@ -91,14 +91,14 @@
     <div class="scores" id="scores"></div>
   </header>
   <div class="fabs">
-    <button class="fab" id="fabMe" title="내 위치">◎</button>
-    <button class="fab" id="fabAll" title="전체 보기">⤢</button>
-    <button class="fab" id="fabLayer" title="위성/지도">🗺</button>
-    <button class="fab" id="fabPocket" title="주머니 모드 — 화면을 까맣게 하고 위치만 계속 보내요">🌙</button>
+    <button class="fab" id="fabMe" title="내 위치" data-ic="locate"></button>
+    <button class="fab" id="fabAll" title="전체 보기" data-ic="expand"></button>
+    <button class="fab" id="fabLayer" title="위성/지도" data-ic="map"></button>
+    <button class="fab" id="fabPocket" title="주머니 모드 — 화면을 까맣게 하고 위치만 계속 보내요" data-ic="moon"></button>
   </div>
   <div class="gpsbar" id="gpsBar">
-    <button class="btn primary small" id="gpsBtn">📍 위치 공유 켜기</button>
-    <button class="btn small" id="simBtn" title="GPS 대신 게임 현장(전주) 가운데에 서고, 지도를 누르면 그리로 걸어가요 (현장 밖에서 시험할 때)">🧪 테스트 모드</button>
+    <button class="btn primary small" id="gpsBtn" data-ic="pin">위치 공유 켜기</button>
+    <button class="btn small" id="simBtn" title="GPS 대신 게임 현장(전주) 가운데에 서고, 지도를 누르면 그리로 걸어가요 (현장 밖에서 시험할 때)" data-ic="flask">테스트 모드</button>
     <button class="btn small" id="offBtn" hidden>위치 공유 끄기</button>
     <span id="gpsText"></span>
   </div>
@@ -107,7 +107,7 @@
   <nav class="dock" id="dock">
     <button class="handle" id="handle" aria-label="아래 창 접기/펴기"><i></i></button>
     <div class="finder">
-      <input id="find" type="search" placeholder="🔍 별칭이나 팀 이름으로 찾기" autocomplete="off" enterkeyhint="search">
+      <input id="find" type="search" placeholder="별칭이나 팀 이름으로 찾기" autocomplete="off" enterkeyhint="search">
       <div class="finds" id="finds" hidden></div>
     </div>
     <div class="tabs">
@@ -115,7 +115,7 @@
       <button data-tab="people">사람</button>
       <button data-tab="feed">소식</button>
       <button data-tab="host" id="hostTab" hidden>진행</button>
-      <button class="grip" id="grip" title="아래 창 접기/펴기">접기 ▾</button>
+      <button class="grip" id="grip" title="아래 창 접기/펴기">접기</button>
     </div>
     <div class="panel" id="panel"></div>
   </nav>

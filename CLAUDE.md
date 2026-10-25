@@ -22,6 +22,7 @@
 - `terrain.js` — 3D 지형을 **조각(줌 17 타일 하나 = 위성사진 한 장, 한 변 약 250m, 8개씩 동시에)**으로 나눠 카메라가 보는 곳 둘레를 이어 받아 폰에서 그린다(`want`), 멀어진 조각은 버린다. 고도는 AWS Terrain Tiles(terrarium, 줌 15), 겉그림은 Esri Clarity 위성사진(기본 World Imagery는 전주 상공이 구름에 덮여 있다) 또는 OSM 지도. 조각 경계 높이는 같은 함수(`elevAt`)로 구해 틈이 없다
 - 지도는 게임 반경과 상관없이 어디로든 옮겨 볼 수 있다(지역 원점 둘레 150km). 게임 반경은 땅에 깔린 금색 띠(`world.js` drawEdge)로만 보인다. 기기 위치가 게임 지역에서 100km 넘으면 오류로 보고 무시한다(`app.js` WILD — PC 와이파이 위치가 베이징으로 잡힌 일이 있었다)
 - 확인용 주소: `?demo`(가짜 참가자), `?fakegps=위도,경도`(GPS 대신 그 좌표)
+- `icons.js` — 이모티콘 대신 쓰는 알록달록한 SVG 아이콘(`ic(이름)`). 화면에 이모티콘을 새로 넣지 말고 여기에 아이콘을 더한다. 3D 이름표는 `iconImage`
 - `geo.js` — 위경도 ↔ 지역 미터 좌표(동 +x, 남 +z), 거리
 - `stage/kit.js`, `stage/people.js` — 그 길에서 **그대로 가져온** 미니미 인형. 고치지 말고, 그 길에서 바뀌면 다시 복사한다. 인형은 `Actor`의 pos/goal을 0에 두고 바깥 묶음(group)을 옮기며, 걷는 동안 `set('walk')`
 - `assets/vendor/three.module.min.js` — three.js 0.160.0 (그 길과 같은 판)

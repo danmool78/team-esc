@@ -87,16 +87,20 @@ function drawEdge(now) {
 }
 
 /* ---------- 이름표: 캔버스 글씨를 스프라이트로 ---------- */
-function label(text, color = '#1d1813', sub = '') {
+// icon: 다 뜬 그림이면 글씨 왼쪽에 그린다 (미션 종류 아이콘)
+function label(text, color = '#1d1813', sub = '', icon = null) {
   const c = document.createElement('canvas'), g = c.getContext('2d');
   const f = '700 30px "Noto Sans KR", sans-serif', fs = '500 22px "Noto Sans KR", sans-serif';
+  const iw = icon?.complete && icon.naturalWidth ? 44 : 0;
   g.font = f;
-  const w = Math.ceil(Math.max(g.measureText(text).width, sub ? (g.font = fs, g.measureText(sub).width) : 0)) + 34;
+  const tw = g.measureText(text).width;
+  const w = Math.ceil(Math.max(tw + iw, sub ? (g.font = fs, g.measureText(sub).width) : 0)) + 34;
   c.width = w; c.height = sub ? 86 : 54;
   g.fillStyle = color; g.globalAlpha = 0.9;
   g.beginPath(); g.roundRect(0, 0, w, c.height, 20); g.fill();
   g.globalAlpha = 1; g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.font = f; g.fillText(text, w / 2, 28);
+  if (iw) g.drawImage(icon, (w - tw - iw) / 2, 8, 38, 38);
+  g.font = f; g.fillText(text, (w + iw) / 2, 28);
   if (sub) { g.font = fs; g.fillStyle = 'rgba(255,255,255,.85)'; g.fillText(sub, w / 2, 62); }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -237,8 +241,10 @@ export function upsertMission(m) {
   const col = new THREE.Color(m.color || '#f0d79a');
   o.beam.material.color.copy(col); o.ring.material.color.copy(col); o.disc.material.color.copy(col); o.glow.material.color.copy(col);
   o.beam.material.opacity = m.dim ? 0.25 : 0.75;
-  const key = m.title + m.color + (m.sub || '');
-  if (o.tagKey !== key) { o.tagKey = key; relabel(o, 'tag', m.title, m.dim ? '#3a4a3a' : '#5a3d10', m.sub || ''); if (!o.tag.parent) o.g.add(o.tag); }
+  const key = m.title + m.color + (m.sub || '') + (m.icon?.src || '') + !!m.icon?.complete;
+  if (o.tagKey !== key) { o.tagKey = key; relabel(o, 'tag', m.title, m.dim ? '#3a4a3a' : '#5a3d10', m.sub || '', m.icon); if (!o.tag.parent) o.g.add(o.tag); }
+  // 아이콘 그림이 아직 안 떴으면 뜨는 대로 이름표를 다시 그린다
+  if (m.icon && !m.icon.complete) m.icon.addEventListener('load', () => missions.has(o.id) && upsertMission(o), { once: true });
   placeMission(o);
   return o;
 }
