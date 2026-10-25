@@ -1,0 +1,67 @@
+{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.child('name').isString() && newData.child('name').val().length >= 2 && newData.child('name').val().length <= 12"
+      }
+    },
+    "games": {
+      "$g": {
+        "meta": {
+          ".read": "auth != null",
+          ".write": "auth != null && ((!data.exists() && newData.child('host').val() === auth.uid) || data.child('host').val() === auth.uid)"
+        },
+        "teams": {
+          ".read": "auth != null && root.child('games/' + $g + '/members/' + auth.uid).exists()",
+          ".write": "auth != null && root.child('games/' + $g + '/meta/host').val() === auth.uid"
+        },
+        "members": {
+          ".read": "auth != null && data.child(auth.uid).exists()",
+          "$uid": {
+            ".write": "auth != null && (auth.uid === $uid || root.child('games/' + $g + '/meta/host').val() === auth.uid) && root.child('games/' + $g + '/meta').exists()",
+            "name": { ".validate": "newData.isString() && newData.val().length <= 12" }
+          }
+        },
+        "pos": {
+          ".read": "auth != null && root.child('games/' + $g + '/members/' + auth.uid).exists()",
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && root.child('games/' + $g + '/members/' + auth.uid).exists()",
+            ".validate": "newData.child('lat').isNumber() && newData.child('lng').isNumber()"
+          }
+        },
+        "missions": {
+          ".read": "auth != null && root.child('games/' + $g + '/members/' + auth.uid).exists()",
+          ".write": "auth != null && root.child('games/' + $g + '/meta/host').val() === auth.uid"
+        },
+        "done": {
+          ".read": "auth != null && root.child('games/' + $g + '/members/' + auth.uid).exists()",
+          ".write": "auth != null && root.child('games/' + $g + '/meta/host').val() === auth.uid",
+          "$tid": {
+            "$mid": {
+              ".write": "auth != null && !data.exists() && root.child('games/' + $g + '/members/' + auth.uid + '/team').val() === $tid && root.child('games/' + $g + '/meta/status').val() === 'live' && root.child('games/' + $g + '/missions/' + $mid).exists()",
+              ".validate": "newData.child('by').val() === auth.uid || root.child('games/' + $g + '/meta/host').val() === auth.uid || !newData.child('by').exists()",
+              "status": { ".validate": "newData.val() === 'wait' || (newData.val() === 'ok' && (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/missions/' + $mid + '/type').val() === 'arrive' || root.child('games/' + $g + '/missions/' + $mid + '/type').val() === 'quiz'))" },
+              "pts": { ".validate": "newData.val() === root.child('games/' + $g + '/missions/' + $mid + '/pts').val()" }
+            }
+          }
+        },
+        "photos": {
+          ".read": "auth != null && root.child('games/' + $g + '/meta/host').val() === auth.uid",
+          "$key": {
+            ".write": "auth != null && (root.child('games/' + $g + '/meta/host').val() === auth.uid || ($key.beginsWith(root.child('games/' + $g + '/members/' + auth.uid + '/team').val() + '_') && !data.exists()))",
+            ".validate": "newData.isString() && newData.val().length < 400000"
+          }
+        },
+        "feed": {
+          ".read": "auth != null && root.child('games/' + $g + '/members/' + auth.uid).exists()",
+          "$id": {
+            ".write": "auth != null && !data.exists() && root.child('games/' + $g + '/members/' + auth.uid).exists()",
+            ".validate": "newData.child('text').isString() && newData.child('text').val().length <= 200"
+          }
+        }
+      }
+    }
+  }
+}

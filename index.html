@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>팀 미션 — 함께 걷는 지도</title>
+<meta name="theme-color" content="#15110d">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- 로그인 -->
+<section id="auth" class="screen center" hidden>
+  <div class="card narrow">
+    <p class="eyebrow">TEAM MISSION</p>
+    <h1 class="title">함께 걷는 지도</h1>
+    <p class="fine">팀원들과 실제로 걸으며 미션을 풀어요. 누가 어디 있는지, 상대 팀이 몇 개를 해냈는지 지도에서 바로 보여요.</p>
+    <button id="googleBtn" class="btn wide google"><span>G</span> 구글 계정으로 시작</button>
+    <div class="or">또는 이메일</div>
+    <form id="emailForm" class="stack">
+      <input id="email" type="email" placeholder="이메일" autocomplete="email" required>
+      <input id="pw" type="password" placeholder="비밀번호 (6자 이상)" autocomplete="current-password" minlength="6" required>
+      <button class="btn wide primary" id="emailBtn">로그인</button>
+    </form>
+    <div class="row between fine">
+      <button class="link" id="toggleSign">처음이에요 — 가입하기</button>
+      <button class="link" id="resetBtn">비밀번호를 잊었어요</button>
+    </div>
+    <p class="msg" id="authMsg"></p>
+  </div>
+</section>
+
+<!-- 처음 한 번: 이름과 인형 -->
+<section id="profile" class="screen center" hidden>
+  <div class="card narrow">
+    <p class="eyebrow">내 인형</p>
+    <h2 class="title sm">지도 위에서 나를 대신할 인형</h2>
+    <div class="avatarbox"><img id="avatarImg" alt=""><button class="btn ghost small" id="reroll">🎲 다시 뽑기</button></div>
+    <div class="seg" id="genderSeg"><button data-g="m" class="on">남자</button><button data-g="f">여자</button></div>
+    <label class="fine">별칭 — 지도 이름표와 검색에 쓰여요
+      <input id="profName" placeholder="별칭 (2~12자)" maxlength="12" minlength="2"></label>
+    <button class="btn wide primary" id="profSave">이대로 할게요</button>
+  </div>
+</section>
+
+<!-- 게임 고르기 -->
+<section id="lobby" class="screen center" hidden>
+  <div class="card narrow">
+    <div class="row between">
+      <div class="me"><img id="lobbyAvatar" alt=""><div><b id="lobbyName"></b><small id="lobbyEmail"></small></div></div>
+      <div class="row"><button class="link" id="editProfile">인형 바꾸기</button><button class="link" id="logout">로그아웃</button></div>
+    </div>
+    <h2 class="title sm">게임 코드로 들어가기</h2>
+    <form id="joinForm" class="row">
+      <input id="joinCode" placeholder="예: K7QX2" maxlength="8" autocapitalize="characters" autocomplete="off">
+      <button class="btn primary">들어가기</button>
+    </form>
+    <p class="msg" id="lobbyMsg"></p>
+    <details id="createBox">
+      <summary>진행자 — 새 게임 만들기</summary>
+      <form id="createForm" class="stack">
+        <input id="cName" placeholder="게임 이름 (예: 한옥마을 팀 미션)" required>
+        <label>팀 수 <select id="cTeams"><option>2</option><option selected>3</option><option>4</option></select></label>
+        <label>게임 지역 중심
+          <select id="cCenter"><option value="jeonju">전주 한옥마을</option><option value="here">지금 내 위치</option><option value="custom">직접 입력 (위도, 경도)</option></select>
+        </label>
+        <input id="cLL" placeholder="35.8155, 127.1525" hidden>
+        <label>반경 <select id="cRadius"><option value="300">300m</option><option value="600" selected>600m</option><option value="1000">1km</option><option value="1500">1.5km</option><option value="2500">2.5km</option></select></label>
+        <button class="btn wide primary">만들기</button>
+      </form>
+    </details>
+    <p class="fine"><a href="?demo">데모로 둘러보기</a> — 로그인 없이 가짜 참가자들이 걸어 다니는 화면</p>
+  </div>
+</section>
+
+<!-- 게임 -->
+<section id="game" class="screen" hidden>
+  <div id="world"></div>
+  <div class="nogl" id="nogl" hidden>이 기기에서는 3D를 그릴 수 없어요. 아래 목록으로 확인해 주세요.</div>
+  <header class="hud">
+    <div class="gtitle"><b id="gName"></b><small id="gStatus"></small></div>
+    <div class="scores" id="scores"></div>
+  </header>
+  <div class="fabs">
+    <button class="fab" id="fabMe" title="내 위치">◎</button>
+    <button class="fab" id="fabAll" title="전체 보기">⤢</button>
+    <button class="fab" id="fabLayer" title="위성/지도">🗺</button>
+  </div>
+  <div class="gpsbar" id="gpsBar"><button class="btn primary small" id="gpsBtn">📍 위치 공유 켜기</button><span id="gpsText"></span></div>
+  <div class="placing" id="placing" hidden>지도를 눌러 미션 위치를 고르세요 <button class="link" id="placeCancel">취소</button></div>
+  <div class="credit" id="credit"></div>
+  <nav class="dock" id="dock">
+    <div class="finder">
+      <input id="find" type="search" placeholder="🔍 별칭이나 팀 이름으로 찾기" autocomplete="off" enterkeyhint="search">
+      <div class="finds" id="finds" hidden></div>
+    </div>
+    <div class="tabs">
+      <button data-tab="missions" class="on">미션</button>
+      <button data-tab="people">사람</button>
+      <button data-tab="feed">소식</button>
+      <button data-tab="host" id="hostTab" hidden>진행</button>
+      <button class="grip" id="grip" title="접기/펴기">▾</button>
+    </div>
+    <div class="panel" id="panel"></div>
+  </nav>
+  <div class="toasts" id="toasts"></div>
+</section>
+
+<!-- 아래에서 올라오는 창 -->
+<div class="sheet" id="sheet" hidden><div class="sheet-bg" data-close></div><div class="sheet-card" id="sheetCard"></div></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
