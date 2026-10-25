@@ -1,7 +1,7 @@
 /* 3D 세계: 지형 위에 참가자 인형과 미션 표지를 세우고, 비스듬히 내려다보는 카메라로 그린다.
    조작은 그 길(the-way-jesus)의 3D 지형 모드와 같게 — 마우스: 끌면 옮기고, 오른쪽 버튼(또는 Shift)으로 끌면 돌리고 기울이고, 바퀴로 당긴다.
    손가락: 하나로 옮기고, 둘로 벌려 당기고 비틀어 돌리고 함께 위아래로 밀어 기울인다.
-   내 위치 따라가기(◎): 나는 늘 화면 가운데, 진행 방향이 화면 위로 오게 지도가 돌고 움직인다.
+   내 위치(◎): 한 번 누르면 나를 가운데 두고 따라가고, 한 번 더 누르면 진행 방향 고정 — 가는 방향이 화면 위로 오게 지도가 돌고 움직인다.
    지형은 카메라가 보는 곳 둘레를 조각조각 이어 받아 그린다 (terrain.js) — 지도를 끌어 옮기면 그쪽 땅이 따라 생긴다.
    인형은 실제 크기로는 점처럼 작아 보여서, 카메라가 멀어질수록 함께 키운다 (자리는 그대로, 크기만) */
 import { THREE, damp, glowTexture } from './stage/kit.js';
@@ -456,6 +456,7 @@ function placeBuses(big, dt) {
 // headUp: 그 사람의 진행 방향이 화면 위로 오게 지도를 돌린다 (내 위치 따라가기)
 export function follow(uid, headUp = false) { cam.follow = uid; cam.headUp = !!uid && headUp; }
 export const following = () => cam.follow;
+export const headingUp = () => cam.headUp;
 // 폰 나침반 방위(도, 북에서 시계 방향). null이면 걸어간 방향으로 돌아간다
 export function setCompass(deg) { compass = deg == null || !isFinite(deg) ? null : deg * Math.PI / 180; }
 // 진행 방향(북에서 시계 방향, 라디안): 내 것은 나침반 우선, 아니면 마지막으로 걸어간 방향
@@ -514,7 +515,7 @@ if (renderer) {
     const dx = e.clientX - p.x, dy = e.clientY - p.y;
     if (ptrs.size === 1) {
       if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 6) downAt = null;
-      if (e.buttons & 2 || e.shiftKey) { goal.yaw -= dx * 0.006; goal.pitch += dy * 0.005; clampGoal(); }
+      if (e.buttons & 2 || e.shiftKey) { if (!cam.headUp) goal.yaw -= dx * 0.006; goal.pitch += dy * 0.005; clampGoal(); }
       else pan(dx, dy);
       p.x = e.clientX; p.y = e.clientY;
       return;
@@ -527,8 +528,7 @@ if (renderer) {
     goal.dist *= before.d / Math.max(after.d, 1);
     let da = after.ang - before.ang;
     if (da > Math.PI) da -= Math.PI * 2; if (da < -Math.PI) da += Math.PI * 2;
-    if (Math.abs(da) > 0.004 && cam.headUp) cam.headUp = false; // 손으로 돌리면 진행 방향 맞추기를 멈춘다 (가운데 따라가기는 그대로)
-    goal.yaw -= da;
+    if (!cam.headUp) goal.yaw -= da; // 진행 방향 고정 중엔 손으로 돌리지 않는다 (벌려 당기기·기울이기는 그대로)
     goal.pitch += (after.my - before.my) * 0.004;
     clampGoal();
   });

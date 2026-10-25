@@ -196,7 +196,7 @@ async function enter(code) {
       if (tab === 'feed') renderPanel(); else renderTabs();
     },
   });
-  W.follow(net.me(), true);
+  W.follow(net.me());
   // 지난번 방식을 이어 가고, 처음이면 GPS를 바로 켠다 (끄기를 골랐던 사람만 꺼진 채로). 데모는 늘 테스트
   setMode(FAKE ? 'gps' : DEMO ? 'sim' : store.get('posMode') || 'gps');
 }
@@ -397,7 +397,7 @@ function focusPlayer(uid) {
   const p = G.pos[uid], m = G.members[uid];
   if (!p) { toast(`${m?.name || ''} 님은 아직 위치를 공유하지 않았어요.`); return; }
   W.flyTo(p, 110);
-  W.follow(uid, uid === net.me());
+  W.follow(uid);
   setFab();
   toast(`${m.name}${solo() ? '' : ' · ' + teamOf(m.team).name}${myLL && uid !== net.me() ? ' · ' + fmtDist(dist(myLL, p)) : ''} — 따라가는 중`);
 }
@@ -414,9 +414,24 @@ function focusTeam(tid) {
 }
 
 /* ---------- 지도 단추 ---------- */
-const setFab = () => $('#fabMe').classList.toggle('on', W.following() === net.me());
-// 내 위치: 나를 가운데 두고 진행 방향이 위로 오게 지도가 돈다
-$('#fabMe').onclick = () => { if (G.pos[net.me()]) { startCompass(); W.follow(net.me(), true); W.flyTo(G.pos[net.me()], 140); } else toast(watchId != null ? '내 위치를 찾는 중이에요. 잠시만요.' : '먼저 위치 공유를 켜 주세요.'); setFab(); };
+// 내 위치 단추: 따라가기(금테) → 진행 방향 고정(파란 화살) → 다시 따라가기
+let fabMode = '';
+const setFab = () => {
+  const mode = W.following() !== net.me() ? '' : W.headingUp() ? 'nav' : 'on';
+  $('#fabMe').classList.toggle('on', mode === 'on');
+  $('#fabMe').classList.toggle('nav', mode === 'nav');
+  if (mode !== fabMode) { fabMode = mode; $('#fabMe').innerHTML = ic(mode === 'nav' ? 'nav' : 'locate'); }
+};
+// 첫 번째: 나를 가운데 두고 따라간다 (지도 방향은 그대로).
+// 두 번째: 진행 방향 고정 — 나는 가운데, 가는 방향이 늘 위, 배율은 지금 그대로. 지도가 내 걸음에 맞춰 돌고 움직인다
+$('#fabMe').onclick = () => {
+  if (!G.pos[net.me()]) { toast(watchId != null ? '내 위치를 찾는 중이에요. 잠시만요.' : '먼저 위치 공유를 켜 주세요.'); return; }
+  startCompass();
+  if (W.following() === net.me() && !W.headingUp()) { W.follow(net.me(), true); toast('진행 방향 고정 — 내가 가는 방향이 늘 위로 와요', 'nav'); }
+  else if (W.following() === net.me()) { W.follow(net.me(), false); toast('내 위치 따라가기', 'locate'); }
+  else { W.follow(net.me(), false); W.flyTo(G.pos[net.me()], 140); }
+  setFab();
+};
 W.on('unfollow', setFab);
 // 폰 나침반: 안드로이드는 deviceorientationabsolute(alpha는 반시계), 아이폰은 webkitCompassHeading(누른 뒤 허락을 받아야 한다).
 // 나침반이 없는 기기(PC)는 걸어간 방향으로 돌린다
@@ -514,7 +529,7 @@ function setMode(mode) {
     gpsText('테스트 모드: 현장에 있는 것처럼 — 지도를 누르면 내 인형이 그리로 걸어가요');
     // 아직 자리가 없으면 게임 지역 가운데에 세운다 (GPS로 받은 먼 좌표도 버린다). 그리고 현장에 선 내 모습으로 바로 데려간다
     simHome();
-    if (myLL) { W.follow(net.me(), true); W.flyTo(myLL, 140); setFab(); }
+    if (myLL) { W.follow(net.me()); W.flyTo(myLL, 140); setFab(); }
     return;
   }
   if (FAKE) { setMyPos(FAKE); return; }
@@ -585,7 +600,7 @@ function setMyPos(p) {
   const moved = !lastSent || dist(lastSent, p) > 3 || Date.now() - lastSent.at > 8000;
   // 테스트 모드 표시(sim): 누를 때마다 뛰어가는 자리라 차·버스 계산에서 뺀다
   if (moved) { lastSent = { ...p, at: Date.now() }; net.writePos(G.code, sim ? { ...p, sim: true } : p); }
-  if (first) { startCompass(); W.follow(net.me(), true); W.flyTo(p, 140); setFab(); }
+  if (first) { startCompass(); W.follow(net.me()); W.flyTo(p, 140); setFab(); }
   checkArrive();
   if (tab === 'missions') renderPanel();
 }
