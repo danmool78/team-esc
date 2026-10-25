@@ -488,9 +488,10 @@ function pocketTick() {
   // 다시 올리기(8초마다)가 아니라 GPS가 실제로 새 값을 준 때로 센다
   const ago = fixAt ? Math.round((Date.now() - fixAt) / 1000) : null;
   const late = watchId != null && ago != null && ago > 120; // 8초마다 보내니 2분 넘게 조용하면 위치가 안 잡히는 것 (가만히 서 있으면 폰이 새 값을 늦게 주기도 해서 넉넉히)
-  $('#pkBox').classList.toggle('warn', !on || late);
-  $('#pkState').textContent = !on ? '위치 공유가 꺼져 있어요' : late ? '2분 넘게 새 위치가 없어요' : '위치 보내는 중';
-  $('#pkSub').textContent = on && ago != null ? `${ago < 5 ? '방금' : ago + '초 전'} 위치 받음 · 오차 ${myLL?.acc ?? '-'}m` : '';
+  const sl = on && sendLate(), sAgo = ackAt ? Math.round((Date.now() - ackAt) / 1000) : null;
+  $('#pkBox').classList.toggle('warn', !on || late || sl);
+  $('#pkState').textContent = !on ? '위치 공유가 꺼져 있어요' : sl ? '서버로 위치가 안 가요 — 인터넷 확인' : late ? '2분 넘게 새 위치가 없어요' : '위치 보내는 중';
+  $('#pkSub').textContent = on && ago != null ? `${ago < 5 ? '방금' : ago + '초 전'} 위치 받음 · 오차 ${myLL?.acc ?? '-'}m${sAgo != null ? ` · 서버 확인 ${sAgo < 5 ? '방금' : sAgo + '초 전'}` : ''}` : '';
   // 화면에 글씨 자국이 남지 않게 30초마다 자리를 옮긴다
   if (Math.floor(Date.now() / 1000) % 30 === 0) $('#pkBox').style.top = 18 + Math.random() * 56 + '%';
 }
@@ -542,7 +543,7 @@ function setMode(mode) {
   if (!DEMO && !FAKE) store.set('posMode', mode);
   if (mode === 'off') {
     // 끄면 내 좌표를 지워 다른 사람 지도에서도 내 인형이 사라진다
-    myLL = null; lastSent = null;
+    myLL = null; lastSent = null; ackAt = pendAt = 0; ackErr = false; sendState();
     if (G.code) net.clearPos(G.code);
     gpsText('위치 공유가 꺼져 있어요');
     return;
@@ -638,7 +639,28 @@ function cleanFix(p) {
 }
 // 게임 지역에서 이만큼 넘게 떨어진 위치는 기기가 잘못 알려 준 것으로 본다 (PC 브라우저의 와이파이 위치가 베이징으로 잡힌 일이 있었다)
 const WILD = 100e3;
-function sendPos(p) { lastSent = { ...p, at: Date.now() }; net.writePos(G.code, sim ? { ...p, sim: true } : p); }
+// 서버 전송 확인: 올린 위치를 서버가 받았다고 답한 때(ackAt). 답을 못 받은 채 기다린 지 오래면(pendAt) 인터넷이 끊긴 것
+let ackAt = 0, pendAt = 0, ackErr = false;
+function sendPos(p) {
+  lastSent = { ...p, at: Date.now() };
+  pendAt ||= Date.now();
+  net.writePos(G.code, sim ? { ...p, sim: true } : p)
+    .then(() => { ackAt = Date.now(); pendAt = 0; ackErr = false; sendState(); })
+    .catch(() => { ackErr = true; sendState(); });
+}
+// 내 폰에서도 내 위치가 서버에 들어가는지 보이게: 초록 '서버 전송 ✓ n초 전', 30초 넘게 답이 없으면 빨간 경고
+const SEND_LATE = 30e3;
+const sendLate = () => ackErr || (pendAt && Date.now() - pendAt > SEND_LATE);
+function sendState() {
+  const el = $('#sendState'), on = watchId != null || sim || FAKE;
+  el.hidden = !on || (!ackAt && !pendAt);
+  if (el.hidden) return;
+  const late = sendLate(), s = Math.round((Date.now() - ackAt) / 1000);
+  el.classList.toggle('late', !!late);
+  el.textContent = ackErr ? '서버가 위치를 받지 않아요' : late ? `서버로 위치가 안 가요 — 인터넷 확인 (${Math.round((Date.now() - pendAt) / 1000)}초)`
+    : ackAt ? `서버 전송 ✓ ${s < 3 ? '방금' : s + '초 전'}` : '서버로 보내는 중…';
+}
+setInterval(sendState, 1000);
 // 가만히 서 있으면 폰이 새 값을 안 줄 수 있다 — 8초 넘게 조용하면 마지막 자리를 다시 올려 다른 사람 화면에서 흐려지지 않게
 setInterval(() => { if (G.code && myLL && watchId != null && lastSent && Date.now() - lastSent.at > 8000) sendPos(myLL); }, 2000);
 let fixAt = 0; // 마지막으로 새 위치를 받은 때
