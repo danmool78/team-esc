@@ -12,6 +12,7 @@
 - `main`에 push하면 GitHub Actions가 호스팅과 데이터베이스 규칙을 배포한다. **main에는 사용자가 확인한 것만** 올린다.
 - 새 작업은 브랜치 → PR. PR마다 Actions가 미리보기 주소를 단다.
 - GitHub 비밀값 `FIREBASE_SERVICE_ACCOUNT_TEAM_ESC`(서비스 계정 JSON)가 필요하다. 비밀키 파일은 저장소에 두지 않는다.
+- 판 번호: 배포 때 Actions가 `index.html`·`app.js`의 `__BUILD__`를 커밋 번호로 바꾼다. 홈 화면 앱이 예전 index.html을 들고 있으면(판이 다르면) 앱이 스스로 새로 불러오고, 그래도 못 뜨면 index.html의 비상구 화면(다시 불러오기)이 나온다. 첫 주소 `/`는 no-cache
 - 로컬 실행: `python -m http.server 8765` 후 http://localhost:8765/?demo (로그인 없이 가짜 참가자들이 걸어 다니는 데모)
 
 ## 구조

@@ -1,11 +1,47 @@
 {
-  "database": { "rules": "database.rules.json" },
+  "database": {
+    "rules": "database.rules.json"
+  },
   "hosting": {
     "public": ".",
-    "ignore": ["firebase.json", "database.rules.json", "README.md", "CLAUDE.md", "**/.*", "**/node_modules/**", "_src/**", "**/*-firebase-adminsdk-*.json"],
+    "ignore": [
+      "firebase.json",
+      "database.rules.json",
+      "README.md",
+      "CLAUDE.md",
+      "**/.*",
+      "**/node_modules/**",
+      "_src/**",
+      "**/*-firebase-adminsdk-*.json"
+    ],
     "headers": [
-      { "source": "**/*.@(js|css|html|json|webmanifest)", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
-      { "source": "/assets/vendor/**", "headers": [{ "key": "Cache-Control", "value": "public, max-age=2592000" }] }
+      {
+        "source": "/",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "**/*.@(js|css|html|json|webmanifest)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "/assets/vendor/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=2592000"
+          }
+        ]
+      }
     ]
   }
 }

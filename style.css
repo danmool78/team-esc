@@ -97,10 +97,8 @@ summary{cursor:pointer;color:var(--gold2);font-size:14px;margin-bottom:10px}
 .tabs button{border:0;background:none;padding:11px 12px;color:var(--muted);cursor:pointer;position:relative}
 .tabs button.on{color:var(--ink);font-weight:700}
 .tabs button.on::after{content:'';position:absolute;left:12px;right:12px;bottom:-1px;height:2px;background:var(--gold)}
-/* 아래 창 접기/펴기: 작은 ▾ 하나로는 못 찾아서, 금색 테 단추에 글자로 쓰고 창 위에도 손잡이를 붙인다 */
+/* 아래 창 접기/펴기: 작은 ▾ 하나로는 못 찾아서, 금색 테 단추에 글자로 쓴다 */
 .tabs .grip{margin:7px 0 7px auto;padding:4px 13px;border:1px solid var(--gold);border-radius:999px;background:rgba(217,180,106,.14);color:var(--gold2);font-size:13px;font-weight:700}
-.handle{position:absolute;left:50%;top:-18px;transform:translateX(-50%);width:72px;height:24px;border:1px solid var(--line);border-bottom:0;border-radius:12px 12px 0 0;background:rgba(21,17,13,.95);cursor:pointer;display:grid;place-items:center;padding:0}
-.handle i{display:block;width:34px;height:4px;border-radius:2px;background:var(--gold2);opacity:.85}
 .tabs .badge{display:inline-block;min-width:17px;height:17px;padding:0 5px;border-radius:9px;background:var(--bad);color:#fff;font-size:11px;line-height:17px;margin-left:4px;font-weight:700}
 .panel{flex:1;overflow:auto;padding:6px 12px 14px}
 
@@ -175,3 +173,7 @@ summary{cursor:pointer;color:var(--gold2);font-size:14px;margin-bottom:10px}
 .toast .ico{width:1.4em;height:1.4em}
 .finder input{background-repeat:no-repeat;background-position:12px 50%;background-size:20px;padding-left:40px}
 label.btn{flex-direction:row;justify-content:center;align-items:center;gap:4px}
+/* 비상구: 앱이 못 뜰 때 진갈색 빈 화면 대신 */
+.rescue{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:var(--bg);text-align:center;padding:24px}
+.rescue b{font-size:18px;color:var(--gold2)}
+.rescue p{color:var(--muted);font-size:14px;margin:8px 0 18px}

@@ -17,6 +17,9 @@ jobs:
         run: |
           echo "$SA" > "$RUNNER_TEMP/sa.json"
           GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json" npx -y firebase-tools@14 deploy --only database --project team-esc --non-interactive
+      # 판 번호: index.html과 app.js의 __BUILD__를 커밋 번호로 — 둘이 어긋나면(예전 화면을 들고 있으면) 앱이 스스로 새로 불러온다
+      - name: Stamp build id
+        run: sed -i "s/__BUILD__/${GITHUB_SHA::8}/g" index.html app.js
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}

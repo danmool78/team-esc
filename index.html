@@ -5,6 +5,19 @@
 <!-- 화면 크기 고정: 확대 막기(maximum-scale은 아이폰 입력칸 확대까지 막는다), 자판이 떠도 화면 배치는 그대로(interactive-widget) -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-visual">
 <title>비전현장미션</title>
+<!-- 배포할 때 GitHub Actions가 커밋 번호로 바꾼다. app.js의 BUILD와 다르면 예전 화면을 들고 있는 것 → 새로 불러온다 -->
+<meta name="build" content="__BUILD__">
+<script>
+  // 비상구: 앱이 시작하다 오류가 나거나 20초 안에 첫 화면이 안 뜨면 '다시 불러오기'를 보인다 (행사 중 진갈색 빈 화면에 갇히지 않게)
+  addEventListener('error', function () { if (!window.__booted) setTimeout(rescue, 300); });
+  setTimeout(function () { if (!window.__booted) rescue(); }, 20000);
+  function rescue() { var r = document.getElementById('rescue'); if (r && !window.__booted) r.hidden = false; }
+  async function hardReload() {
+    try { (await navigator.serviceWorker?.getRegistrations() || []).forEach(function (x) { x.unregister(); }); } catch (e) {}
+    try { (await caches.keys()).filter(function (k) { return k.indexOf('tiles') < 0; }).forEach(function (k) { caches.delete(k); }); } catch (e) {}
+    var u = new URL(location.href); u.searchParams.set('v', Date.now()); location.replace(u);
+  }
+</script>
 <meta name="theme-color" content="#15110d">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
@@ -105,7 +118,6 @@
   <div class="placing" id="placing" hidden>지도를 눌러 미션 위치를 고르세요 <button class="link" id="placeCancel">취소</button></div>
   <div class="credit" id="credit"></div>
   <nav class="dock" id="dock">
-    <button class="handle" id="handle" aria-label="아래 창 접기/펴기"><i></i></button>
     <div class="finder">
       <input id="find" type="search" placeholder="별칭이나 팀 이름으로 찾기" autocomplete="off" enterkeyhint="search">
       <div class="finds" id="finds" hidden></div>
@@ -124,6 +136,9 @@
 
 <!-- 아래에서 올라오는 창 -->
 <div class="sheet" id="sheet" hidden><div class="sheet-bg" data-close></div><div class="sheet-card" id="sheetCard"></div></div>
+
+<!-- 비상구 화면 (위 스크립트가 띄운다) -->
+<div class="rescue" id="rescue" hidden><div><b>앱을 불러오지 못했어요</b><p>새 판으로 바뀌는 중이었을 수 있어요.</p><button class="btn primary" onclick="hardReload()">다시 불러오기</button></div></div>
 
 <script type="module" src="app.js"></script>
 <!-- 주머니 모드: 화면은 켜 둔 채(위치가 계속 나가게) 까맣게 덮는다. 길게 눌러야 풀린다 -->
