@@ -197,8 +197,8 @@ async function enter(code) {
     },
   });
   W.follow(net.me());
-  // 지난번 방식을 이어 가고, 처음이면 GPS를 바로 켠다 (끄기를 골랐던 사람만 꺼진 채로). 데모는 늘 테스트
-  setMode(FAKE ? 'gps' : DEMO ? 'sim' : store.get('posMode') || 'gps');
+  // 테스트 모드는 그때만 — 다시 열면 GPS로 (전에 시험해 본 폰이 행사 날 테스트 모드에 갇히지 않게). 끄기를 고른 것만 기억한다
+  setMode(FAKE ? 'gps' : DEMO ? 'sim' : store.get('posMode') === 'off' ? 'off' : 'gps');
 }
 
 function onMeta() {
@@ -568,7 +568,6 @@ const INAPP = /KAKAOTALK|NAVER|Instagram|FBAN|FBAV|Line\/|DaumApps/i.test(naviga
 // 좋은 값(30m 이내)을 받은 지 20초 안에 오차가 그 세 배 넘고 50m 넘는 값이 오면 버리고,
 // 최근 값을 정확도로 가중 평균해(1/오차²) 흔들림을 줄인다. 폰은 1초에 한 번쯤 새 값을 주므로
 // 서 있을 땐 20초(20개 남짓)를 모아 평균해 미션 지점에서 자리를 단단히 잡고, 걸으면 4초만 써서 몇 m 늦는 정도로 따라간다.
-// 걷는지는 폰이 준 속도(0.6m/s 넘게)나, 새 값이 지금 평균에서 오차의 두 배보다 멀리 벗어났는지로 본다
 let fixes = [], goodAt = 0, goodAcc = Infinity;
 function cleanFix(p) {
   const now = Date.now();
@@ -579,7 +578,10 @@ function cleanFix(p) {
     list.forEach(f => { const k = 1 / (f.acc * f.acc); w += k; lat += f.lat * k; lng += f.lng * k; });
     return { lat: lat / w, lng: lng / w, w };
   };
-  const moving = p.v > 0.6 || (fixes.length > 0 && dist(avg(fixes), p) > Math.max(6, p.acc * 2));
+  // 걷는지: 폰이 준 속도, 또는 모아 둔 가장 오래된 값에서 지금까지 실제로 간 거리(초속 0.6m 넘게, 오차보다 멀리).
+  // 폰이 속도를 안 주면 천천히 걷는 걸 '서 있음'으로 봐서 20초 평균이 한참 늦게 따라오던 것을 막는다
+  const first = fixes[0], gone = first ? dist(first, p) : 0;
+  const moving = p.v > 0.6 || (first && gone > Math.max(5, p.acc) && gone / Math.max(1, (now - first.t) / 1000) > 0.6) || (fixes.length > 0 && dist(avg(fixes), p) > Math.max(6, p.acc * 2));
   fixes = fixes.filter(f => now - f.t < (moving ? 4000 : 20000));
   fixes.push({ ...p, t: now });
   const m = avg(fixes), best = Math.min(...fixes.map(f => f.acc));
