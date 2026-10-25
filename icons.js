@@ -43,6 +43,10 @@ const ICONS = {
   search: `<circle cx="10.5" cy="10.5" r="6" fill="#bfe9ff"/><path d="M15 15l5 5" stroke="#ffa24c" stroke-width="3"/>${shine(8.6, 8.4, 1.2)}`,
   // 끝나는 시간: 자명종
   clock: `<path d="M5 4.5L3 6.5M19 4.5l2 2" stroke="#ff6b6b" stroke-width="2.2"/><circle cx="12" cy="13" r="7.5" fill="#fff4e0"/><path d="M12 9v4.2l2.8 1.8" stroke="#3b6fd6" stroke-width="2"/><path d="M7 19.5l-1.2 1.6M17 19.5l1.2 1.6"/><circle cx="12" cy="13" r=".9" fill="${O}" stroke="none"/>`,
+  // 더하기: 민트 동그라미에 흰 십자
+  plus: `<circle cx="12" cy="12" r="9" fill="#3fd6a8"/><path d="M12 7.5v9M7.5 12h9" stroke="#fff" stroke-width="2.6"/>${shine(8.2, 7.8, 1.1)}`,
+  // 팀: 세 팀 색 머리와 어깨
+  team: `<path d="M2.8 20a4.2 4.2 0 0 1 8.4 0z" fill="#ff6b6b"/><circle cx="7" cy="12.3" r="2.6" fill="#ff6b6b"/><path d="M12.8 20a4.2 4.2 0 0 1 8.4 0z" fill="#5fd38a"/><circle cx="17" cy="12.3" r="2.6" fill="#5fd38a"/><path d="M7.4 17.6a4.6 4.6 0 0 1 9.2 0z" fill="#4c9bff"/><circle cx="12" cy="8.6" r="3" fill="#4c9bff"/>${shine(11, 7.6, .8)}`,
   // 단체 버스
   bus: `<rect x="3" y="5" width="18" height="12" rx="3" fill="#ffc93c"/><path d="M3 12h18" stroke="#ff6b6b" stroke-width="2"/><rect x="5.5" y="7.2" width="4" height="3" rx=".8" fill="#bfe9ff"/><rect x="10.5" y="7.2" width="4" height="3" rx=".8" fill="#bfe9ff"/><rect x="15.5" y="7.2" width="3.5" height="3" rx=".8" fill="#bfe9ff"/><circle cx="7.5" cy="18" r="2" fill="#5a4a40"/><circle cx="16.5" cy="18" r="2" fill="#5a4a40"/>`,
   // 결과: 금빛 트로피
