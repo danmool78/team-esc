@@ -182,3 +182,21 @@ label.btn{flex-direction:row;justify-content:center;align-items:center;gap:4px}
 .timer.warn{background:#ff6b6b;color:#fff;animation:bump 1s infinite}
 .timer.over{background:var(--panel2);color:var(--muted)}
 .quick{display:flex;gap:8px;flex-wrap:wrap}
+/* 결과 화면: 시상대·메달·꽃가루 */
+.banner{display:flex;align-items:center;justify-content:center;gap:8px;width:calc(100% - 8px);margin:8px 4px;padding:12px;border:0;border-radius:14px;background:linear-gradient(90deg,#ffd34e,#ff9f6b);color:#2b1a08;font-weight:700;font-size:15px;cursor:pointer}
+.result{position:relative;z-index:1}
+.rhead{text-align:center}.rhead .ico{width:56px;height:56px}.rhead h3{margin:4px 0 0}
+.podium{display:flex;align-items:flex-end;justify-content:center;gap:8px;margin:14px 0}
+.pod{flex:1;max-width:110px;display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center}
+.pod b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.pod small{color:var(--muted);font-size:12px}
+.pod i{display:block;width:100%;border-radius:10px 10px 4px 4px;margin-top:6px;opacity:.9}
+.pod.r1 i{height:84px}.pod.r2 i{height:58px}.pod.r3 i{height:40px}
+.pod .ico{width:40px;height:40px}.pod.r1 .ico{width:52px;height:52px}
+.mineres{text-align:center;font-size:15px}.mineres b{color:var(--gold2);font-size:18px}
+.item.on{background:rgba(217,180,106,.1);border-radius:12px}
+.item .ic .rk{font-family:var(--serif);font-size:17px;color:var(--muted)}
+.item .rt b{font-size:17px;color:var(--ink)}
+.confetti{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.confetti span{position:absolute;top:-12px;width:8px;height:12px;border-radius:2px;opacity:.9;animation:fall 2.6s ease-in 2 forwards}
+@keyframes fall{0%{transform:translateY(0) rotate(0)}100%{transform:translateY(520px) rotate(540deg);opacity:0}}

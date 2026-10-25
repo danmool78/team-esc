@@ -43,6 +43,14 @@ const ICONS = {
   search: `<circle cx="10.5" cy="10.5" r="6" fill="#bfe9ff"/><path d="M15 15l5 5" stroke="#ffa24c" stroke-width="3"/>${shine(8.6, 8.4, 1.2)}`,
   // 끝나는 시간: 자명종
   clock: `<path d="M5 4.5L3 6.5M19 4.5l2 2" stroke="#ff6b6b" stroke-width="2.2"/><circle cx="12" cy="13" r="7.5" fill="#fff4e0"/><path d="M12 9v4.2l2.8 1.8" stroke="#3b6fd6" stroke-width="2"/><path d="M7 19.5l-1.2 1.6M17 19.5l1.2 1.6"/><circle cx="12" cy="13" r=".9" fill="${O}" stroke="none"/>`,
+  // 단체 버스
+  bus: `<rect x="3" y="5" width="18" height="12" rx="3" fill="#ffc93c"/><path d="M3 12h18" stroke="#ff6b6b" stroke-width="2"/><rect x="5.5" y="7.2" width="4" height="3" rx=".8" fill="#bfe9ff"/><rect x="10.5" y="7.2" width="4" height="3" rx=".8" fill="#bfe9ff"/><rect x="15.5" y="7.2" width="3.5" height="3" rx=".8" fill="#bfe9ff"/><circle cx="7.5" cy="18" r="2" fill="#5a4a40"/><circle cx="16.5" cy="18" r="2" fill="#5a4a40"/>`,
+  // 결과: 금빛 트로피
+  trophy: `<path d="M7 4h10v5a5 5 0 0 1-10 0z" fill="#ffd34e"/><path d="M7 6H4.5a2.5 2.5 0 0 0 2.8 3.6M17 6h2.5a2.5 2.5 0 0 1-2.8 3.6" stroke="#ffb020" stroke-width="1.8"/><path d="M10.5 14h3v3h-3z" fill="#ffb020"/><rect x="7.5" y="17" width="9" height="3.5" rx="1" fill="#c58b4e"/>${shine(9.6, 6.6, 1.1)}`,
+  // 등수: 금·은·동 메달
+  medal1: `<path d="M8 2.5l2.5 6h3L16 2.5z" fill="#4cc3f0"/><circle cx="12" cy="14.5" r="6.5" fill="#ffd34e"/><path d="M12 11.3v6.4M10.7 12.4l1.3-1.1" stroke="#b07a10" stroke-width="1.8"/>${shine(9.6, 12.2, 1.1)}`,
+  medal2: `<path d="M8 2.5l2.5 6h3L16 2.5z" fill="#ff6b9a"/><circle cx="12" cy="14.5" r="6.5" fill="#dfe6ee"/><path d="M10 12.6a2 2 0 1 1 3.4 1.5L10 17.6h4" stroke="#6b7785" stroke-width="1.6"/>${shine(9.6, 12.2, 1.1)}`,
+  medal3: `<path d="M8 2.5l2.5 6h3L16 2.5z" fill="#5fd38a"/><circle cx="12" cy="14.5" r="6.5" fill="#e8a46a"/><path d="M10.2 12h3.4l-1.8 2a1.9 1.9 0 1 1-1.8 2.6" stroke="#8a4f22" stroke-width="1.6"/>${shine(9.6, 12.2, 1.1)}`,
   down: `<path d="M6.5 9.5L12 15l5.5-5.5" stroke="currentColor" stroke-width="2.4"/>`,
   up: `<path d="M6.5 14.5L12 9l5.5 5.5" stroke="currentColor" stroke-width="2.4"/>`,
 };

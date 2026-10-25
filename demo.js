@@ -64,6 +64,8 @@ const BOTS = [
 ];
 // 탈것 확인용: 함께 걷는 단체 5명(20초 뒤 오픈버스)과 차로 달리는 1명
 const TOUR = [['c1', '은혜', 'man'], ['c2', '진리', 'woman'], ['c3', '생명', 'shepherd'], ['c4', '빛', 'woman2'], ['c5', '평안', 'elder']];
+// ?demo&crowd: 단체를 45명으로 (큰 버스 확인용)
+if (new URLSearchParams(location.search).has('crowd')) for (let i = 6; i <= 45; i++) TOUR.push(['c' + i, '단체' + i, ['man', 'woman', 'shepherd', 'woman2', 'elder', 'traveler'][i % 6]]);
 const DRIVER = ['d1', '바람', 'official', 't2'];
 function seed() {
   if (S.games.DEMO) return;
@@ -86,7 +88,7 @@ function seed() {
   const moveExtras = () => {
     tourA += 1.4 / 180; carA += 11 / 350;
     TOUR.forEach(([id], i) => {
-      const a = tourA - i * 0.012, side = (i % 2 ? 2 : -2);
+      const a = tourA - (i % 12) * 0.012, side = (i % 2 ? 2 : -2) + Math.floor(i / 12) * 3;
       pos[id] = { ...at(60 + Math.cos(a) * (180 + side) + (Math.random() - 0.5), -40 + Math.sin(a) * (180 + side) + (Math.random() - 0.5)), acc: 6, t: now() };
     });
     pos[DRIVER[0]] = { ...at(Math.cos(carA) * 350, Math.sin(carA) * 350), acc: 8, t: now() };

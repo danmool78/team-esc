@@ -7,6 +7,7 @@
 import { THREE, damp, glowTexture } from './stage/kit.js';
 import { Actor } from './stage/people.js';
 import { buildTerrain } from './terrain.js';
+import { iconImage } from './icons.js';
 
 const wrap = document.getElementById('world');
 let renderer;
@@ -297,9 +298,9 @@ function makeCar(color) {
   [[-0.47, -0.55], [0.47, -0.55], [-0.47, 0.55], [0.47, 0.55]].forEach(([x, z]) => g.add(wheel(x, z)));
   return g;
 }
-// 오픈버스: 노란 몸통, 지붕 없이 낮은 난간, 앞 운전석. rows 줄 × 2명
-function makeBus(rows) {
-  const g = new THREE.Group(), L = rows * 0.62 + 1.4;
+// 오픈버스: 노란 몸통, 지붕 없이 낮은 난간, 앞 운전석. 길이 L은 탈 사람 수로 (seating)
+function makeBus(L) {
+  const g = new THREE.Group();
   put(g, 1.15, 0.38, L, '#ffc93c', 0, 0.36, 0);
   put(g, 1.17, 0.07, L + 0.02, '#ff6b6b', 0, 0.56, 0);
   // 난간: 양옆과 뒤
@@ -324,7 +325,7 @@ const avgV = list => [list.reduce((s, p) => s + p.vx, 0) / list.length, list.red
 //  2) 버스에 안 탄 움직이는 사람 — 다니는 버스 곁(25m)에서 같이 가면 바로 타고, 아니면 가깝고(25m) 속도가 비슷한(1.5m/s)
 //     사람끼리 묶어 4명 넘게 20초 넘게 같이 다니면 새 버스에 태운다
 function updateGroups(now) {
-  const drop = (id, b) => { if (b.g) scene.remove(b.g); b.members.forEach(p => p.bus === id && (p.bus = null)); buses.delete(id); };
+  const drop = (id, b) => { if (b.g) scene.remove(b.g); if (b.tag) scene.remove(b.tag); b.members.forEach(p => p.bus === id && (p.bus = null)); buses.delete(id); };
   buses.forEach((b, id) => {
     b.members = b.members.filter(p => players.get(p.uid) === p && alive(p) && Math.hypot(p.cur.x - b.x, p.cur.y - b.z) < 35);
     players.forEach(p => { if (p.bus === id && !b.members.includes(p)) p.bus = null; });
@@ -356,32 +357,60 @@ function updateGroups(now) {
     const ready = list.filter(p => now - p.together >= BUS_AFTER);
     if (ready.length < BUS_MIN) return;
     const id = ++busSeq;
-    buses.set(id, { rows: 0, members: ready, x: ready.reduce((s, p) => s + p.cur.x, 0) / ready.length, z: ready.reduce((s, p) => s + p.cur.y, 0) / ready.length, ang: 0, slowAt: 0 });
+    buses.set(id, { members: ready, x: ready.reduce((s, p) => s + p.cur.x, 0) / ready.length, z: ready.reduce((s, p) => s + p.cur.y, 0) / ready.length, ang: 0, slowAt: 0 });
     ready.forEach(p => (p.bus = id));
   });
+}
+// 자리 배치: 16명까지는 두 줄로 제 키대로, 더 많으면 줄을 늘리고 그만큼 작게 (50명이면 네 줄에 0.57배) — 버스가 끝없이 길어지지 않게
+function seating(n) {
+  const k = n <= 16 ? 1 : Math.sqrt(16 / n);
+  const cols = n <= 16 ? 2 : Math.min(5, Math.round(2 / k));
+  const rows = Math.ceil(n / cols), dz = 0.62 * k, dx = Math.min(0.54, 0.98 / cols);
+  return { k, cols, rows, dz, dx, L: rows * dz + 1.4, key: cols + 'x' + rows };
+}
+// 땅에 앉히기: 앞뒤·양옆 네 곳의 땅 높이로 기울이고, 가장 높은 쪽에 맞춰 올려 비탈에서도 바퀴가 땅에 묻히지 않게 한다
+const tmpV = new THREE.Vector3();
+function settle(obj, x, z, ang, hl, hw) {
+  const fx = -Math.sin(ang), fz = -Math.cos(ang), rx = Math.cos(ang), rz = -Math.sin(ang);
+  const hF = T.heightAt(x + fx * hl, z + fz * hl), hB = T.heightAt(x - fx * hl, z - fz * hl);
+  const hR = T.heightAt(x + rx * hw, z + rz * hw), hL = T.heightAt(x - rx * hw, z - rz * hw);
+  obj.rotation.order = 'YXZ';
+  obj.rotation.set(Math.atan2(hF - hB, 2 * hl), ang, Math.atan2(hR - hL, 2 * hw));
+  return Math.max(T.heightAt(x, z), (hF + hB) / 2, (hR + hL) / 2);
 }
 // 매 장면: 버스를 사람들 가운데로 옮기고, 앞을 함께 가는 방향으로 돌리고, 자리마다 인형을 세운다
 function placeBuses(big, dt) {
   buses.forEach(b => {
     const m = b.members.filter(p => p.cur);
     if (!m.length) return;
-    const rows = Math.ceil(m.length / 2);
-    if (rows !== b.rows) { if (b.g) scene.remove(b.g); b.g = makeBus(rows); b.rows = rows; scene.add(b.g); }
+    const lay = seating(m.length);
+    if (lay.key !== b.key) { if (b.g) scene.remove(b.g); b.g = makeBus(lay.L); b.key = lay.key; scene.add(b.g); }
     const cx = m.reduce((s, p) => s + p.cur.x, 0) / m.length, cz = m.reduce((s, p) => s + p.cur.y, 0) / m.length;
     b.x = damp(b.x, cx, 3, dt); b.z = damp(b.z, cz, 3, dt);
     const vx = m.reduce((s, p) => s + p.vx, 0), vz = m.reduce((s, p) => s + p.vz, 0);
     if (Math.hypot(vx, vz) > 0.1) b.ang = damp(b.ang, near(-Math.atan2(vx, -vz), b.ang), 3, dt); // yaw 0 = 북(-z)을 봄
-    b.g.position.set(b.x, T.heightAt(b.x, b.z), b.z);
-    b.g.rotation.y = b.ang;
+    const y = settle(b.g, b.x, b.z, b.ang, lay.L / 2 * big * 0.9, 0.55 * big);
+    b.g.position.set(b.x, y, b.z);
     b.g.scale.setScalar(big);
-    const L = b.g.userData.L, c = Math.cos(b.ang), s = Math.sin(b.ang);
+    b.g.updateMatrixWorld();
+    // 사람이 많으면 이름표 대신 버스 위에 '단체 버스 · N명' (내 이름표만 남긴다)
+    b.many = m.length > 8;
+    if (b.many && b.tagN !== m.length) { b.tagN = m.length; relabel(b, 'tag', `단체 버스 · ${m.length}명`, '#b5431f', '', iconImage('bus')); if (!b.tag.parent) scene.add(b.tag); }
+    if (b.tag) {
+      b.tag.visible = b.many;
+      const s = cam.dist * 0.019 * b.tag.userData.h;
+      b.tag.scale.set(s * b.tag.userData.aspect, s, 1);
+      b.tag.position.set(b.x, y + big * (b.g.userData.deck + lay.k * 1.2) + s * 0.8, b.z);
+    }
+    const L = b.g.userData.L, face = Math.atan2(-Math.sin(b.ang), -Math.cos(b.ang));
     m.forEach((p, i) => {
-      const sx = i % 2 ? 0.27 : -0.27, sz = -L / 2 + 1.25 + Math.floor(i / 2) * 0.62; // 운전석 뒤부터 두 줄
-      p.seat = { x: b.x + (sx * c + sz * s) * big, z: b.z + (-sx * s + sz * c) * big, y: b.g.position.y + b.g.userData.deck * big, face: Math.atan2(-Math.sin(b.ang), -Math.cos(b.ang)) };
+      const col = i % lay.cols, row = Math.floor(i / lay.cols);
+      tmpV.set((col - (lay.cols - 1) / 2) * lay.dx, b.g.userData.deck, -L / 2 + 1.1 + lay.dz * 0.6 + row * lay.dz); // 운전석 뒤부터 줄 맞춰
+      b.g.localToWorld(tmpV);
+      p.seat = { x: tmpV.x, y: tmpV.y, z: tmpV.z, face, k: lay.k, hideTag: b.many && !p.me };
     });
   });
 }
-
 /* ---------- 카메라 ---------- */
 // headUp: 그 사람의 진행 방향이 화면 위로 오게 지도를 돌린다 (내 위치 따라가기)
 export function follow(uid, headUp = false) { cam.follow = uid; cam.headUp = !!uid && headUp; }
@@ -513,7 +542,7 @@ function frameLoop(now) {
   for (const k of ['tx', 'tz', 'dist', 'pitch', 'yaw']) cam[k] = damp(cam[k], goal[k], 6, dt);
   if (fp && fp.cur) {
     // 따라가는 사람은 늘 화면 한가운데 — 뒤늦게 쫓지 않고 바로 붙인다 (처음 날아가는 동안만 부드럽게)
-    goal.tx = fp.cur.x; goal.tz = fp.cur.y;
+    goal.tx = fp.seat ? fp.seat.x : fp.cur.x; goal.tz = fp.seat ? fp.seat.z : fp.cur.y; // 버스에 탔으면 그 자리 (앞 장면 값)
     if (Math.hypot(cam.tx - goal.tx, cam.tz - goal.tz) < 8) { cam.tx = goal.tx; cam.tz = goal.tz; }
     // 진행 방향이 화면 위로: 카메라를 그 사람 뒤에 둔다 (yaw 0 = 북쪽을 봄, 방위 h면 yaw = -h)
     const h = cam.headUp ? headingOf(fp) : null;
@@ -556,20 +585,26 @@ function frameLoop(now) {
     if (p.car && !p.carG) { p.carG = makeCar(p.color || '#ffffff'); p.g.add(p.carG); }
     if (p.carG) {
       p.carG.visible = p.car;
-      // 서 있을 땐 방향 그대로
-      if (p.car) { p.carG.scale.setScalar(big); if (p.spd > 0.5) p.carG.rotation.y = damp(p.carG.rotation.y, near(-Math.atan2(p.vx, -p.vz), p.carG.rotation.y), 6, dt); }
+      if (p.car) {
+        p.carG.scale.setScalar(big);
+        if (p.spd > 0.5) p.carAng = damp(p.carAng || 0, near(-Math.atan2(p.vx, -p.vz), p.carAng || 0), 6, dt); // 서 있을 땐 방향 그대로
+        // 인형 묶음은 차 안에 서도록 0.3만큼 올렸으니, 차는 그만큼 내리고 비탈에 맞춰 기울인다
+        const y = settle(p.carG, p.cur.x, p.cur.y, p.carAng || 0, 0.8 * big, 0.45 * big);
+        p.carG.position.y = y - T.heightAt(p.cur.x, p.cur.y) - 0.3 * big;
+      }
     }
     const a = p.actor;
     a.pos.set(0, 0); a.goal.set(0, 0);
     a.faceT = p.seat ? p.seat.face : p.face;
     a.set(moving && !p.seat && !p.car ? 'walk' : 'idle');
-    a.big = big;
+    a.big = big * (p.seat?.k || 1); // 버스에 많이 타면 작게
     a.update(t, dt);
     if (p.seat) p.g.position.set(p.seat.x, p.seat.y, p.seat.z);
     else p.g.position.set(p.cur.x, T.heightAt(p.cur.x, p.cur.y) + (p.car ? 0.3 * big : 0), p.cur.y);
     const s = cam.dist * 0.019 * p.tag.userData.h;
     p.tag.scale.set(s * p.tag.userData.aspect, s, 1);
-    p.tag.position.y = big * 1.05 + s * 0.7;
+    p.tag.position.y = a.big * 1.05 + s * 0.7;
+    p.tag.visible = !p.seat?.hideTag;
   });
   const beamH = Math.max(20, cam.dist * 0.16);
   missions.forEach(m => {

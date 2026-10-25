@@ -146,6 +146,7 @@ const myTeam = () => G.members[net.me()]?.team || '';
 // 진행 중: 진행자가 시작했고, 끝나는 시간(endAt)이 있으면 아직 그 전 (규칙도 같은 조건으로 막는다)
 const timeUp = () => !!G.meta.endAt && Date.now() >= G.meta.endAt;
 const isLive = () => G.meta.status === 'live' && !timeUp();
+const isOver = () => G.meta.status === 'ended' || (G.meta.status === 'live' && timeUp());
 // 진행자: 게임을 만든 사람(host)과, 그가 회원 중에서 더한 사람들(hosts)
 const isOwner = () => G.meta.host === net.me();
 const isHostUid = uid => uid === G.meta.host || G.meta.hosts?.[uid] === true;
@@ -175,6 +176,7 @@ async function enter(code) {
   history.replaceState(null, '', `?${DEMO ? 'demo&' : ''}${FAKE ? `fakegps=${FAKE.lat},${FAKE.lng}&` : ''}g=${code}`);
   G.code = code;
   G.feed = [];
+  G.shownResult = false;
   show('game');
   $('#nogl').hidden = W.hasGL;
   W.start();
@@ -206,6 +208,7 @@ function onMeta() {
   if (G.endSeen !== undefined && G.meta.endAt !== G.endSeen) { navigator.vibrate?.([200, 100, 200]); warned = {}; }
   G.endSeen = G.meta.endAt;
   tickTimer();
+  checkResults();
   $('#hostTab').hidden = !isHost();
   if (tab === 'host' && !isHost()) { tab = 'missions'; renderTabs(); renderPanel(); } // 진행자에서 빠지면 진행 탭을 닫는다
   simHome();
@@ -244,12 +247,19 @@ const teamScore = tid => {
 const personScore = uid => { const d = Object.values(G.pdone[uid] || {}).filter(x => x.status === 'ok'); return { n: d.length, pts: okPts(d) }; };
 // 점수가 오르는 순간 그 칸을 반짝인다
 let lastPts = {};
-function renderScores() {
+// 순위표: 개인전은 사람, 팀전은 팀 — 점수, 같으면 미션 수로. 점수판과 결과 화면이 같이 쓴다
+function standings() {
   const open = Object.values(G.missions).filter(m => m.open !== false);
   const rows = solo()
     ? Object.entries(G.members).filter(([u]) => !isHostUid(u) || personScore(u).n).map(([u, m]) => ({ key: 'u' + u, id: u, kind: 'u', name: m.name, color: personColor(u), mine: u === net.me(), total: open.length, ...personScore(u) }))
     : Object.entries(G.teams).map(([tid, t]) => ({ key: 't' + tid, id: tid, kind: 't', name: t.name, color: t.color, mine: tid === myTeam(), total: open.filter(m => !m.each).length, ...teamScore(tid) }));
   rows.sort((a, b) => b.pts - a.pts || b.n - a.n);
+  // 같은 점수·같은 미션 수면 같은 등수
+  rows.forEach((r, i) => (r.rank = i && r.pts === rows[i - 1].pts && r.n === rows[i - 1].n ? rows[i - 1].rank : i + 1));
+  return rows;
+}
+function renderScores() {
+  const rows = standings();
   $('#scores').innerHTML = rows.map(r => `
     <div class="score ${r.mine ? 'mine' : ''} ${lastPts[r.key] != null && r.pts > lastPts[r.key] ? 'bump' : ''}" data-${r.kind}="${r.id}">
       <i style="background:${esc(r.color)}"></i><div><b>${esc(r.name)}</b><small>${r.pts}점</small></div><em>${r.n}</em><small>/${r.total}</small>
@@ -316,6 +326,7 @@ function renderPanel() {
   if (tab === 'people') el.innerHTML = peopleList();
   if (tab === 'feed') el.innerHTML = G.feed.length ? G.feed.map(f => `<div class="feed"><time>${clock(f.t)}</time><span>${f.team ? `<span class="dot" style="background:${esc(teamOf(f.team).color)}"></span>` : ic('megaphone')} ${esc(plain(f.text))}</span></div>`).join('') : '<p class="empty">아직 소식이 없어요.</p>';
   if (tab === 'host') el.innerHTML = hostPanel();
+  el.querySelector('#seeResult')?.addEventListener('click', showResults);
   el.querySelectorAll('[data-m]').forEach(n => (n.onclick = () => openMission(n.dataset.m)));
   el.querySelectorAll('[data-u]').forEach(n => (n.onclick = () => focusPlayer(n.dataset.u)));
   el.querySelectorAll('[data-t]').forEach(n => (n.onclick = () => focusTeam(n.dataset.t)));
@@ -325,6 +336,10 @@ const clock = t => (t ? new Date(t).toLocaleTimeString('ko-KR', { hour: '2-digit
 const sortedMissions = () => Object.entries(G.missions).filter(([, m]) => m.open !== false || isHost()).sort((a, b) => (a[1].order ?? 0) - (b[1].order ?? 0));
 function missionList() {
   const list = sortedMissions();
+  const banner = isOver() ? `<button class="banner" id="seeResult">${ic('trophy')} 게임이 끝났어요 — 결과 보기</button>` : '';
+  return banner + missionItems(list);
+}
+function missionItems(list) {
   if (!list.length) return `<p class="empty">아직 미션이 없어요.${isHost() ? '<br>진행 탭에서 미션을 더해 주세요.' : ''}</p>`;
   return list.map(([id, m]) => {
     const st = myDone(id)?.status;
@@ -735,6 +750,29 @@ async function judgeSheet(kind, who, mid) {
     if (m.type === 'photo') { const url = await net.getPhoto(G.code, key, mid); el.querySelector('#ph').innerHTML = url ? `<img class="photo" src="${url}" alt="">` : '<p class="fine">사진이 없어요.</p>'; }
   });
 }
+/* ---------- 결과: 게임이 끝나면 모두에게 등수를 바로 보여 준다 ---------- */
+// 끝나는 순간(진행자가 끝내거나 시간이 다 되면) 한 번 띄운다. 점수 자료가 마저 오게 잠깐 기다린다
+function checkResults() {
+  if (!G.code || !isOver() || G.shownResult) return;
+  G.shownResult = true;
+  setTimeout(showResults, 1200);
+}
+function showResults() {
+  const rows = standings();
+  if (!rows.length) return;
+  const medal = r => (r.rank <= 3 ? ic('medal' + r.rank) : `<b class="rk">${r.rank}</b>`);
+  const top = rows.filter(r => r.rank <= 3).slice(0, 3);
+  // 시상대: 2등 · 1등 · 3등 자리
+  const podium = [top[1], top[0], top[2]].filter(Boolean).map(r => `<div class="pod r${r.rank}"><div class="pm">${ic('medal' + r.rank)}</div><b>${esc(r.name)}</b><small>${r.pts}점</small><i style="background:${esc(r.color)}"></i></div>`).join('');
+  const mine = rows.find(r => r.mine);
+  const colors = ['#ff6b9a', '#ffd34e', '#4cc3f0', '#5fd38a', '#9b6bff', '#ffa24c'];
+  const confetti = Array.from({ length: 28 }, (_, i) => `<span style="left:${(i * 37) % 100}%;background:${colors[i % 6]};animation-delay:${(i % 7) * 0.18}s;animation-duration:${2.2 + (i % 5) * 0.3}s"></span>`).join('');
+  openSheet(`<div class="confetti">${confetti}</div><div class="result"><div class="rhead">${ic('trophy')}<h3>게임 결과</h3><p class="fine">${esc(G.meta.name || '')}</p></div>
+    <div class="podium">${podium}</div>
+    ${mine ? `<div class="box mineres">${solo() ? '나는' : '우리 팀은'} <b>${mine.rank}등</b>! · ${mine.pts}점</div>` : ''}
+    <div class="stack">${rows.map(r => `<div class="item ${r.mine ? 'on' : ''}"><div class="ic">${medal(r)}</div><div class="tx"><b><span class="dot" style="background:${esc(r.color)}"></span> ${esc(r.name)}</b><small>미션 ${r.n}개</small></div><div class="rt"><b>${r.pts}</b>점</div></div>`).join('')}</div></div>`);
+}
+
 /* ---------- 끝나는 시간 ---------- */
 const hhmm = t => new Date(t).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
 const left = ms => { const s = Math.max(0, Math.ceil(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = String(s % 60).padStart(2, '0'); return h ? `${h}:${String(m).padStart(2, '0')}:${x}` : `${m}:${x}`; };
@@ -752,6 +790,7 @@ function tickTimer() {
   if (ms <= 0 && !warned.end) {
     warned.end = 1;
     refresh();
+    checkResults();
     // 게임을 만든 진행자가 끝낸다 (그가 없으면 다른 진행자가 15초 뒤에)
     if (isHost()) setTimeout(async () => { if (G.meta.status === 'live') { await net.setStatus(G.code, 'ended'); net.say(G.code, '', '시간이 다 됐어요. 게임 끝! 수고하셨어요'); } }, isOwner() ? 0 : 15000);
   }
