@@ -36,6 +36,7 @@ const ICONS = {
   // 위성/지도, 지역 바꾸기
   map: `<path d="M3 6.5l5.5-2.5 7 2.5 5.5-2.5v13.5L15.5 20l-7-2.5L3 20z" fill="#9be38a"/><path d="M8.5 4v13.5M15.5 6.5V20"/><path d="M8.5 4l7 2.5V20l-7-2.5z" fill="#6fcaf0"/><circle cx="18.2" cy="10" r="1.3" fill="#ff6b9a"/>`,
   // 주머니 모드: 달과 별
+  building: `<path d="M3.5 20.5V10l5-3v13.5z" fill="#ffd98a"/><path d="M8.5 20.5V5l7-2.5v18z" fill="#8fd8ff"/><path d="M15.5 20.5v-10l5 2v8z" fill="#ffb3c8"/><path d="M11 8h2M11 11h2M11 14h2M5.5 13h1M5.5 16h1M17.5 15h1M2.5 20.5h19" stroke-width="1.6"/>`,
   moon: `<path d="M15.5 3.5a8.5 8.5 0 1 0 5 13.5A7 7 0 0 1 15.5 3.5z" fill="#ffd34e"/><path d="M19 3l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" fill="#fff59a" stroke="none"/><circle cx="9" cy="12.5" r="1" fill="#f0b43a" stroke="none"/><circle cx="12.5" cy="16.5" r=".8" fill="#f0b43a" stroke="none"/>`,
   // 테스트: 분홍 물약 시험관
   flask: `<path d="M9.5 3h5M10.5 3v5.5L5.2 18A2 2 0 0 0 7 21h10a2 2 0 0 0 1.8-3l-5.3-9.5V3" fill="#eaf7ff"/><path d="M7.8 14.5h8.4l2.6 4A1.6 1.6 0 0 1 17.4 21H6.6a1.6 1.6 0 0 1-1.4-2.5z" fill="#ff7fb0"/><circle cx="10.5" cy="17.5" r="1" fill="#fff" stroke="none"/><circle cx="13.6" cy="16" r=".7" fill="#fff" stroke="none"/>`,

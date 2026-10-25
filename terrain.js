@@ -7,6 +7,7 @@
    조각 경계의 높이는 모두 같은 함수(elevAt)로 구하므로 이웃 조각과 틈 없이 맞물린다 */
 import { THREE } from './stage/kit.js';
 import { makeFrame, lngPx, latPx } from './geo.js';
+import { makeBuildings } from './buildings.js';
 
 export const EXAG = 1.6; // 높이 과장 배율 — 전주는 낮은 언덕이라 실제 비율로는 밋밋하다
 const ZD = 15, ZC = 17;          // 높이 · 조각(=겉그림) 줌
@@ -125,9 +126,17 @@ export async function buildTerrain({ center, layer = 'sat' }) {
     chunks.delete(k);
   }
 
+  // 지도 모드면 3D 건물도 (바탕 지도와 같은 오픈스트리트맵 자료라 윤곽이 지도와 맞는다)
+  const bld = layer === 'map' ? makeBuildings({
+    F, ground: (lat, lng) => lift(elevAt(lat, lng)),
+    ready: (lat, lng) => dem(Math.floor(lngPx(lng, ZD) / 256), Math.floor(latPx(lat, ZD) / 256)),
+  }) : null;
+  if (bld) group.add(bld.group);
+
   // 카메라가 보는 곳(x, z) 둘레 반경 r(m)의 조각을 원한다: 없는 것은 가까운 순서로 받고, 2.2배 넘게 먼 것은 버린다
   let last = null;
   function want(x, z, r) {
+    bld?.want(x, z, r);
     if (last && Math.hypot(x - last.x, z - last.z) < 40 && Math.abs(r - last.r) < last.r * 0.15) return;
     last = { x, z, r };
     const ll = F.toLL(x, z);
@@ -165,7 +174,7 @@ export async function buildTerrain({ center, layer = 'sat' }) {
     want(x, z, r);
     while (busy || queue.length) await new Promise(res => setTimeout(res, 60));
   }
-  const dispose = () => chunks.forEach((c, k) => drop(k, c));
+  const dispose = () => { chunks.forEach((c, k) => drop(k, c)); bld?.dispose(); };
 
   return { group, heightAt, frame: F, want, prime, dispose, credit: L.credit, get demOk() { return demOk; }, get version() { return version; } };
 }
