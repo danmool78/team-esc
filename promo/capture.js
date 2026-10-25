@@ -39,7 +39,7 @@ fs.mkdirSync(OUT, { recursive: true });
     await p.evaluate(() => document.querySelector('#taskBtn')?.click());
     await seq(p, 'taskdone', 12, 80);
     // 진행자 화면: 확인 기다리는 현장 미션 → 판정 → 인정 → 점수가 오른다
-    await p.tap('.tabs button[data-tab=host]'); await p.waitForTimeout(600);
+    await p.evaluate(() => { document.querySelector('#sheet').hidden = true; document.querySelector('.tabs button[data-tab=host]').click(); }); await p.waitForTimeout(600);
     await seq(p, 'judgelist', 1);
     await p.evaluate(() => document.querySelector('[data-judge]').click()); await p.waitForTimeout(600);
     await seq(p, 'judge', 1);
@@ -78,8 +78,10 @@ fs.mkdirSync(OUT, { recursive: true });
   if (process.env.ONLY === 'basic') {
     p = await page();
     await p.evaluate(async () => (await import('/demo.js')).saveMeta('DEMO', { endAt: Date.now() + 299000 })); await p.waitForTimeout(2500);
+    await p.tap('#grip'); await p.waitForTimeout(500);
     await seq(p, 'timer', 1);
-    await p.tap('.tabs button[data-tab=host]');
+    await p.evaluate(() => { document.querySelector('.tabs button[data-tab=host]').click(); });
+    await p.waitForTimeout(400);
     await p.evaluate(() => { document.querySelector('#hEnd').click(); document.querySelector('#hEnd')?.click(); });
     await p.waitForTimeout(1300);
     await seq(p, 'result', 24, 60);
