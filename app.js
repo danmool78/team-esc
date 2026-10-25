@@ -78,8 +78,8 @@ $('#resetBtn').onclick = async () => {
 
 /* ---------- 별칭·인형 ---------- */
 let draft = { gender: 'm', avatar: pick(OUTFITS.m) };
-// 고르는 화면의 인형도 지도와 같은 알록달록 옷으로: 겉옷은 지금 내 팀 색(팀이 아직 없으면 밝은 미색), 망토는 나만의 색
-const myLook = () => (G.code && G.members[net.me()]?.team || (G.code && solo()) ? colorOf(net.me()) : '#efe4c8');
+// 고르는 화면의 인형도 지도와 같은 알록달록 옷으로: 겉옷은 지금 내 팀 색(팀이 아직 없으면 나만의 밝은 색 — 미색은 칙칙해 보였다), 망토는 나만의 색
+const myLook = () => (G.code && G.members[net.me()]?.team || (G.code && solo()) ? colorOf(net.me()) : personColor(net.me() || 'me'));
 const myThumb = t => W.avatarThumb(t, myLook(), net.me() || '');
 function drawDraft() {
   $('#avatarImg').src = myThumb(draft.avatar);
