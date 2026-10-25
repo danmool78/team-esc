@@ -472,7 +472,7 @@ $('#fabPocket').onclick = () => {
   if (!myLL) { toast('먼저 위치 공유를 켜 주세요.'); return; }
   $('#pocket').hidden = false;
   W.stop();
-  navigator.wakeLock?.request('screen').then(w => (wake = w)).catch(() => {});
+  keepAwake();
   document.documentElement.requestFullscreen?.().catch(() => {}); // 위쪽 알림줄까지 가린다 (아이폰은 안 돼도 그만)
   pocketTick();
   pocketT = setInterval(pocketTick, 1000);
@@ -534,7 +534,7 @@ $('#simBtn').onclick = () => setMode('sim');
 $('#offBtn').onclick = () => setMode('off');
 function setMode(mode) {
   if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
-  wake?.release?.().catch(() => {}); wake = null;
+  wake?.release?.().catch(() => {}); wake = null; wakeVid?.pause();
   sim = mode === 'sim';
   W.setGroundFirst(sim);
   $('#gpsBtn').hidden = mode === 'gps';
@@ -561,7 +561,7 @@ function setMode(mode) {
   gpsAt = Date.now();
   startWatch();
   // 화면이 꺼지면 브라우저가 위치를 멈추므로 켜 둔다
-  navigator.wakeLock?.request('screen').then(w => (wake = w)).catch(() => {});
+  keepAwake();
 }
 // 위치 받기를 (다시) 건다. 폰은 다른 앱에 다녀오거나 GPS를 다른 앱과 나눠 쓴 뒤 이 브라우저에 새 값을 안 주기도 한다
 // (다른 내비를 켰다 끄면 그제야 움직였다) — 그래서 돌아올 때와 오래 조용할 때 새로 건다
@@ -588,9 +588,32 @@ function startWatch() {
 // 다른 앱에 다녀오면 화면 켜 두기가 풀리고 위치 받기도 멈춰 있을 수 있으므로 둘 다 다시 건다
 document.addEventListener('visibilitychange', () => {
   if (document.hidden || watchId == null) return;
-  navigator.wakeLock?.request('screen').then(w => (wake = w)).catch(() => {});
+  keepAwake();
   startWatch();
 });
+/* 화면 켜 두기: 화면이 꺼지면 브라우저가 위치를 멈춘다. Wake Lock을 걸고, 시스템이 풀어 버리면(절전 등) 1초 뒤 다시 건다.
+   거절당하면(손길이 있어야 하는 브라우저) 다음에 화면을 만질 때 다시. Wake Lock이 없는 예전 브라우저는 소리 없는 작은 영상을
+   반복 재생해 꺼짐을 막는다 */
+let wakeVid = null;
+const awake = () => (wake && !wake.released) || (wakeVid && !wakeVid.paused);
+function keepAwake() {
+  if (document.hidden || awake()) return;
+  if (navigator.wakeLock) {
+    navigator.wakeLock.request('screen').then(w => {
+      wake = w;
+      w.addEventListener('release', () => { if (wake === w) wake = null; if (watchId != null && !document.hidden) setTimeout(keepAwake, 1000); });
+    }).catch(() => {});
+    return;
+  }
+  if (!wakeVid) {
+    wakeVid = Object.assign(document.createElement('video'), { src: 'assets/awake.mp4', muted: true, loop: true, playsInline: true });
+    wakeVid.setAttribute('playsinline', '');
+    wakeVid.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
+    document.body.appendChild(wakeVid);
+  }
+  wakeVid.play().catch(() => {});
+}
+document.addEventListener('pointerdown', () => { if (watchId != null) keepAwake(); }, { passive: true });
 // 화면을 보고 있는데 12초 넘게 폰이 아무 값도 안 주면 위치 받기가 멈춘 것으로 보고 새로 건다 (서 있어도 폰은 몇 초마다 준다)
 setInterval(() => { if (watchId != null && !document.hidden && Date.now() - rawAt > 12000) startWatch(); }, 4000);
 const gpsText = t => ($('#gpsText').textContent = t);
@@ -648,18 +671,32 @@ function sendPos(p) {
     .then(() => { ackAt = Date.now(); pendAt = 0; ackErr = false; sendState(); })
     .catch(() => { ackErr = true; sendState(); });
 }
-// 내 폰에서도 내 위치가 서버에 들어가는지 보이게: 초록 '서버 전송 ✓ n초 전', 30초 넘게 답이 없으면 빨간 경고
+// 내 폰에서도 내 위치가 서버에 들어가는지 보이게: 제목 줄 오른쪽 끝 전파 표시. 받을 때마다 초록으로 한 번 퍼지고, 30초 넘게 답이 없거나 거절되면 빨갛게
 const SEND_LATE = 30e3;
 const sendLate = () => ackErr || (pendAt && Date.now() - pendAt > SEND_LATE);
+let pingAt = 0;
 function sendState() {
-  const el = $('#sendState'), on = watchId != null || sim || FAKE;
+  const el = $('#sendIc'), on = watchId != null || sim || FAKE;
   el.hidden = !on || (!ackAt && !pendAt);
   if (el.hidden) return;
-  const late = sendLate(), s = Math.round((Date.now() - ackAt) / 1000);
-  el.classList.toggle('late', !!late);
-  el.textContent = ackErr ? '서버가 위치를 받지 않아요' : late ? `서버로 위치가 안 가요 — 인터넷 확인 (${Math.round((Date.now() - pendAt) / 1000)}초)`
+  const late = !!sendLate();
+  el.classList.toggle('late', late);
+  // 새로 받았으면 전파를 한 번 퍼뜨린다 (애니메이션을 처음부터 다시)
+  if (!late && ackAt > pingAt) { pingAt = ackAt; el.classList.remove('ping'); void el.offsetWidth; el.classList.add('ping'); }
+  const s = Math.round((Date.now() - ackAt) / 1000);
+  el.title = ackErr ? '서버가 위치를 받지 않아요 — 눌러서 다시 요청' : late ? '서버로 위치가 안 가요 — 눌러서 다시 요청'
     : ackAt ? `서버 전송 ✓ ${s < 3 ? '방금' : s + '초 전'}` : '서버로 보내는 중…';
 }
+// 누르면: 빨간 때는 위치 받기를 새로 걸고 마지막 자리를 다시 올린다, 초록일 땐 언제 보냈는지 알려 준다
+$('#sendIc').onclick = () => {
+  if (sendLate() || !ackAt) {
+    if (watchId != null) startWatch();
+    ackErr = false; pendAt = 0;
+    if (myLL && G.code) sendPos(myLL);
+    sendState();
+    toast('위치를 다시 요청했어요', 'signal');
+  } else toast($('#sendIc').title, 'signal');
+};
 setInterval(sendState, 1000);
 // 가만히 서 있으면 폰이 새 값을 안 줄 수 있다 — 8초 넘게 조용하면 마지막 자리를 다시 올려 다른 사람 화면에서 흐려지지 않게
 setInterval(() => { if (G.code && myLL && watchId != null && lastSent && Date.now() - lastSent.at > 8000) sendPos(myLL); }, 2000);
