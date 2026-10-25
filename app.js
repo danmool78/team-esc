@@ -56,9 +56,15 @@ let signing = false;
 $('#toggleSign').onclick = () => {
   signing = !signing;
   $('#emailBtn').textContent = signing ? '가입하기' : '로그인';
-  $('#toggleSign').textContent = signing ? '이미 가입했어요 — 로그인' : '처음이에요 — 가입하기';
+  $('#authSub').textContent = signing ? '가입하고 함께 여정을 시작하세요' : '로그인하고 새로운 여정을 시작하세요';
+  $('#toggleQ').textContent = signing ? '이미 계정이 있으신가요?' : '아직 계정이 없으신가요?';
+  $('#toggleSign').textContent = signing ? '로그인' : '회원가입';
+  $('#pw').placeholder = signing ? '비밀번호를 정하세요 (6자 이상)' : '비밀번호를 입력하세요';
   $('#pw').autocomplete = signing ? 'new-password' : 'current-password';
 };
+$('#pwEye').onclick = () => { const p = $('#pw'); p.type = p.type === 'password' ? 'text' : 'password'; $('#pwEye').classList.toggle('on', p.type === 'text'); };
+// 로그인 유지: 끄면 이 브라우저 창을 닫을 때 로그아웃 (같이 쓰는 폰·PC에서)
+const remember = () => net.setRemember?.($('#remember').checked);
 const authErr = e => {
   const m = { 'auth/invalid-credential': '이메일이나 비밀번호가 맞지 않아요.', 'auth/email-already-in-use': '이미 가입한 이메일이에요. 로그인해 주세요.', 'auth/weak-password': '비밀번호는 6자 이상으로 해 주세요.', 'auth/invalid-email': '이메일 주소를 확인해 주세요.', 'auth/popup-closed-by-user': '구글 로그인 창이 닫혔어요.', 'auth/operation-not-allowed': '아직 이 로그인 방식이 켜져 있지 않아요 (Firebase 콘솔에서 켜야 해요).', 'auth/configuration-not-found': '아직 로그인 설정이 되어 있지 않아요 (Firebase 콘솔 → Authentication 시작).' }[e.code];
   $('#authMsg').className = 'msg err';
@@ -67,9 +73,9 @@ const authErr = e => {
 $('#emailForm').onsubmit = async e => {
   e.preventDefault();
   $('#authMsg').textContent = '';
-  try { await (signing ? net.signUp : net.signIn)($('#email').value.trim(), $('#pw').value); } catch (er) { authErr(er); }
+  try { await remember(); await (signing ? net.signUp : net.signIn)($('#email').value.trim(), $('#pw').value); } catch (er) { authErr(er); }
 };
-$('#googleBtn').onclick = () => net.google().catch(authErr);
+$('#googleBtn').onclick = () => Promise.resolve(remember()).then(() => net.google()).catch(authErr);
 $('#resetBtn').onclick = async () => {
   const em = $('#email').value.trim();
   if (!em) { $('#authMsg').textContent = '이메일을 먼저 적어 주세요.'; return; }

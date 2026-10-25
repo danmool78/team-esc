@@ -16,7 +16,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js';
 import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail,
-  GoogleAuthProvider, signInWithPopup, signOut as fbSignOut, updateProfile,
+  GoogleAuthProvider, signInWithPopup, signOut as fbSignOut, updateProfile, setPersistence, browserLocalPersistence, browserSessionPersistence,
 } from 'https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js';
 import {
   getDatabase, ref, get, set, update, remove, push, onValue, onChildAdded, onDisconnect, serverTimestamp, query, limitToLast,
@@ -43,6 +43,8 @@ export async function signUp(email, pw, name) {
 }
 export const signIn = (email, pw) => signInWithEmailAndPassword(auth, email, pw);
 export const google = () => signInWithPopup(auth, new GoogleAuthProvider());
+// 로그인 유지: 켜면 브라우저를 닫아도 그대로, 끄면 창을 닫을 때 로그아웃
+export const setRemember = on => setPersistence(auth, on ? browserLocalPersistence : browserSessionPersistence);
 export const resetPw = email => sendPasswordResetEmail(auth, email);
 export const signOut = () => fbSignOut(auth);
 const uid = () => auth.currentUser?.uid;
