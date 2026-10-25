@@ -327,36 +327,104 @@ export function removeMission(id) {
 const VEH = 2.5, VEH_MIN = 0.022;
 let veh = VEH;
 const CAR_ON = 7, CAR_OFF = 4, BUS_MIN = 4, BUS_R = 25, BUS_DV = 1.5, BUS_AFTER = 20000;
-const box = (w, h, d, color) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color }));
-const wheel = (x, z, r = 0.17) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.12, 14), new THREE.MeshLambertMaterial({ color: '#2b2522' })); m.rotation.z = Math.PI / 2; m.position.set(x, r, z); return m; };
-// 상자 하나를 (x, y, z) 자리에 붙인다 (y는 상자 가운데 높이)
-const put = (g, w, h, d, color, x, y, z) => { const m = box(w, h, d, color); m.position.set(x, y, z); g.add(m); return m; };
-// 오픈카: 팀 색 몸통 + 흰 줄 + 앞 유리. 인형은 가운데 서서 윗몸이 보인다 (앞은 -z)
-function makeCar(color) {
+// 재질은 색마다 한 번만 만든다 (차·버스가 여럿이어도 같은 색은 함께 쓴다)
+const vmats = new Map();
+const vmat = (color, basic) => { const k = color + (basic ? 'b' : ''); if (!vmats.has(k)) vmats.set(k, basic ? new THREE.MeshBasicMaterial({ color }) : new THREE.MeshLambertMaterial({ color })); return vmats.get(k); };
+// 바퀴: 검은 타이어 + 밝은 휠캡 + 가운데 색 점
+function wheel(x, z, r = 0.17, cap = '#ffd34e') {
   const g = new THREE.Group();
-  put(g, 0.95, 0.32, 1.7, color, 0, 0.34, 0);
-  put(g, 0.97, 0.06, 1.72, '#fff6e0', 0, 0.42, 0); // 옆줄 (윗면은 팀 색 그대로)
-  put(g, 0.9, 0.16, 0.12, '#2b2522', 0, 0.6, 0.6); // 뒷자리 등받이
-  const glass = new THREE.Mesh(new THREE.PlaneGeometry(0.86, 0.3), new THREE.MeshBasicMaterial({ color: '#bfe9ff', transparent: true, opacity: 0.7, side: THREE.DoubleSide }));
-  glass.position.set(0, 0.66, -0.45); glass.rotation.x = -0.35; g.add(glass);
-  put(g, 0.2, 0.08, 0.04, '#ffe27a', -0.3, 0.4, -0.86); put(g, 0.2, 0.08, 0.04, '#ffe27a', 0.3, 0.4, -0.86); // 앞등
-  [[-0.47, -0.55], [0.47, -0.55], [-0.47, 0.55], [0.47, 0.55]].forEach(([x, z]) => g.add(wheel(x, z)));
+  const tire = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.13, 18), vmat('#2b2522'));
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.58, r * 0.58, 0.14, 14), vmat('#e8e2d6'));
+  const dot = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.22, r * 0.22, 0.15, 10), vmat(cap));
+  g.add(tire, hub, dot);
+  g.rotation.z = Math.PI / 2; g.position.set(x, r, z);
   return g;
 }
-// 오픈버스: 노란 몸통, 지붕 없이 낮은 난간, 앞 운전석. 길이 L은 탈 사람 수로 (seating)
-function makeBus(L) {
+// 옆모습(앞이 +x)을 폭만큼 밀어 둥근 몸통을 만든다 → 차의 앞(-z)을 보게 돌린다
+function bodyFrom(shape, width, color) {
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: width, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 3, curveSegments: 10 });
+  geo.translate(0, 0, -width / 2); geo.rotateY(Math.PI / 2);
+  return new THREE.Mesh(geo, vmat(color));
+}
+const ball = (g, r, color, x, y, z, basic) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 8), vmat(color, basic)); m.position.set(x, y, z); g.add(m); return m; };
+// 상자 하나를 (x, y, z) 자리에 붙인다 (y는 상자 가운데 높이)
+const put = (g, w, h, d, color, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), vmat(color)); m.position.set(x, y, z); g.add(m); return m; };
+// 오픈카: 둥근 팀 색 몸통, 보닛 흰 줄, 금테 앞 유리, 좌석, 앞등·뒷등, 크롬 범퍼, 거울. 인형은 가운데 서서 윗몸이 보인다 (앞은 -z)
+function makeCar(color) {
   const g = new THREE.Group();
-  put(g, 1.15, 0.38, L, '#ffc93c', 0, 0.36, 0);
-  put(g, 1.17, 0.07, L + 0.02, '#ff6b6b', 0, 0.56, 0);
-  // 난간: 양옆과 뒤
-  [-0.56, 0.56].forEach(x => put(g, 0.05, 0.3, L - 0.9, '#3fbfd9', x, 0.74, 0.45));
-  put(g, 1.15, 0.3, 0.05, '#3fbfd9', 0, 0.74, L / 2 - 0.03);
-  // 운전석: 앞 덮개와 유리
-  put(g, 1.15, 0.22, 0.7, '#ffc93c', 0, 0.68, -L / 2 + 0.36);
-  put(g, 1.1, 0.42, 0.06, '#bfe9ff', 0, 0.98, -L / 2 + 0.74);
-  const n = Math.max(2, Math.round(L / 1.1));
-  for (let i = 0; i < n; i++) { const z = -L / 2 + 0.35 + (i * (L - 0.7)) / (n - 1); g.add(wheel(-0.58, z, 0.2), wheel(0.58, z, 0.2)); }
-  g.userData = { L, deck: 0.58 };
+  const sh = new THREE.Shape();
+  sh.moveTo(-0.8, 0.18); sh.lineTo(0.8, 0.18);
+  sh.quadraticCurveTo(0.9, 0.19, 0.89, 0.33); sh.quadraticCurveTo(0.87, 0.45, 0.68, 0.47);
+  sh.lineTo(0.24, 0.5); sh.lineTo(0.2, 0.41); sh.lineTo(-0.44, 0.41); sh.lineTo(-0.48, 0.5);
+  sh.lineTo(-0.7, 0.5); sh.quadraticCurveTo(-0.9, 0.48, -0.89, 0.32); sh.quadraticCurveTo(-0.88, 0.19, -0.8, 0.18);
+  g.add(bodyFrom(sh, 0.84, color));
+  put(g, 0.18, 0.012, 0.62, '#ffffff', 0, 0.535, -0.55).rotation.x = -0.06; // 보닛 줄
+  // 앞 유리: 금테 + 하늘빛 유리
+  const glass = new THREE.Mesh(new THREE.PlaneGeometry(0.84, 0.26), new THREE.MeshBasicMaterial({ color: '#bfe9ff', transparent: true, opacity: 0.55, side: THREE.DoubleSide }));
+  glass.position.set(0, 0.66, -0.2); glass.rotation.x = -0.45; g.add(glass);
+  put(g, 0.9, 0.035, 0.035, '#ffd34e', 0, 0.78, -0.15).rotation.x = -0.45;
+  [-0.44, 0.44].forEach(x => put(g, 0.035, 0.3, 0.035, '#ffd34e', x, 0.64, -0.21).rotation.x = -0.45);
+  // 좌석 (크림색 등받이)
+  [-0.2, 0.2].forEach(x => { put(g, 0.3, 0.08, 0.26, '#fff4e0', x, 0.48, 0.05); put(g, 0.3, 0.26, 0.07, '#fff4e0', x, 0.6, 0.2); });
+  put(g, 0.72, 0.22, 0.07, '#fff4e0', 0, 0.58, 0.5);
+  // 앞등·뒷등·범퍼·거울
+  [-0.28, 0.28].forEach(x => { ball(g, 0.065, '#fff7c2', x, 0.37, -0.9, true); ball(g, 0.05, '#ff4d4d', x, 0.4, 0.91, true); });
+  put(g, 0.8, 0.07, 0.06, '#d9d4c8', 0, 0.23, -0.93); put(g, 0.8, 0.07, 0.06, '#d9d4c8', 0, 0.23, 0.93);
+  [-0.47, 0.47].forEach(x => put(g, 0.07, 0.06, 0.04, color, x * 1.06, 0.6, -0.12));
+  [[-0.44, -0.52], [0.44, -0.52], [-0.44, 0.52], [0.44, 0.52]].forEach(([x, z]) => g.add(wheel(x, z)));
+  return g;
+}
+// 행선판 글씨: 한 번만 그려 모든 버스가 함께 쓴다
+let signTex = null;
+function busSign() {
+  if (!signTex) {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 112;
+    const x = c.getContext('2d');
+    x.fillStyle = '#2b2118'; x.fillRect(0, 0, 512, 112);
+    x.fillStyle = '#ffd34e'; x.font = '900 64px "Noto Sans KR", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText('비전 퀘스트', 256, 60);
+    signTex = new THREE.CanvasTexture(c); signTex.colorSpace = THREE.SRGBColorSpace;
+  }
+  return signTex;
+}
+// 오픈버스: 둥근 노란 몸통, 아래층 창문 띠와 빨간 줄, 앞 유리·그릴·앞등, 위층은 지붕 없이 하늘색 난간과 기둥, 앞에 행선판.
+// 길이 L은 탈 사람 수로 (seating). 사람은 위층 바닥(deck)에 줄 맞춰 선다
+function makeBus(L) {
+  const g = new THREE.Group(), W = 1.12, h = L / 2;
+  const sh = new THREE.Shape();
+  sh.moveTo(-h + 0.08, 0.17); sh.lineTo(h - 0.14, 0.17); sh.quadraticCurveTo(h, 0.17, h, 0.32);
+  sh.lineTo(h, 0.48); sh.quadraticCurveTo(h, 0.6, h - 0.14, 0.6); sh.lineTo(-h + 0.08, 0.6);
+  sh.quadraticCurveTo(-h, 0.6, -h, 0.52); sh.lineTo(-h, 0.25); sh.quadraticCurveTo(-h, 0.17, -h + 0.08, 0.17);
+  g.add(bodyFrom(sh, W - 0.08, '#ffc93c'));
+  // 옆: 빨간 줄, 창문 띠와 창살
+  [-1, 1].forEach(sd => {
+    const x = sd * (W / 2 + 0.005);
+    put(g, 0.02, 0.05, L - 0.2, '#ff6b6b', x, 0.27, 0);
+    put(g, 0.02, 0.13, L - 0.5, '#9fdcff', x, 0.43, 0.05);
+    for (let z = -h + 0.3; z < h - 0.15; z += 0.42) put(g, 0.025, 0.15, 0.04, '#3b2a1a', x, 0.43, z);
+  });
+  // 앞: 큰 유리, 그릴, 앞등 / 뒤: 뒷등
+  put(g, W - 0.24, 0.17, 0.02, '#9fdcff', 0, 0.45, -h - 0.04);
+  put(g, 0.5, 0.07, 0.02, '#3b2a1a', 0, 0.27, -h - 0.04);
+  [-0.4, 0.4].forEach(x => { ball(g, 0.06, '#fff7c2', x, 0.27, -h - 0.03, true); ball(g, 0.05, '#ff4d4d', x, 0.3, h + 0.03, true); });
+  put(g, W - 0.1, 0.06, 0.06, '#d9d4c8', 0, 0.2, -h - 0.05);
+  // 위층: 낮은 하늘색 벽, 기둥, 윗 난간
+  const D = 0.64, R = D + 0.3;
+  [-1, 1].forEach(sd => {
+    const x = sd * (W / 2 - 0.03);
+    put(g, 0.04, 0.12, L - 0.1, '#3fbfd9', x, D + 0.06, 0);
+    put(g, 0.05, 0.04, L - 0.1, '#ffffff', x, R, 0);
+    for (let z = -h + 0.1; z <= h - 0.05; z += 0.45) put(g, 0.035, R - D, 0.035, '#ffffff', x, (R + D) / 2, z);
+  });
+  put(g, W - 0.06, 0.12, 0.04, '#3fbfd9', 0, D + 0.06, h - 0.05); put(g, W - 0.06, 0.04, 0.05, '#ffffff', 0, R, h - 0.05);
+  // 행선판: 위층 앞에 서 있는 판
+  put(g, W - 0.04, 0.26, 0.05, '#2b2118', 0, D + 0.13, -h + 0.06);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.12, 0.22), new THREE.MeshBasicMaterial({ map: busSign() }));
+  sign.position.set(0, D + 0.13, -h + 0.03); sign.rotation.y = Math.PI; g.add(sign);
+  const sign2 = sign.clone(); sign2.position.z = -h + 0.09; sign2.rotation.y = 0; g.add(sign2); // 뒤에서도 보이게
+  const n = Math.max(2, Math.round(L / 1.6));
+  for (let i = 0; i < n; i++) { const z = -h + 0.42 + (i * (L - 0.84)) / (n - 1); g.add(wheel(-0.56, z, 0.2, '#ff6b6b'), wheel(0.56, z, 0.2, '#ff6b6b')); }
+  g.userData = { L, deck: D };
   return g;
 }
 const buses = new Map(); // id → { g, rows, members[], x, z, ang, slowAt }
