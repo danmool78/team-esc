@@ -583,7 +583,8 @@ function setMyPos(p) {
     : away > 0 ? `게임 지역에서 ${fmtDist(away)} 밖 · 오차 ${p.acc}m` : `위치 공유 중 · 오차 ${p.acc}m${p.acc > 40 ? ' (실내면 커요)' : ''}`);
   // 3m 넘게 움직였거나 8초가 지났을 때만 올린다 (배터리·데이터 아끼기)
   const moved = !lastSent || dist(lastSent, p) > 3 || Date.now() - lastSent.at > 8000;
-  if (moved) { lastSent = { ...p, at: Date.now() }; net.writePos(G.code, p); }
+  // 테스트 모드 표시(sim): 누를 때마다 뛰어가는 자리라 차·버스 계산에서 뺀다
+  if (moved) { lastSent = { ...p, at: Date.now() }; net.writePos(G.code, sim ? { ...p, sim: true } : p); }
   if (first) { startCompass(); W.follow(net.me(), true); W.flyTo(p, 140); setFab(); }
   checkArrive();
   if (tab === 'missions') renderPanel();
