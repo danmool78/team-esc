@@ -51,6 +51,8 @@ export async function loadArea(area) {
   if (T) { scene.remove(T.group); T.dispose(); if (T.edge) { scene.remove(T.edge); T.edge.geometry.dispose(); } }
   T = t;
   T.radius = area.radius;
+  lightMap = area.layer === 'map';
+  missions.forEach(paintMission);
   T.edgeR = area.radius;
   T.edgeVer = -1;
   scene.add(T.group);
@@ -273,15 +275,26 @@ export function upsertMission(m) {
     missions.set(m.id, o);
   }
   Object.assign(o, m);
-  const col = new THREE.Color(m.color || '#f0d79a');
-  o.beam.material.color.copy(col); o.ring.material.color.copy(col); o.disc.material.color.copy(col); o.glow.material.color.copy(col);
-  o.beam.material.opacity = m.dim ? 0.25 : 0.75;
+  paintMission(o);
   const key = m.title + m.color + (m.sub || '') + (m.icon?.src || '') + !!m.icon?.complete;
   if (o.tagKey !== key) { o.tagKey = key; relabel(o, 'tag', m.title, m.dim ? '#3a4a3a' : '#5a3d10', m.sub || '', m.icon); if (!o.tag.parent) o.g.add(o.tag); }
   // 아이콘 그림이 아직 안 떴으면 뜨는 대로 이름표를 다시 그린다
   if (m.icon && !m.icon.complete) m.icon.addEventListener('load', () => missions.has(o.id) && upsertMission(o), { once: true });
   placeMission(o);
   return o;
+}
+// 빛기둥 색: 위성사진(어두운 바탕) 위에선 빛을 더해 그려 빛나 보이게, 밝은 지도(OSM) 위에선 그렇게 그리면 흰 바탕에 묻혀
+// 안 보이므로 보통으로 그리고 색을 진하게 한다
+let lightMap = false;
+function paintMission(o) {
+  const col = new THREE.Color(o.color || '#f0d79a');
+  if (lightMap) col.offsetHSL(0, 0.3, -0.25);
+  [o.beam.material, o.glow.material].forEach(mt => {
+    const b = lightMap ? THREE.NormalBlending : THREE.AdditiveBlending;
+    if (mt.blending !== b) { mt.blending = b; mt.needsUpdate = true; }
+  });
+  o.beam.material.color.copy(col); o.ring.material.color.copy(col); o.disc.material.color.copy(col); o.glow.material.color.copy(col);
+  o.beam.material.opacity = o.dim ? (lightMap ? 0.4 : 0.25) : (lightMap ? 0.9 : 0.75);
 }
 function placeMission(o) {
   if (!T) return;
