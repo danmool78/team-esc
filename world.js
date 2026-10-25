@@ -180,6 +180,7 @@ function placePlayer(p, ll, snap) {
   if (snap || !p.cur) p.cur = p.to.clone();
   // 진행 방향: 받은 좌표가 3m 넘게 옮겨 갈 때마다 그 방향 (북에서 시계 방향). 제자리 GPS 흔들림은 무시
   if (snap || !p.hdFrom) p.hdFrom = p.to.clone();
+  else if (p.to.distanceTo(p.hdFrom) > 400) p.hdFrom = p.to.clone(); // 순간 이동(테스트 모드로 옮기기 등)은 걸어간 방향이 아니다
   else if (p.to.distanceTo(p.hdFrom) > 3) { p.hd = Math.atan2(p.to.x - p.hdFrom.x, -(p.to.y - p.hdFrom.y)); p.hdFrom = p.to.clone(); }
 }
 // 새 좌표가 오면 그 자리까지 걸어간다. stale: 오래 소식이 없으면 흐리게
