@@ -22,7 +22,10 @@ const OUTFITS = {
   f: ['woman', 'woman2', 'martha', 'samaritan', 'phoenician', 'mother', 'anna'],
 };
 const pick = a => a[Math.floor(Math.random() * a.length)];
-const TEAM_PRESET = [['청팀', '#3d7be0'], ['홍팀', '#e0503d'], ['녹팀', '#3dae6a'], ['황팀', '#d9a520']];
+const TEAM_PRESET = [['청팀', '#3d7be0'], ['홍팀', '#e0503d'], ['녹팀', '#3dae6a'], ['황팀', '#d9a520'], ['자팀', '#8e5bd6'], ['주팀', '#e8862e'], ['하늘팀', '#3fbfd9'], ['분홍팀', '#e06aa8'], ['백팀', '#d8d2c4'], ['흑팀', '#55504a']];
+// 개인전: 사람마다 색 (uid로 늘 같은 색)
+const PERSON_COLORS = ['#3d7be0', '#e0503d', '#3dae6a', '#d9a520', '#8e5bd6', '#e8862e', '#3fbfd9', '#e06aa8', '#7fae3a', '#c0763f', '#5a6fd6', '#d6455f'];
+const personColor = uid => PERSON_COLORS[[...uid].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % PERSON_COLORS.length];
 const TYPES = { arrive: ['📍', '도착'], quiz: ['❓', '퀴즈'], photo: ['📷', '사진'], task: ['🙌', '현장 미션'] };
 const STATUS = { ready: '시작 전', live: '진행 중', ended: '끝남' };
 const STALE = 90e3; // 이만큼 좌표가 안 오면 흐리게
@@ -111,22 +114,32 @@ $('#createForm').onsubmit = async e => {
       if (!isFinite(lat) || !isFinite(lng)) throw new Error('위도, 경도를 "35.8155, 127.1525"처럼 적어 주세요.');
       center = { lat, lng };
     }
+    // 개인전이면 팀 없이, 팀전이면 고른 수만큼 (진행 중에도 팀을 더하고 뺄 수 있다)
+    const solo = $('#cTeams').value === 'solo';
     const teams = {};
-    TEAM_PRESET.slice(0, +$('#cTeams').value).forEach(([name, color], i) => (teams['t' + (i + 1)] = { name, color }));
-    const code = await net.createGame({ name: $('#cName').value.trim(), center, radius: +$('#cRadius').value, layer: 'sat' }, teams, profile);
+    if (!solo) TEAM_PRESET.slice(0, +$('#cTeams').value).forEach(([name, color], i) => (teams['t' + (i + 1)] = { name, color }));
+    const code = await net.createGame({ name: $('#cName').value.trim(), mode: solo ? 'solo' : 'team', center, radius: +$('#cRadius').value, layer: 'sat' }, teams, profile);
     msg.textContent = '';
     enter(code);
   } catch (er) { msg.className = 'msg err'; msg.textContent = er.message || '만들지 못했어요.'; }
 };
 
 /* ---------- 게임 ---------- */
-const G = { code: null, meta: {}, teams: {}, members: {}, pos: {}, missions: {}, done: {}, feed: [], off: null, areaKey: '' };
+const G = { code: null, meta: {}, teams: {}, members: {}, pos: {}, missions: {}, done: {}, pdone: {}, feed: [], off: null, areaKey: '' };
 const myTeam = () => G.members[net.me()]?.team || '';
 // 진행자: 게임을 만든 사람(host)과, 그가 회원 중에서 더한 사람들(hosts)
 const isOwner = () => G.meta.host === net.me();
 const isHostUid = uid => uid === G.meta.host || G.meta.hosts?.[uid] === true;
 const isHost = () => isHostUid(net.me());
 const teamOf = tid => G.teams[tid] || { name: '팀 없음', color: '#8a8070' };
+// 개인전(solo): 팀 없이 각자. 개인 미션(each): 팀전에서도 팀원 각자 해서 점수를 자기 팀에 보탠다 — 완료는 pdone/{uid}에
+const solo = () => G.meta.mode === 'solo';
+const isEach = m => solo() || !!m?.each;
+const colorOf = uid => (solo() ? personColor(uid) : teamOf(G.members[uid]?.team).color);
+// 이 미션에서 나(개인 미션) 또는 우리 팀(팀 미션)의 완료
+const myDone = id => (isEach(G.missions[id]) ? G.pdone[net.me()]?.[id] : G.done[myTeam()]?.[id]);
+// 개인 미션을 해낸 사람들 [uid, 완료]
+const eachDone = id => Object.entries(G.pdone).map(([u, ms]) => [u, ms?.[id]]).filter(([, d]) => d?.status === 'ok');
 let myLL = null, tab = 'missions', unseen = 0;
 
 async function enter(code) {
@@ -153,7 +166,8 @@ async function enter(code) {
     members: v => { G.members = v; refresh(); },
     pos: v => { G.pos = v; syncPlayers(); if (tab === 'people') renderPanel(); },
     missions: v => { G.missions = v; refresh(); checkArrive(); },
-    done: v => { bumpScores(v); G.done = v; refresh(); },
+    done: v => { G.done = v; refresh(); },
+    pdone: v => { G.pdone = v; refresh(); },
     feed: (f, isNew) => {
       G.feed.unshift(f);
       if (G.feed.length > 60) G.feed.pop();
@@ -193,31 +207,33 @@ function refresh() {
   renderTabs();
   renderPanel();
   // 팀이 아직 없으면 고르게 한다 (진행자는 팀 없이도 된다)
-  if (G.members[net.me()] && !myTeam() && !isHost() && Object.keys(G.teams).length && $('#sheet').hidden) teamPicker();
+  if (!solo() && G.members[net.me()] && !myTeam() && !isHost() && Object.keys(G.teams).length && $('#sheet').hidden) teamPicker();
 }
 
 /* ---------- 점수판 ---------- */
+// 팀 점수 = 팀 미션 + 그 팀 사람들이 해낸 개인 미션 (완료할 때의 팀으로 센다). n은 팀 미션 수만 (전체 몇 개 중 몇 개)
+const okPts = list => list.reduce((s, x) => s + (+x.pts || 0), 0);
 const teamScore = tid => {
   const d = Object.values(G.done[tid] || {}).filter(x => x.status === 'ok');
-  return { n: d.length, pts: d.reduce((s, x) => s + (+x.pts || 0), 0) };
+  const mine = Object.values(G.pdone).flatMap(ms => Object.values(ms || {})).filter(x => x.status === 'ok' && x.team === tid);
+  return { n: d.length, pts: okPts(d) + okPts(mine) };
 };
-let lastCounts = {};
-function bumpScores(next) {
-  Object.keys(next).forEach(tid => {
-    const n = Object.values(next[tid] || {}).filter(x => x.status === 'ok').length;
-    if (lastCounts[tid] != null && n > lastCounts[tid]) setTimeout(() => document.querySelector(`.score[data-t="${tid}"]`)?.classList.add('bump'), 30);
-    lastCounts[tid] = n;
-  });
-}
+const personScore = uid => { const d = Object.values(G.pdone[uid] || {}).filter(x => x.status === 'ok'); return { n: d.length, pts: okPts(d) }; };
+// 점수가 오르는 순간 그 칸을 반짝인다
+let lastPts = {};
 function renderScores() {
-  const total = Object.values(G.missions).filter(m => m.open !== false).length;
-  const ranked = Object.entries(G.teams).map(([tid, t]) => ({ tid, t, ...teamScore(tid) })).sort((a, b) => b.pts - a.pts || b.n - a.n);
-  $('#scores').innerHTML = ranked.map(({ tid, t, n, pts }) => `
-    <div class="score ${tid === myTeam() ? 'mine' : ''}" data-t="${tid}">
-      <i style="background:${esc(t.color)}"></i><div><b>${esc(t.name)}</b><small>${pts}점</small></div><em>${n}</em><small>/${total}</small>
+  const open = Object.values(G.missions).filter(m => m.open !== false);
+  const rows = solo()
+    ? Object.entries(G.members).filter(([u]) => !isHostUid(u) || personScore(u).n).map(([u, m]) => ({ key: 'u' + u, id: u, kind: 'u', name: m.name, color: personColor(u), mine: u === net.me(), total: open.length, ...personScore(u) }))
+    : Object.entries(G.teams).map(([tid, t]) => ({ key: 't' + tid, id: tid, kind: 't', name: t.name, color: t.color, mine: tid === myTeam(), total: open.filter(m => !m.each).length, ...teamScore(tid) }));
+  rows.sort((a, b) => b.pts - a.pts || b.n - a.n);
+  $('#scores').innerHTML = rows.map(r => `
+    <div class="score ${r.mine ? 'mine' : ''} ${lastPts[r.key] != null && r.pts > lastPts[r.key] ? 'bump' : ''}" data-${r.kind}="${r.id}">
+      <i style="background:${esc(r.color)}"></i><div><b>${esc(r.name)}</b><small>${r.pts}점</small></div><em>${r.n}</em><small>/${r.total}</small>
     </div>`).join('');
+  lastPts = Object.fromEntries(rows.map(r => [r.key, r.pts]));
   document.querySelectorAll('.score').forEach(el => {
-    el.onclick = () => focusTeam(el.dataset.t);
+    el.onclick = () => (el.dataset.u ? focusPlayer(el.dataset.u) : focusTeam(el.dataset.t));
     el.addEventListener('animationend', () => el.classList.remove('bump'));
   });
 }
@@ -230,20 +246,19 @@ function syncPlayers() {
     const p = G.pos[uid];
     if (!p) { W.removePlayer(uid); return; }
     const stale = !m.online || now - (p.t || 0) > STALE;
-    W.upsertPlayer({ uid, name: m.name, avatar: m.avatar, color: teamOf(m.team).color, team: m.team, me: uid === net.me(), sub: stale ? ago(p.t) : '' });
+    W.upsertPlayer({ uid, name: m.name, avatar: m.avatar, color: colorOf(uid), team: m.team, me: uid === net.me(), sub: stale ? ago(p.t) : '' });
     W.movePlayer(uid, p, stale);
   });
 }
 function syncMissions() {
   if (!W.frame()) return;
-  const mine = myTeam();
   const seen = new Set();
   Object.entries(G.missions).forEach(([id, m]) => {
     if (m.open === false && !isHost()) { W.removeMission(id); return; }
     seen.add(id);
-    const st = G.done[mine]?.[id]?.status;
-    const by = Object.keys(G.teams).filter(t => G.done[t]?.[id]?.status === 'ok').map(t => G.teams[t].name).join('·');
-    W.upsertMission({ id, title: `${TYPES[m.type]?.[0] || '📍'} ${m.title}`, lat: m.lat, lng: m.lng, r: m.r, dim: st === 'ok' || m.open === false,
+    const st = myDone(id)?.status;
+    const by = isEach(m) ? (eachDone(id).length ? eachDone(id).length + '명' : '') : Object.keys(G.teams).filter(t => G.done[t]?.[id]?.status === 'ok').map(t => G.teams[t].name).join('·');
+    W.upsertMission({ id, title: `${TYPES[m.type]?.[0] || '📍'} ${m.title}${m.each && !solo() ? ' (개인)' : ''}`, lat: m.lat, lng: m.lng, r: m.r, dim: st === 'ok' || m.open === false,
       color: st === 'ok' ? '#7fdc8f' : st === 'wait' ? '#f0d79a' : '#ffcf6a', sub: `${m.pts || 0}점${by ? ' · ✓ ' + by : ''}` });
   });
   removedMissions(seen);
@@ -287,31 +302,33 @@ const sortedMissions = () => Object.entries(G.missions).filter(([, m]) => m.open
 function missionList() {
   const list = sortedMissions();
   if (!list.length) return `<p class="empty">아직 미션이 없어요.${isHost() ? '<br>진행 탭에서 미션을 더해 주세요.' : ''}</p>`;
-  const mine = myTeam();
   return list.map(([id, m]) => {
-    const st = G.done[mine]?.[id]?.status;
+    const st = myDone(id)?.status;
     const d = myLL ? fmtDist(dist(myLL, m)) : '';
-    const dots = Object.entries(G.teams).filter(([t]) => G.done[t]?.[id]?.status === 'ok').map(([, t]) => `<i style="background:${esc(t.color)}"></i>`).join('');
+    // 해낸 팀은 팀 색 점으로, 개인 미션은 해낸 사람 수로
+    const dots = isEach(m) ? (eachDone(id).length ? ` · ✓ ${eachDone(id).length}명` : '') : Object.entries(G.teams).filter(([t]) => G.done[t]?.[id]?.status === 'ok').map(([, t]) => `<i style="background:${esc(t.color)}"></i>`).join('');
     return `<div class="item" data-m="${id}">
       <div class="ic ${st || ''}">${st === 'ok' ? '✓' : st === 'wait' ? '⏳' : TYPES[m.type]?.[0] || '📍'}</div>
-      <div class="tx"><b>${esc(m.title)}</b><small>${TYPES[m.type]?.[1] || ''} · ${m.pts || 0}점${m.open === false ? ' · 닫힘' : ''}<span class="dots">${dots}</span></small></div>
+      <div class="tx"><b>${esc(m.title)}</b><small>${TYPES[m.type]?.[1] || ''}${m.each && !solo() ? ' · 개인' : ''} · ${m.pts || 0}점${m.open === false ? ' · 닫힘' : ''}<span class="dots">${dots}</span></small></div>
       <div class="rt">${d}</div></div>`;
   }).join('');
 }
 function peopleList() {
+  const row = ([uid, m]) => {
+    const p = G.pos[uid], live = m.online && p && Date.now() - (p.t || 0) < STALE, s = personScore(uid);
+    return `<div class="item" data-u="${uid}"><img class="mini" src="${thumb(m.avatar)}" alt="">
+      <div class="tx"><b>${solo() ? `<span class="dot" style="background:${personColor(uid)}"></span> ` : ''}${esc(m.name)}${uid === net.me() ? ' (나)' : ''}${isHostUid(uid) ? ' · 진행자' : ''}</b>
+      <small><span class="dot ${live ? 'on-dot' : 'off-dot'}"></span> ${p ? (live ? '위치 공유 중' : ago(p.t) + ' 위치') : '위치 없음'}${s.n ? ` · ${solo() ? '' : '개인 '}${s.n}개 ${s.pts}점` : ''}</small></div>
+      <div class="rt">${myLL && p && uid !== net.me() ? fmtDist(dist(myLL, p)) : ''}</div></div>`;
+  };
+  // 개인전: 점수 순으로 한 줄. 팀전: 팀별로 묶는다
+  if (solo()) return Object.entries(G.members).sort(([a], [b]) => personScore(b).pts - personScore(a).pts).map(row).join('');
   const groups = {};
   Object.entries(G.members).forEach(([uid, m]) => (groups[m.team || ''] ||= []).push([uid, m]));
   const order = [...Object.keys(G.teams), ''];
   return order.filter(t => groups[t]).map(t => {
     const team = teamOf(t), s = t ? teamScore(t) : null;
-    return `<div class="group-h" data-t="${t}"><span class="dot" style="background:${esc(team.color)}"></span><b>${esc(team.name)}</b>${s ? ` · 미션 ${s.n} · ${s.pts}점` : ''}</div>` +
-      groups[t].map(([uid, m]) => {
-        const p = G.pos[uid], live = m.online && p && Date.now() - (p.t || 0) < STALE;
-        return `<div class="item" data-u="${uid}"><img class="mini" src="${thumb(m.avatar)}" alt="">
-          <div class="tx"><b>${esc(m.name)}${uid === net.me() ? ' (나)' : ''}${isHostUid(uid) ? ' · 진행자' : ''}</b>
-          <small><span class="dot ${live ? 'on-dot' : 'off-dot'}"></span> ${p ? (live ? '위치 공유 중' : ago(p.t) + ' 위치') : '위치 없음'}</small></div>
-          <div class="rt">${myLL && p && uid !== net.me() ? fmtDist(dist(myLL, p)) : ''}</div></div>`;
-      }).join('');
+    return `<div class="group-h" data-t="${t}"><span class="dot" style="background:${esc(team.color)}"></span><b>${esc(team.name)}</b>${s ? ` · 미션 ${s.n} · ${s.pts}점` : ''}</div>` + groups[t].map(row).join('');
   }).join('');
 }
 const thumbs = {};
@@ -322,8 +339,8 @@ const findEl = $('#find'), findsEl = $('#finds');
 function finds(q) {
   q = q.trim().toLowerCase();
   if (!q) return [];
-  const teams = Object.entries(G.teams).filter(([, t]) => t.name.toLowerCase().includes(q)).map(([tid, t]) => ({ kind: 't', id: tid, label: t.name, color: t.color, sub: `팀 · ${Object.values(G.members).filter(m => m.team === tid).length}명` }));
-  const people = Object.entries(G.members).filter(([, m]) => (m.name || '').toLowerCase().includes(q)).map(([uid, m]) => ({ kind: 'u', id: uid, label: m.name, color: teamOf(m.team).color, sub: teamOf(m.team).name + (G.pos[uid] ? '' : ' · 위치 없음'), avatar: m.avatar }));
+  const teams = Object.entries(solo() ? {} : G.teams).filter(([, t]) => t.name.toLowerCase().includes(q)).map(([tid, t]) => ({ kind: 't', id: tid, label: t.name, color: t.color, sub: `팀 · ${Object.values(G.members).filter(m => m.team === tid).length}명` }));
+  const people = Object.entries(G.members).filter(([, m]) => (m.name || '').toLowerCase().includes(q)).map(([uid, m]) => ({ kind: 'u', id: uid, label: m.name, color: colorOf(uid), sub: (solo() ? `${personScore(uid).pts}점` : teamOf(m.team).name) + (G.pos[uid] ? '' : ' · 위치 없음'), avatar: m.avatar }));
   return [...people, ...teams].slice(0, 12);
 }
 findEl.oninput = () => {
@@ -342,7 +359,7 @@ function focusPlayer(uid) {
   W.flyTo(p, 110);
   W.follow(uid, uid === net.me());
   setFab();
-  toast(`${m.name} · ${teamOf(m.team).name}${myLL && uid !== net.me() ? ' · ' + fmtDist(dist(myLL, p)) : ''} — 따라가는 중`);
+  toast(`${m.name}${solo() ? '' : ' · ' + teamOf(m.team).name}${myLL && uid !== net.me() ? ' · ' + fmtDist(dist(myLL, p)) : ''} — 따라가는 중`);
 }
 // 팀: 위치가 있는 팀원들의 가운데로, 모두 들어오게 물러난다
 function focusTeam(tid) {
@@ -535,21 +552,26 @@ function setMyPos(p) {
 /* ---------- 미션 수행 ---------- */
 const near = m => myLL && (!m.r || dist(myLL, m) <= m.r + Math.min(myLL.acc || 0, 15)); // GPS 오차를 15m까지는 봐준다
 const busy = new Set();
+// 미션을 할 수 있는 사람: 개인전은 누구나, 팀전은 팀이 있어야
+const canPlay = () => solo() || !!myTeam();
 function checkArrive() {
-  if (G.meta.status !== 'live' || !myTeam() || !myLL) return;
+  if (G.meta.status !== 'live' || !canPlay() || !myLL) return;
   Object.entries(G.missions).forEach(([id, m]) => {
-    if (m.type !== 'arrive' || m.open === false || G.done[myTeam()]?.[id] || busy.has(id) || !near(m)) return;
+    if (m.type !== 'arrive' || m.open === false || myDone(id) || busy.has(id) || !near(m)) return;
     busy.add(id);
     finish(id, m, 'ok').finally(() => busy.delete(id));
   });
 }
 async function finish(id, m, status) {
-  const t = myTeam();
+  const t = myTeam(), d = { name: profile.name, pts: m.pts || 0, status };
   try {
-    await net.complete(G.code, t, id, { name: profile.name, pts: m.pts || 0, status });
-    await net.say(G.code, t, `${teamOf(t).name} ${profile.name} — '${m.title}' ${status === 'ok' ? '완료!' : '확인 요청'}`);
+    if (isEach(m)) await net.completeMine(G.code, id, { ...d, team: t });
+    else await net.complete(G.code, t, id, d);
+    await net.say(G.code, t, `${solo() ? '' : teamOf(t).name + ' '}${profile.name} — '${m.title}' ${status === 'ok' ? '완료!' : '확인 요청'}${m.each && !solo() ? ' (개인)' : ''}`);
   } catch { /* 다른 팀원이 먼저 해냈으면 규칙이 막는다 */ }
 }
+// 사진 자리: 팀 미션은 팀, 개인 완료는 사람마다
+const photoKey = (m, uid = net.me()) => (isEach(m) ? 'u_' + uid : myTeam());
 async function sha(s) {
   const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
   return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
@@ -570,15 +592,16 @@ function openMission(id) {
   const m = G.missions[id];
   if (!m) return;
   W.flyTo(m, 160); W.follow(null); setFab();
-  const t = myTeam(), d = G.done[t]?.[id], live = G.meta.status === 'live';
-  const others = Object.entries(G.teams).map(([tid, tm]) => {
-    const x = G.done[tid]?.[id];
-    return `<span class="pill ${x?.status || ''}"><span class="dot" style="background:${esc(tm.color)}"></span> ${esc(tm.name)} ${x?.status === 'ok' ? '✓' : x ? '⏳' : '—'}</span>`;
+  const d = myDone(id), live = G.meta.status === 'live', each = isEach(m);
+  // 개인 미션은 팀마다 해낸 사람 수(개인전은 전체 수), 팀 미션은 팀마다 ✓
+  const others = solo() ? `<span class="pill">✓ ${eachDone(id).length}명 해냈어요</span>` : Object.entries(G.teams).map(([tid, tm]) => {
+    const x = G.done[tid]?.[id], n = eachDone(id).filter(([, y]) => y.team === tid).length;
+    return `<span class="pill ${each ? (n ? 'ok' : '') : x?.status || ''}"><span class="dot" style="background:${esc(tm.color)}"></span> ${esc(tm.name)} ${each ? n + '명' : x?.status === 'ok' ? '✓' : x ? '⏳' : '—'}</span>`;
   }).join('');
   let act = '';
-  if (d?.status === 'ok') act = `<div class="box">✓ 우리 팀이 해냈어요 (${esc(d.name)}, ${clock(d.t)})</div>`;
+  if (d?.status === 'ok') act = `<div class="box">✓ ${each ? `해냈어요 (${clock(d.t)})` : `우리 팀이 해냈어요 (${esc(d.name)}, ${clock(d.t)})`}</div>`;
   else if (d?.status === 'wait') act = `<div class="box">⏳ 진행자가 확인하고 있어요.</div>`;
-  else if (!t) act = `<div class="box">팀에 들어가야 미션을 할 수 있어요.</div>`;
+  else if (!canPlay()) act = `<div class="box">팀에 들어가야 미션을 할 수 있어요.</div>`;
   else if (!live) act = `<div class="box">${G.meta.status === 'ended' ? '게임이 끝났어요.' : '진행자가 게임을 시작하면 열려요.'}</div>`;
   else if (!near(m)) act = `<div class="box">${myLL ? `${fmtDist(dist(myLL, m))} 남았어요. ` : '위치 공유를 켜 주세요. '}반경 ${m.r}m 안으로 가면 ${m.type === 'arrive' ? '저절로 완료돼요' : '열려요'}.</div>`;
   else if (m.type === 'quiz') act = `<div class="box">${esc(m.q)}</div><form class="row" id="qForm"><input id="qAns" placeholder="정답" autocomplete="off"><button class="btn primary">제출</button></form><p class="msg" id="qMsg"></p>`;
@@ -588,7 +611,7 @@ function openMission(id) {
   // 테스트 모드: 미션 자리로 바로 옮겨 가 본다
   if (sim && !d) act += `<button class="btn wide" id="simGo">🧪 여기로 이동 (테스트)</button>`;
   const host = isHost() ? `<div class="hostgrid"><button class="btn small" id="mEdit">수정</button><button class="btn small" id="mToggle">${m.open === false ? '열기' : '닫기'}</button><button class="btn small danger" id="mDel">삭제</button></div>` : '';
-  openSheet(`<p class="eyebrow">${TYPES[m.type]?.[0]} ${TYPES[m.type]?.[1]} · ${m.pts || 0}점</p><h3>${esc(m.title)}</h3>
+  openSheet(`<p class="eyebrow">${TYPES[m.type]?.[0]} ${TYPES[m.type]?.[1]}${m.each && !solo() ? ' · 개인 미션 — 각자 해서 팀 점수에 보태요' : ''} · ${m.pts || 0}점</p><h3>${esc(m.title)}</h3>
     ${m.desc ? `<p class="fine">${esc(m.desc)}</p>` : ''}<div class="teamrow">${others}</div>${act}${host}`, el => {
     el.querySelector('#qForm')?.addEventListener('submit', async e => {
       e.preventDefault();
@@ -601,7 +624,7 @@ function openMission(id) {
       const f = e.target.files[0];
       if (!f) return;
       el.querySelector('#qMsg').textContent = '올리는 중…';
-      await net.savePhoto(G.code, t, id, await shrink(f));
+      await net.savePhoto(G.code, photoKey(m), id, await shrink(f));
       await finish(id, m, 'wait');
       closeSheet(); toast('사진을 올렸어요. 진행자가 확인하면 점수가 올라가요.');
     });
@@ -637,7 +660,11 @@ function teamPicker() {
 /* ---------- 진행자 ---------- */
 let placing = null;
 $('#placeCancel').onclick = () => { placing = null; $('#placing').hidden = true; };
-const pendings = () => Object.entries(G.done).flatMap(([tid, ms]) => Object.entries(ms || {}).filter(([, d]) => d.status === 'wait').map(([mid, d]) => ({ tid, mid, d })));
+// 확인 대기: 팀 미션(done)과 개인 완료(pdone) — who는 팀 id 또는 사람 uid
+const pendings = () => [
+  ...Object.entries(G.done).flatMap(([tid, ms]) => Object.entries(ms || {}).filter(([, d]) => d.status === 'wait').map(([mid, d]) => ({ kind: 't', who: tid, tid, mid, d }))),
+  ...Object.entries(G.pdone).flatMap(([uid, ms]) => Object.entries(ms || {}).filter(([, d]) => d.status === 'wait').map(([mid, d]) => ({ kind: 'u', who: uid, tid: d.team, mid, d }))),
+].sort((a, b) => (a.d.t || 0) - (b.d.t || 0));
 function hostPanel() {
   const st = G.meta.status;
   const link = `${location.origin}${location.pathname}?g=${G.code}`;
@@ -646,14 +673,14 @@ function hostPanel() {
     <div class="hostgrid">
       ${st !== 'live' ? `<button class="btn primary small" id="hStart">▶ ${st === 'ended' ? '다시 시작' : '게임 시작'}</button>` : `<button class="btn small" id="hEnd">■ 게임 끝내기</button>`}
       <button class="btn small" id="hAdd">＋ 미션 더하기</button>
-      <button class="btn small" id="hTeams">팀 정하기</button>
+      <button class="btn small" id="hTeams">${solo() ? '방식·팀' : '팀 정하기'}</button>
       <button class="btn small" id="hNotice">📣 알림 보내기</button>
       <button class="btn small" id="hArea">🗺 지역 바꾸기</button>
       ${isOwner() ? '<button class="btn small" id="hHosts">🧑‍✈️ 진행자 더하기</button>' : ''}
     </div>
     <div class="group-h">확인을 기다리는 미션 ${waits.length}</div>
-    ${waits.length ? waits.map(({ tid, mid, d }) => `<div class="item" data-judge="${tid}|${mid}"><div class="ic wait">${TYPES[G.missions[mid]?.type]?.[0] || '⏳'}</div>
-      <div class="tx"><b>${esc(G.missions[mid]?.title || mid)}</b><small><span class="dot" style="background:${esc(teamOf(tid).color)}"></span> ${esc(teamOf(tid).name)} · ${esc(d.name)} · ${clock(d.t)}</small></div><div class="rt">보기 ›</div></div>`).join('') : '<p class="empty">없어요.</p>'}`;
+    ${waits.length ? waits.map(({ kind, who, tid, mid, d }) => `<div class="item" data-judge="${kind}|${who}|${mid}"><div class="ic wait">${TYPES[G.missions[mid]?.type]?.[0] || '⏳'}</div>
+      <div class="tx"><b>${esc(G.missions[mid]?.title || mid)}${kind === 'u' && !solo() ? ' (개인)' : ''}</b><small><span class="dot" style="background:${esc(kind === 'u' && solo() ? personColor(who) : teamOf(tid).color)}"></span> ${solo() ? '' : esc(teamOf(tid).name) + ' · '}${esc(d.name)} · ${clock(d.t)}</small></div><div class="rt">보기 ›</div></div>`).join('') : '<p class="empty">없어요.</p>'}`;
 }
 function bindHost(el) {
   el.querySelector('#hCopy')?.addEventListener('click', e => { navigator.clipboard?.writeText(e.target.dataset.link); toast('초대 링크를 복사했어요.'); });
@@ -667,14 +694,18 @@ function bindHost(el) {
     s => (s.querySelector('#nf').onsubmit = async e => { e.preventDefault(); await net.say(G.code, '', '📣 ' + s.querySelector('#nt').value.trim()); closeSheet(); })));
   el.querySelectorAll('[data-judge]').forEach(n => (n.onclick = () => judgeSheet(...n.dataset.judge.split('|'))));
 }
-async function judgeSheet(tid, mid) {
-  const m = G.missions[mid] || {}, d = G.done[tid]?.[mid];
-  openSheet(`<p class="eyebrow">확인 요청 · ${esc(teamOf(tid).name)}</p><h3>${esc(m.title)}</h3><p class="fine">${esc(d?.name)} · ${clock(d?.t)}</p>
+async function judgeSheet(kind, who, mid) {
+  // kind 't': 팀 미션(who = 팀), 'u': 개인 완료(who = 사람)
+  const m = G.missions[mid] || {}, d = kind === 'u' ? G.pdone[who]?.[mid] : G.done[who]?.[mid], tid = kind === 'u' ? d?.team : who;
+  const key = kind === 'u' ? 'u_' + who : who;
+  const judge = ok => (kind === 'u' ? net.judgeMine(G.code, who, mid, ok) : net.judge(G.code, who, mid, ok));
+  const label = solo() ? d?.name : `${teamOf(tid).name}${kind === 'u' ? ' ' + d?.name : ''}`;
+  openSheet(`<p class="eyebrow">확인 요청 · ${esc(solo() ? '개인' : teamOf(tid).name)}</p><h3>${esc(m.title)}</h3><p class="fine">${esc(d?.name)} · ${clock(d?.t)}</p>
     <div id="ph">${m.type === 'photo' ? '<p class="fine">사진을 불러오는 중…</p>' : ''}</div>
     <div class="grid2"><button class="btn danger" id="jNo">다시 하게 하기</button><button class="btn primary" id="jOk">인정 (+${m.pts || 0}점)</button></div>`, async el => {
-    el.querySelector('#jOk').onclick = async () => { await net.judge(G.code, tid, mid, true); net.say(G.code, tid, `${teamOf(tid).name} — '${m.title}' 완료!`); closeSheet(); };
-    el.querySelector('#jNo').onclick = async () => { await net.judge(G.code, tid, mid, false); await net.delPhoto(G.code, tid, mid); net.say(G.code, tid, `${teamOf(tid).name} — '${m.title}' 다시 해 주세요`); closeSheet(); };
-    if (m.type === 'photo') { const url = await net.getPhoto(G.code, tid, mid); el.querySelector('#ph').innerHTML = url ? `<img class="photo" src="${url}" alt="">` : '<p class="fine">사진이 없어요.</p>'; }
+    el.querySelector('#jOk').onclick = async () => { await judge(true); net.say(G.code, tid || '', `${label} — '${m.title}' 완료!`); closeSheet(); };
+    el.querySelector('#jNo').onclick = async () => { await judge(false); await net.delPhoto(G.code, key, mid); net.say(G.code, tid || '', `${label} — '${m.title}' 다시 해 주세요`); closeSheet(); };
+    if (m.type === 'photo') { const url = await net.getPhoto(G.code, key, mid); el.querySelector('#ph').innerHTML = url ? `<img class="photo" src="${url}" alt="">` : '<p class="fine">사진이 없어요.</p>'; }
   });
 }
 // 게임 지역: 중심과 반경을 바꾸면 모두의 화면에서 지형을 새로 만든다 (예: 대전에서 시험하다가 행사 날 전주로)
@@ -729,17 +760,49 @@ function hostEditor() {
     bind();
   });
 }
+// 방식·팀: 팀전/개인전을 바꾸고, 팀을 더하거나 빼고, 이름·색과 사람마다 팀을 정한다
 function teamEditor() {
-  const rows = Object.entries(G.members).filter(([u]) => u !== G.meta.host || G.members[u].team).map(([uid, m]) => `<label>${esc(m.name)}<select data-mem="${uid}"><option value="">팀 없음</option>${Object.entries(G.teams).map(([tid, t]) => `<option value="${tid}" ${m.team === tid ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>`).join('');
-  const names = Object.entries(G.teams).map(([tid, t]) => `<div class="row"><input type="color" value="${esc(t.color)}" data-tc="${tid}" style="width:52px;padding:4px"><input value="${esc(t.name)}" data-tn="${tid}"></div>`).join('');
-  openSheet(`<h3>팀 정하기</h3><div class="stack">${names}<button class="btn small" id="tSave">팀 이름·색 저장</button></div><div class="group-h">사람마다 팀</div><div class="stack">${rows}</div>
-    <label style="margin-top:12px">진행자인 나도 팀에 들어가기<select data-mem="${G.meta.host}"><option value="">들어가지 않음</option>${Object.entries(G.teams).map(([tid, t]) => `<option value="${tid}" ${G.members[G.meta.host]?.team === tid ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>`, el => {
+  const teamOpts = cur => Object.entries(G.teams).map(([tid, t]) => `<option value="${tid}" ${cur === tid ? 'selected' : ''}>${esc(t.name)}</option>`).join('');
+  const rows = Object.entries(G.members).filter(([u]) => u !== G.meta.host || G.members[u].team).map(([uid, m]) => `<label>${esc(m.name)}<select data-mem="${uid}"><option value="">팀 없음</option>${teamOpts(m.team)}</select></label>`).join('');
+  const names = Object.entries(G.teams).map(([tid, t]) => `<div class="row"><input type="color" value="${esc(t.color)}" data-tc="${tid}" style="width:52px;padding:4px"><input value="${esc(t.name)}" data-tn="${tid}"><button class="btn small danger" data-tdel="${tid}" title="팀 빼기">×</button></div>`).join('');
+  const body = solo()
+    ? `<p class="fine">개인전 — 각자 미션을 해서 개인 점수로 겨뤄요. 점수판에 사람마다 점수가 보이고, 팀은 쓰지 않아요.</p>`
+    : `<div class="stack">${names}<div class="grid2"><button class="btn small" id="tAdd">＋ 팀 더하기</button><button class="btn small primary" id="tSave">이름·색 저장</button></div></div>
+      <div class="group-h">사람마다 팀</div><div class="stack">${rows}</div>
+      <label style="margin-top:12px">진행자인 나도 팀에 들어가기<select data-mem="${G.meta.host}"><option value="">들어가지 않음</option>${teamOpts(G.members[G.meta.host]?.team)}</select></label>`;
+  openSheet(`<h3>방식·팀</h3><div class="seg"><button data-mode="team" class="${solo() ? '' : 'on'}">팀전</button><button data-mode="solo" class="${solo() ? 'on' : ''}">개인전</button></div>${body}`, el => {
+    el.querySelectorAll('[data-mode]').forEach(b => (b.onclick = async () => {
+      if ((b.dataset.mode === 'solo') === solo()) return;
+      await net.saveMeta(G.code, { mode: b.dataset.mode });
+      // 팀전으로 돌아왔는데 팀이 없으면 두 팀을 만들어 둔다
+      if (b.dataset.mode === 'team' && !Object.keys(G.teams).length) await net.saveTeams(G.code, { t1: { name: TEAM_PRESET[0][0], color: TEAM_PRESET[0][1] }, t2: { name: TEAM_PRESET[1][0], color: TEAM_PRESET[1][1] } });
+      net.say(G.code, '', `📣 ${b.dataset.mode === 'solo' ? '개인전' : '팀전'}으로 바뀌었어요`);
+      teamEditor();
+    }));
     el.querySelectorAll('[data-mem]').forEach(s => (s.onchange = () => net.setTeam(G.code, s.dataset.mem, s.value)));
-    el.querySelector('#tSave').onclick = async () => {
+    const read = () => {
       const teams = {};
       Object.keys(G.teams).forEach(tid => (teams[tid] = { name: el.querySelector(`[data-tn="${tid}"]`).value.trim() || G.teams[tid].name, color: el.querySelector(`[data-tc="${tid}"]`).value }));
-      await net.saveTeams(G.code, teams); toast('팀을 저장했어요.');
+      return teams;
     };
+    el.querySelector('#tSave')?.addEventListener('click', async () => { await net.saveTeams(G.code, read()); toast('팀을 저장했어요.'); });
+    // 팀 더하기: 아직 안 쓴 이름·색으로, 쓰던 번호 다음 id
+    el.querySelector('#tAdd')?.addEventListener('click', async () => {
+      const teams = read(), used = new Set(Object.values(teams).map(t => t.name));
+      const [name, color] = TEAM_PRESET.find(([n]) => !used.has(n)) || [`${Object.keys(teams).length + 1}팀`, PERSON_COLORS[Object.keys(teams).length % PERSON_COLORS.length]];
+      const n = Math.max(0, ...Object.keys(teams).map(k => +k.slice(1) || 0)) + 1;
+      await net.saveTeams(G.code, { ...teams, ['t' + n]: { name, color } });
+      teamEditor();
+    });
+    // 팀 빼기: 두 번 눌러야. 그 팀 사람들은 '팀 없음'이 되어 다시 고른다 (이미 얻은 점수 기록은 남지만 점수판에서 빠진다)
+    el.querySelectorAll('[data-tdel]').forEach(b => (b.onclick = async () => {
+      if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = '빼기?'; return; }
+      const tid = b.dataset.tdel, teams = read();
+      delete teams[tid];
+      await net.saveTeams(G.code, teams);
+      await Promise.all(Object.entries(G.members).filter(([, m]) => m.team === tid).map(([u]) => net.setTeam(G.code, u, '')));
+      teamEditor();
+    }));
   });
 }
 function missionForm(id, draftM) {
@@ -747,6 +810,7 @@ function missionForm(id, draftM) {
   openSheet(`<h3>${id ? '미션 고치기' : '새 미션'}</h3><form class="stack" id="mf">
     <input name="title" placeholder="미션 이름 (예: 경기전 홍살문)" value="${esc(m.title || '')}" required>
     <label>종류<select name="type">${Object.entries(TYPES).map(([k, [ic, n]]) => `<option value="${k}" ${m.type === k ? 'selected' : ''}>${ic} ${n}</option>`).join('')}</select></label>
+    ${solo() ? '' : `<label class="check"><input type="checkbox" name="each" ${m.each ? 'checked' : ''}><span>개인 미션 — 팀원 각자 해서 점수를 팀에 보태요</span></label>`}
     <textarea name="desc" placeholder="설명 (무엇을 하면 되는지)">${esc(m.desc || '')}</textarea>
     <div class="qa stack"><input name="q" placeholder="문제" value="${esc(m.q || '')}"><input name="ans" placeholder="${m.ah ? '정답 (바꿀 때만 적기)' : '정답 — 띄어쓰기·대소문자는 무시해요'}"></div>
     <div class="grid2"><label>반경(m)<input name="r" type="number" min="0" value="${m.r ?? 25}"></label><label>점수<input name="pts" type="number" min="0" value="${m.pts ?? 10}"></label></div>
@@ -756,7 +820,8 @@ function missionForm(id, draftM) {
     const f = el.querySelector('#mf');
     const qa = () => (el.querySelector('.qa').hidden = f.type.value !== 'quiz');
     f.type.onchange = qa; qa();
-    const read = () => ({ ...m, title: f.title.value.trim(), type: f.type.value, desc: f.desc.value.trim(), q: f.q.value.trim(), r: +f.r.value || 0, pts: +f.pts.value || 0, _ans: f.ans.value });
+    // 개인전에선 개인 미션 칸이 없으니 원래 값을 둔다
+    const read = () => ({ ...m, each: solo() ? m.each : !!f.each?.checked, title: f.title.value.trim(), type: f.type.value, desc: f.desc.value.trim(), q: f.q.value.trim(), r: +f.r.value || 0, pts: +f.pts.value || 0, _ans: f.ans.value });
     el.querySelector('#pickMap').onclick = () => {
       const cur = read();
       $('#sheet').hidden = true; $('#placing').hidden = false;
@@ -770,6 +835,7 @@ function missionForm(id, draftM) {
       if (v.type === 'quiz' && !v.ah && !v._ans.trim()) { el.querySelector('#mfMsg').textContent = '정답을 적어 주세요.'; return; }
       const ans = v._ans; delete v._ans; delete v.ans;
       if (v.type !== 'quiz') { delete v.q; delete v.ah; }
+      if (!v.each) delete v.each;
       // 새 미션은 id를 먼저 받아야 정답 해시를 만들 수 있다
       const isNew = !id;
       if (!id) { const r = await net.addMission(G.code, { ...v, open: true }); id = r?.key || Object.keys(G.missions).find(k => G.missions[k].title === v.title); }
