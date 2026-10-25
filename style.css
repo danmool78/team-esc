@@ -146,3 +146,5 @@ summary{cursor:pointer;color:var(--gold2);font-size:14px;margin-bottom:10px}
   .dock.min{--dock:118px}
   .credit{bottom:4px;right:424px}
 }
+/* 위치 공유 끄기는 PC에서만 — 폰은 걸으며 늘 켜 두어야 하니 실수로 끄지 않게 숨긴다 */
+@media (pointer: coarse) { #offBtn { display: none } }

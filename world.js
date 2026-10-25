@@ -1,6 +1,6 @@
 /* 3D 세계: 지형 위에 참가자 인형과 미션 표지를 세우고, 비스듬히 내려다보는 카메라로 그린다.
    조작은 그 길(the-way-jesus)의 3D 지형 모드와 같게 — 마우스: 끌면 옮기고, 오른쪽 버튼(또는 Shift)으로 끌면 돌리고 기울이고, 바퀴로 당긴다.
-   손가락: 하나로 옮기고, 둘로 벌려 당기고 비틀어 돌리고 함께 위아래로 밀어 기울인다 — 지도를 손으로 잡은 듯 손가락 방향 그대로 (마우스와 반대).
+   손가락: 하나로 옮기고, 둘로 벌려 당기고 비틀어 돌리고 함께 위아래로 밀어 기울인다.
    내 위치 따라가기(◎): 나는 늘 화면 가운데, 진행 방향이 화면 위로 오게 지도가 돌고 움직인다.
    지형은 카메라가 보는 곳 둘레를 조각조각 이어 받아 그린다 (terrain.js) — 지도를 끌어 옮기면 그쪽 땅이 따라 생긴다.
    인형은 실제 크기로는 점처럼 작아 보여서, 카메라가 멀어질수록 함께 키운다 (자리는 그대로, 크기만) */
@@ -322,8 +322,7 @@ if (renderer) {
       p.x = e.clientX; p.y = e.clientY;
       return;
     }
-    // 두 손가락: 벌리기 = 당기기, 비틀기 = 돌리기, 함께 위아래 = 기울이기.
-    // 마우스는 '고개를 돌리는' 방향이지만 손가락은 지도를 잡은 듯 — 시계 방향으로 비틀면 지도도 시계 방향, 위로 밀면 위에서 내려다보게
+    // 두 손가락: 벌리기 = 당기기, 비틀기 = 돌리기, 함께 위아래 = 기울이기
     const [a, b] = [...ptrs.values()];
     const before = { d: Math.hypot(a.x - b.x, a.y - b.y), ang: Math.atan2(b.y - a.y, b.x - a.x), my: (a.y + b.y) / 2 };
     p.x = e.clientX; p.y = e.clientY;
@@ -332,8 +331,8 @@ if (renderer) {
     let da = after.ang - before.ang;
     if (da > Math.PI) da -= Math.PI * 2; if (da < -Math.PI) da += Math.PI * 2;
     if (Math.abs(da) > 0.004 && cam.headUp) cam.headUp = false; // 손으로 돌리면 진행 방향 맞추기를 멈춘다 (가운데 따라가기는 그대로)
-    goal.yaw += da;
-    goal.pitch -= (after.my - before.my) * 0.004;
+    goal.yaw -= da;
+    goal.pitch += (after.my - before.my) * 0.004;
     clampGoal();
   });
   const up = e => {
