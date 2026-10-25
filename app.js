@@ -367,6 +367,48 @@ function startCompass() {
   else listen();
 }
 $('#fabAll').onclick = () => { W.resetView(); setFab(); };
+// 주머니 모드: 브라우저는 화면이 꺼지면 위치를 멈추므로, 화면은 켜 둔 채 까맣게 덮고 3D 그리기를 멈춰 배터리를 아낀다.
+// 주머니 속에서 눌리지 않게 1초 길게 눌러야 풀린다
+let pocketT = null, holdT = null;
+$('#fabPocket').onclick = () => {
+  if (!myLL) { toast('먼저 위치 공유를 켜 주세요.'); return; }
+  $('#pocket').hidden = false;
+  W.stop();
+  navigator.wakeLock?.request('screen').then(w => (wake = w)).catch(() => {});
+  document.documentElement.requestFullscreen?.().catch(() => {}); // 위쪽 알림줄까지 가린다 (아이폰은 안 돼도 그만)
+  pocketTick();
+  pocketT = setInterval(pocketTick, 1000);
+};
+function pocketOff() {
+  $('#pocket').hidden = true;
+  clearInterval(pocketT); pocketT = null;
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  W.start();
+}
+function pocketTick() {
+  const on = watchId != null || sim || FAKE;
+  const ago = lastSent ? Math.round((Date.now() - lastSent.at) / 1000) : null;
+  const late = watchId != null && ago != null && ago > 120; // 8초마다 보내니 2분 넘게 조용하면 위치가 안 잡히는 것 (가만히 서 있으면 폰이 새 값을 늦게 주기도 해서 넉넉히)
+  $('#pkBox').classList.toggle('warn', !on || late);
+  $('#pkState').textContent = !on ? '위치 공유가 꺼져 있어요' : late ? '2분 넘게 새 위치가 없어요' : '위치 보내는 중';
+  $('#pkSub').textContent = on && ago != null ? `${ago < 5 ? '방금' : ago + '초 전'} 보냄 · 오차 ${myLL?.acc ?? '-'}m` : '';
+  // 화면에 글씨 자국이 남지 않게 30초마다 자리를 옮긴다
+  if (Math.floor(Date.now() / 1000) % 30 === 0) $('#pkBox').style.top = 18 + Math.random() * 56 + '%';
+}
+// 1초 채우면 풀 준비만 하고, 손을 뗀 뒤 잠깐 있다 걷는다 — 바로 걷으면 손 뗄 때의 누름이 아래 목록·지도에 떨어진다
+let armed = false;
+$('#pocket').addEventListener('pointerdown', e => {
+  e.preventDefault();
+  armed = false;
+  $('#pocket').classList.add('hold');
+  holdT = setTimeout(() => (armed = true), 1000);
+});
+['pointerup', 'pointercancel', 'pointerleave'].forEach(k => $('#pocket').addEventListener(k, () => {
+  clearTimeout(holdT);
+  $('#pocket').classList.remove('hold');
+  if (armed) { armed = false; setTimeout(pocketOff, 400); }
+}));
+$('#pocket').addEventListener('contextmenu', e => e.preventDefault());
 $('#fabLayer').onclick = () => {
   const layer = G.meta.layer === 'map' ? 'sat' : 'map';
   if (isHost()) net.saveMeta(G.code, { layer });
