@@ -170,6 +170,7 @@ function onMeta() {
   if (key !== G.areaKey && center) {
     G.areaKey = key;
     W.loadArea({ center, radius: G.meta.radius || 600, edge: localArea ? 0 : null, layer: G.meta.layer || 'sat' }).then(t => {
+      if (!t) return; // 그 사이 다른 지역을 요청했다
       $('#credit').textContent = [t.credit, t.demOk ? '고도 © Mapzen/AWS Terrain Tiles' : ''].filter(Boolean).join(' · ');
       syncPlayers(); syncMissions();
     });
@@ -439,7 +440,13 @@ function cleanFix(p) {
   fixes.forEach(f => { const k = 1 / (f.acc * f.acc); w += k; lat += f.lat * k; lng += f.lng * k; });
   return { lat: lat / w, lng: lng / w, acc: Math.max(1, Math.round(Math.min(p.acc, 1 / Math.sqrt(w)))) };
 }
+// 게임 지역에서 이만큼 넘게 떨어진 위치는 기기가 잘못 알려 준 것으로 본다 (PC 브라우저의 와이파이 위치가 베이징으로 잡힌 일이 있었다)
+const WILD = 100e3;
 function setMyPos(p) {
+  if (!sim && G.meta.center && dist(p, G.meta.center) > WILD) {
+    gpsText(`기기가 알려 준 위치가 이상해요 (게임 지역에서 ${fmtDist(dist(p, G.meta.center))}) — 폰에서 '정확한 위치'를 켜거나 🧪 지도로 테스트를 써 주세요`);
+    return;
+  }
   myLL = p;
   W.setAccuracy(net.me(), sim ? 0 : p.acc);
   if (!sim) followArea(p);

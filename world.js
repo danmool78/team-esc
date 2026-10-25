@@ -38,9 +38,13 @@ const hooks = { tapPlayer: null, tapMission: null, tapGround: null };
 export const on = (k, f) => (hooks[k] = f);
 
 /* ---------- 지형 ---------- */
+let loadSeq = 0;
 export async function loadArea(area) {
+  // 지역을 연달아 바꾸면 늦게 끝난 옛 지역이 새 지역을 덮어쓰지 않게, 마지막 요청만 받아들인다
+  const seq = ++loadSeq;
   const t = await buildTerrain(area);
   await t.prime(Math.min(area.radius * 1.3, 900));
+  if (seq !== loadSeq) { t.dispose(); return null; }
   if (T) { scene.remove(T.group); T.dispose(); if (T.edge) scene.remove(T.edge); }
   T = t;
   T.radius = area.radius;
