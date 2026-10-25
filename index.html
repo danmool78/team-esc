@@ -90,6 +90,7 @@
     <button class="fab" id="fabMe" title="내 위치">◎</button>
     <button class="fab" id="fabAll" title="전체 보기">⤢</button>
     <button class="fab" id="fabLayer" title="위성/지도">🗺</button>
+    <button class="fab" id="fabPocket" title="주머니 모드 — 화면을 까맣게 하고 위치만 계속 보내요">🌙</button>
   </div>
   <div class="gpsbar" id="gpsBar">
     <button class="btn primary small" id="gpsBtn">📍 위치 공유 켜기</button>
@@ -120,5 +121,14 @@
 <div class="sheet" id="sheet" hidden><div class="sheet-bg" data-close></div><div class="sheet-card" id="sheetCard"></div></div>
 
 <script type="module" src="app.js"></script>
+<!-- 주머니 모드: 화면은 켜 둔 채(위치가 계속 나가게) 까맣게 덮는다. 길게 눌러야 풀린다 -->
+<div class="pocket" id="pocket" hidden>
+  <div class="pk" id="pkBox">
+    <b id="pkState"></b>
+    <small id="pkSub"></small>
+    <div class="pkhold"><i id="pkBar"></i></div>
+    <small>길게 눌러 돌아가기</small>
+  </div>
+</div>
 </body>
 </html>
