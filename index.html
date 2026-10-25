@@ -105,6 +105,7 @@
   <div class="placing" id="placing" hidden>지도를 눌러 미션 위치를 고르세요 <button class="link" id="placeCancel">취소</button></div>
   <div class="credit" id="credit"></div>
   <nav class="dock" id="dock">
+    <button class="handle" id="handle" aria-label="아래 창 접기/펴기"><i></i></button>
     <div class="finder">
       <input id="find" type="search" placeholder="🔍 별칭이나 팀 이름으로 찾기" autocomplete="off" enterkeyhint="search">
       <div class="finds" id="finds" hidden></div>
@@ -114,7 +115,7 @@
       <button data-tab="people">사람</button>
       <button data-tab="feed">소식</button>
       <button data-tab="host" id="hostTab" hidden>진행</button>
-      <button class="grip" id="grip" title="접기/펴기">▾</button>
+      <button class="grip" id="grip" title="아래 창 접기/펴기">접기 ▾</button>
     </div>
     <div class="panel" id="panel"></div>
   </nav>

@@ -258,8 +258,10 @@ const ago = t => {
 };
 
 /* ---------- 아래 판: 미션 · 사람 · 소식 · 진행 ---------- */
-document.querySelectorAll('.tabs button[data-tab]').forEach(b => (b.onclick = () => { tab = b.dataset.tab; if (tab === 'feed') unseen = 0; $('#dock').classList.remove('min'); renderTabs(); renderPanel(); }));
-$('#grip').onclick = () => { $('#dock').classList.toggle('min'); $('#grip').textContent = $('#dock').classList.contains('min') ? '▴' : '▾'; };
+document.querySelectorAll('.tabs button[data-tab]').forEach(b => (b.onclick = () => { tab = b.dataset.tab; if (tab === 'feed') unseen = 0; setDock(false); renderTabs(); renderPanel(); }));
+// 아래 창 접기/펴기 (탭을 누르면 펴진다 — 단추 글자도 같이 바꾼다)
+const setDock = min => { $('#dock').classList.toggle('min', min); $('#grip').textContent = min ? '펴기 ▴' : '접기 ▾'; };
+$('#grip').onclick = $('#handle').onclick = () => setDock(!$('#dock').classList.contains('min'));
 function renderTabs() {
   const waits = isHost() ? pendings().length : 0;
   document.querySelectorAll('.tabs button[data-tab]').forEach(b => {
