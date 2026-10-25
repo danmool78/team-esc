@@ -1,0 +1,29 @@
+# 비전 퀘스트 — 홍보 쇼츠
+
+`vision-quest-shorts.mp4` — 1080×1920, 약 38초, 30fps. 장면은 배경음악 박자(143.6 BPM)에 맞춰 2마디마다 바뀐다.
+
+1. 다 같이 버스 타고 미션 현장 도착
+2. 우리가 모인 곳이 게임판이 된다 (떠 있는 마을 그림 + 앱의 미니미)
+3. 지도 위 빛기둥이 바로 미션 장소
+4. 3D 지도(지도 모드 3D 건물) 보며 우리 팀 함께 출발
+5. 미션 종류 ① 도착
+6. 미션 종류 ② 퀴즈
+7. 미션 종류 ③ 사진
+8. 미션 종류 ④ 현장 (+20)
+9. 미션 종류 ⑤ 술래잡기
+10. 남은 시간 째깍째깍 → 누가 1등?! (결과 화면)
+11. 두둥! 금빛 비전 퀘스트 — COMING SOON · SSSOFT
+
+## 다시 만들기
+```sh
+python3 -m http.server 8765 &        # 저장소 맨 위에서
+mkdir -p promo/audio && curl -o promo/audio/bgm.mp3 "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Pixel%20Peeker%20Polka%20-%20faster.mp3"
+sh promo/capture-all.sh               # 앱 데모 화면 촬영 → promo/cap (미니미 그림도)
+python3 promo/audio.py                # 음악 + 두둥 → promo/audio/final.wav
+node promo/render.js                  # shorts.html을 30fps로 찍어 mp4로 (node promo/render.js 3 15 처럼 주면 그 초의 정지 화면만)
+```
+
+## 음악
+"Pixel Peeker Polka - faster" Kevin MacLeod (incompetech.com)
+Licensed under Creative Commons: By Attribution 4.0 License — http://creativecommons.org/licenses/by/4.0/
+영상 끝에 출처를 넣었고, 올릴 때 설명란에도 위 두 줄을 적는다. "두둥" 북소리는 `audio.py`가 직접 만든 소리.

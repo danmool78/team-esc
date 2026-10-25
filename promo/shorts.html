@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>비전 퀘스트 — 쇼츠</title>
+<!-- 홍보 쇼츠(1080×1920) 한 장면씩 그리는 페이지. render(t)가 t초의 화면을 만든다 — promo/render.js가 30fps로 찍어 영상으로 엮는다 -->
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Jua&family=Noto+Sans+KR:wght@500;700;900&family=Montserrat:wght@600&display=block" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;width:1080px;height:1920px;overflow:hidden;background:#15110d;font-family:'Noto Sans KR',sans-serif}
+  #stage{position:relative;width:1080px;height:1920px;overflow:hidden}
+  .layer{position:absolute;inset:0}
+  .bg{background:linear-gradient(160deg,var(--a),var(--b))}
+  .stripes{opacity:.13;background:repeating-linear-gradient(-30deg,#fff 0 40px,transparent 40px 110px)}
+  .cap{position:absolute;left:0;right:0;text-align:center;font-family:'Black Han Sans',sans-serif;color:#fff;line-height:1.08;
+       paint-order:stroke fill;-webkit-text-stroke:16px #2b1a0e;text-shadow:0 12px 0 rgba(43,26,14,.55);letter-spacing:-1px}
+  .cap em{font-style:normal;color:var(--hl,#ffd34e)}
+  .sub{position:absolute;left:0;right:0;text-align:center;font-family:'Jua',sans-serif;font-size:52px;color:#2b1a0e;}
+  .sub span{background:#fff;border-radius:999px;padding:10px 34px;box-shadow:0 8px 0 rgba(43,26,14,.35)}
+  .phone{position:absolute;width:600px;height:1200px;border-radius:78px;background:#1b1714;padding:20px;box-shadow:0 40px 80px rgba(0,0,0,.45),inset 0 0 0 4px #3b332c}
+  .phone .scr{width:100%;height:100%;border-radius:60px;overflow:hidden;background:#000;position:relative}
+  .phone img{width:100%;height:100%;object-fit:cover;display:block}
+  .phone .notch{position:absolute;top:34px;left:50%;width:150px;height:36px;margin-left:-75px;border-radius:20px;background:#1b1714;z-index:2}
+  .sticker{position:absolute;width:150px;height:150px;filter:drop-shadow(0 10px 0 rgba(43,26,14,.35))}
+  .sticker svg{width:100%;height:100%}
+  .mini{position:absolute;width:230px}
+  .mini img{width:100%;display:block}
+  .mini .ring{position:absolute;left:30px;right:30px;bottom:-10px;height:46px;border-radius:50%;border:12px solid var(--c)}
+  .mini .tag{position:absolute;top:24px;left:50%;transform:translateX(-50%);background:var(--c);color:#fff;font:700 30px 'Noto Sans KR';padding:4px 18px;border-radius:999px;white-space:nowrap}
+  .mini .ph{position:absolute;right:22px;top:132px;width:46px;height:80px;border-radius:10px;background:linear-gradient(160deg,#7fe3a8,#4cc3f0 60%,#ffd34e);border:5px solid #222;transform:rotate(14deg);box-shadow:0 0 0 4px rgba(255,255,255,.4)}
+  .teamcard{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px;background:linear-gradient(180deg,#201912,#120e0a)}
+  .teamcard b{font-family:'Black Han Sans';font-size:96px;color:var(--c)}
+  .teamcard .pill{font:700 34px 'Noto Sans KR';color:#fff;background:var(--c);padding:14px 40px;border-radius:999px}
+  .teamcard img{width:260px}
+  .confetti i{position:absolute;width:26px;height:40px;border-radius:6px}
+  .burst{position:absolute;font-family:'Black Han Sans';font-size:200px;color:#ffd34e;paint-order:stroke fill;-webkit-text-stroke:18px #2b1a0e}
+  #end{background:linear-gradient(rgba(10,7,4,.25),rgba(10,7,4,.15) 35%,rgba(10,7,4,.8) 62%,#0a0704),url(../assets/splash-bg.webp) 50% 0/auto 1150px no-repeat,#0a0704}
+  .titleimg{position:absolute;left:50%;top:1010px;width:900px;margin-left:-450px;filter:drop-shadow(0 10px 24px rgba(0,0,0,.7)) drop-shadow(0 0 30px rgba(255,190,80,.3))}
+  .maker{position:absolute;left:0;right:0;bottom:100px;text-align:center;font:600 34px Montserrat,'Noto Sans KR',sans-serif;letter-spacing:.3em;color:#e9edf5}
+  .ring{position:absolute;left:50%;top:42%;border-radius:50%;border:6px solid rgba(255,211,78,.6)}
+  .star{position:absolute;border-radius:50%;background:#fff6c8}
+  .logo{position:absolute;left:50%;top:560px;width:380px;height:380px;margin-left:-190px;border-radius:84px;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+  .title{position:absolute;left:0;right:0;top:1000px;text-align:center;font-family:'Black Han Sans';font-size:200px;color:#ffd34e;
+         paint-order:stroke fill;-webkit-text-stroke:20px #2b1a0e;text-shadow:0 18px 0 #b5431f}
+  .soon{position:absolute;left:0;right:0;top:1290px;text-align:center;font-family:'Black Han Sans';font-size:110px;color:#fff;letter-spacing:8px;
+        paint-order:stroke fill;-webkit-text-stroke:12px #2b1a0e}
+  .where{position:absolute;left:0;right:0;top:1440px;text-align:center;font-family:'Jua';font-size:50px;color:#f0d79a}
+  .credit{position:absolute;left:0;right:0;bottom:46px;text-align:center;font-size:24px;color:rgba(255,255,255,.55)}
+  .tchip{position:absolute;left:50%;top:140px;transform:translateX(-50%);font:900 40px 'Noto Sans KR';color:#fff;background:#2b1a0e;border-radius:999px;padding:8px 34px;white-space:nowrap}
+  .thead{position:absolute;left:0;right:0;top:215px;display:flex;align-items:center;justify-content:center;gap:22px}
+  .thead .ico{width:170px;height:170px;filter:drop-shadow(0 10px 0 rgba(43,26,14,.35))}
+  .thead b{font-family:'Black Han Sans';font-size:140px;font-weight:400;color:#fff;paint-order:stroke fill;-webkit-text-stroke:16px #2b1a0e;text-shadow:0 12px 0 rgba(43,26,14,.55)}
+  .bus{position:absolute;width:940px;height:420px}
+  .bus .body{position:absolute;left:0;top:40px;width:940px;height:300px;border-radius:60px 90px 30px 30px;background:#ffc93c;border:10px solid #3b2a1a}
+  .bus .stripe{position:absolute;left:0;right:0;top:190px;height:30px;background:#ff6b6b}
+  .bus .win{position:absolute;top:30px;width:120px;height:130px;border-radius:22px;background:#bfe9ff;border:8px solid #3b2a1a;overflow:hidden}
+  .bus .win img{position:absolute;left:-14px;top:-6px;width:150px}
+  .bus .wheel{position:absolute;top:300px;width:120px;height:120px;border-radius:50%;background:#3b2a1a;border:22px solid #5a4a40}
+  .bus .sign{position:absolute;right:40px;top:-38px;font:900 44px 'Noto Sans KR';color:#fff;background:#3d7be0;border:6px solid #3b2a1a;border-radius:20px;padding:4px 24px}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script type="module">
+import { ic } from '../icons.js';
+
+// 음악 박자 (Pixel Peeker Polka - faster ≈ 143.6 BPM): 장면은 2마디(8박)마다 바뀐다
+const BEAT = 60 / 143.55, SCENE = BEAT * 8, END = SCENE * 10; // 10장면 뒤 마무리 (두둥!)
+const TOTAL = END + 4.3;
+const ease = { out: x => 1 - Math.pow(1 - x, 3), back: x => { const c = 1.9; x = Math.min(1, Math.max(0, x)); return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); }, inout: x => (x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2) };
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const pop = (t, t0, d = 0.28) => ease.back(clamp((t - t0) / d)); // 0 → 1 (튀어나오듯)
+const pulse = t => Math.pow(1 - ((t / BEAT) % 1), 4); // 박자마다 1 → 0
+
+// 촬영한 앱 화면들
+const CAP = window.CAP || {};
+const img = new Map();
+const frame = (name, k) => { const n = CAP[name] || 1; const i = Math.min(n - 1, Math.max(0, Math.floor(k * n))); return `cap/${name}-${String(i).padStart(3, '0')}.jpg`; };
+const AV = window.AVATARS || [];
+
+const stage = document.getElementById('stage');
+const el = (html) => { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstChild; };
+
+// 전주 그림 배경: 하늘, 산, 한옥 지붕들, 경기전 홍살문, 은행나무 (직접 그린 그림)
+const jeonju = (shift = 0) => `<svg class="layer" viewBox="0 0 1080 1920" preserveAspectRatio="xMidYMid slice">
+  <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6fd0ff"/><stop offset=".6" stop-color="#bff0ff"/><stop offset="1" stop-color="#fff3d6"/></linearGradient></defs>
+  <rect width="1080" height="1920" fill="url(#sky)"/>
+  <g fill="#fff" opacity=".9" transform="translate(${-shift * 0.3} 0)"><ellipse cx="200" cy="260" rx="120" ry="44"/><ellipse cx="290" cy="240" rx="90" ry="50"/><ellipse cx="820" cy="380" rx="140" ry="46"/><ellipse cx="900" cy="350" rx="80" ry="44"/></g>
+  <path d="M0 1050 Q200 860 420 980 T860 930 T1080 1000 V1920 H0z" fill="#8fcf7a"/>
+  <path d="M0 1120 Q260 980 520 1080 T1080 1060 V1920 H0z" fill="#6db35e"/>
+  <g transform="translate(${-shift * 0.6} 0)">
+    ${[0, 1, 2, 3, 4].map(i => { const x = -80 + i * 300, y = 1130 + (i % 2) * 40; return `
+      <rect x="${x + 40}" y="${y + 40}" width="220" height="120" fill="#f3e6c8" stroke="#5a3d2b" stroke-width="6"/>
+      <rect x="${x + 120}" y="${y + 80}" width="60" height="80" fill="#8a5a36"/>
+      <path d="M${x - 20} ${y + 44} Q${x + 30} ${y + 30} ${x + 50} ${y - 10} L${x + 250} ${y - 10} Q${x + 270} ${y + 30} ${x + 320} ${y + 44} Q${x + 150} ${y + 20} ${x - 20} ${y + 44}z" fill="#3d3f4a" stroke="#22232a" stroke-width="6"/>
+      <path d="M${x + 50} ${y - 10} Q${x + 150} ${y - 50} ${x + 250} ${y - 10}z" fill="#4c4f5c"/>`; }).join('')}
+  </g>
+  <!-- 경기전 홍살문 -->
+  <g transform="translate(${640 - shift * 0.9} 1180)">
+    <rect x="0" y="0" width="22" height="300" fill="#d8402f" stroke="#5a1d14" stroke-width="5"/><rect x="258" y="0" width="22" height="300" fill="#d8402f" stroke="#5a1d14" stroke-width="5"/>
+    <rect x="-20" y="10" width="320" height="22" fill="#d8402f" stroke="#5a1d14" stroke-width="5"/>
+    ${Array.from({ length: 12 }, (_, i) => `<path d="M${20 + i * 21} 32 V-40" stroke="#d8402f" stroke-width="8"/>`).join('')}
+    <path d="M60 -40 h160 l-20 -30 h-120z" fill="#d8402f" stroke="#5a1d14" stroke-width="5"/>
+  </g>
+  <!-- 은행나무 -->
+  <g transform="translate(${100 - shift * 1.1} 1330)"><rect x="40" y="80" width="30" height="140" fill="#7a4a2a"/><circle cx="55" cy="40" r="110" fill="#ffd34e" stroke="#c99a14" stroke-width="8"/></g>
+  <g transform="translate(${930 - shift * 1.1} 1380)"><rect x="40" y="80" width="30" height="120" fill="#7a4a2a"/><circle cx="55" cy="50" r="90" fill="#ffc531" stroke="#c99a14" stroke-width="8"/></g>
+  <rect y="1560" width="1080" height="360" fill="#e9d2a6"/><path d="M0 1560h1080" stroke="#c9a874" stroke-width="10"/>
+</svg>`;
+
+const sticker = (name, x, y, s, rot) => `<div class="sticker" style="left:${x}px;top:${y}px;transform:scale(${s}) rotate(${rot}deg)">${ic(name)}</div>`;
+const phone = (src, x, y, s = 1, rot = 0, extra = '') => `<div class="phone" style="left:${x}px;top:${y}px;transform:scale(${s}) rotate(${rot}deg);transform-origin:50% 50%"><div class="scr"><div class="notch"></div>${src ? `<img src="${src}">` : ''}${extra}</div></div>`;
+const cap = (html, top, t, t0, size = 120, hl) => { const k = pop(t, t0); return k <= 0 ? '' : `<div class="cap" style="top:${top}px;font-size:${size}px;transform:scale(${(0.3 + 0.7 * k) * (1 + 0.025 * pulse(t))});opacity:${clamp(k * 3)};${hl ? `--hl:${hl}` : ''}">${html}</div>`; };
+const sub = (text, top, t, t0) => { const k = pop(t, t0, 0.35); return k <= 0 ? '' : `<div class="sub" style="top:${top}px;opacity:${clamp(k * 2)};transform:translateY(${(1 - k) * 60}px)"><span>${text}</span></div>`; };
+const confetti = (t, t0, n = 40) => {
+  if (t < t0) return '';
+  const cs = ['#ff6b9a', '#ffd34e', '#4cc3f0', '#5fd38a', '#9b6bff', '#ffa24c'];
+  return `<div class="layer confetti">${Array.from({ length: n }, (_, i) => { const x = (i * 131) % 1080, sp = 700 + (i % 7) * 120, y = -80 + (t - t0) * sp - (i % 5) * 140; return y > 1980 ? '' : `<i style="left:${x}px;top:${y}px;background:${cs[i % 6]};transform:rotate(${(t - t0) * 400 + i * 40}deg)"></i>`; }).join('')}</div>`;
+};
+const mini = (i, x, y, color, name, t, hop = 0) => { const a = AV[i % AV.length]; const bob = Math.abs(Math.sin((t / BEAT + hop) * Math.PI)) * 26; return a ? `<div class="mini" style="left:${x}px;top:${y - bob}px;--c:${color}"><div class="tag">${name}</div><img src="${a}"><div class="ph"></div><div class="ring"></div></div>` : ''; };
+const T = { b: '#3d7be0', r: '#e0503d', g: '#3dae6a' };
+
+// 장면들: (t: 영상 시각, u: 장면 안 시각 0..SCENE)
+// 미션 종류 장면 머리: "미션 종류 ①" + 큰 아이콘 + 이름 + 하는 법
+const typeHead = (t, t0, no, icon, name, how) => { const k = pop(t, t0, .35);
+  return `<div class="tchip" style="opacity:${clamp(k * 2)}">미션 종류 ${'①②③④⑤'[no - 1]}</div>
+    <div class="thead" style="transform:scale(${(.3 + .7 * k) * (1 + .03 * pulse(t))});opacity:${clamp(k * 3)}">${ic(icon)}<b>${name}</b></div>
+    ${sub(how, 450, t, t0 + BEAT * 2)}`; };
+const typeBg = (u, a, b) => `<div class="layer bg" style="--a:${a};--b:${b}"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>`;
+// 단체 버스 (직접 그린 그림): 창마다 팀 색 옷 입은 미니미
+const bus = (x, y, bob) => `<div class="bus" style="left:${x}px;top:${y + bob}px"><div class="sign">비전 퀘스트 단체</div><div class="body"><div class="stripe"></div>
+  ${[0, 1, 2, 3, 4, 5].map(i => `<div class="win" style="left:${40 + i * 140}px"><img src="${AV[i % AV.length] || ''}"></div>`).join('')}</div>
+  <div class="wheel" style="left:120px;transform:rotate(${x * 2}deg)"></div><div class="wheel" style="left:700px;transform:rotate(${x * 2}deg)"></div></div>`;
+
+const scenes = [
+  // 1. 다 같이 버스 타고 전주 도착
+  (t, u) => { const k = ease.out(clamp(u / (BEAT * 5))), x = -1000 + 1070 * k;
+    return `${jeonju(u * 30)}${bus(x, 1240, k < 1 ? Math.abs(Math.sin(u * 14)) * -10 : 0)}
+    ${cap('다 같이 버스 타고', 330, t, 0.05, 116)}${cap('<em>미션 현장 도착!</em>', 480, t, BEAT * 5, 140, '#ffd34e')}
+    ${sub('단체로 떠나는 팀별 미션 여행', 700, t, BEAT * 6)}`; },
+  // 2. 한옥마을이 게임판으로, 게임 시작
+  (t, u) => `<div class="layer" style="background:url(../assets/splash-bg.webp) center/cover;transform:scale(${1.18 + u * .03})"></div>
+    <div class="layer" style="background:linear-gradient(rgba(10,7,4,.55),rgba(10,7,4,0) 38%,rgba(10,7,4,0) 62%,rgba(10,7,4,.7))"></div>
+    ${mini(0, 40, 1420, T.b, '청팀', t, 0)}${mini(1, 290, 1500, T.r, '홍팀', t, .3)}${mini(2, 560, 1440, T.g, '녹팀', t, .6)}${mini(3, 810, 1520, T.b, '청팀', t, .9)}
+    ${cap('우리가 모인 곳이', 330, t, SCENE + .02, 118)}${cap('<em>게임판</em>이 된다!', 490, t, SCENE + BEAT * 3, 150, '#ffd34e')}
+    ${pop(u, BEAT * 5.5) > 0 ? sticker('play', 465, 720, pop(u, BEAT * 5.5) * 1.1, 0) : ''}`,
+  // 3. 지도 위 빛기둥 = 미션 장소
+  (t, u) => `${typeBg(u, '#9b6bff', '#4cc3f0')}
+    ${[160, 540, 900].map((x, i) => `<div style="position:absolute;left:${x}px;top:0;width:70px;height:1920px;margin-left:-35px;opacity:${.35 + .25 * pulse(t + i * BEAT / 3)};background:linear-gradient(180deg,rgba(255,236,170,0),rgba(255,226,140,.9) 70%,#fff6dc)"></div>`).join('')}
+    ${phone(frame('beacons', u / SCENE), 240, 600 + (1 - pop(u, 0, .45)) * 900, 1, -2)}
+    ${sticker('pin', 80, 1300, 1.3 + .2 * pulse(t), -10)}
+    ${cap('지도 위 <em>빛기둥</em>이', 220, t, SCENE * 2 + .02, 118, '#ffd34e')}${cap('바로 미션 장소!', 370, t, SCENE * 2 + BEAT * 3, 124)}`,
+  // 4. 지도 보며 팀이 함께 출발
+  (t, u) => `${typeBg(u, '#5fd38a', '#4cc3f0')}
+    ${phone(frame('mapthree', u / SCENE), 240, 600, 1, 3)}
+    ${sticker('locate', 80, 760, 1 + 0.15 * pulse(t), -10)}${sticker('map', 860, 1220, 1 + 0.15 * pulse(t + BEAT / 2), 12)}
+    ${cap('<em>3D 지도</em> 보며', 220, t, SCENE * 3 + .02, 112, '#ffd34e')}${cap('우리 팀 <em>함께 출발!</em>', 360, t, SCENE * 3 + BEAT * 3, 120, '#ffd34e')}`,
+  // 5. 미션 종류 ① 도착
+  (t, u) => `${typeBg(u, '#ff8fb3', '#ff6b6b')}
+    ${phone(u < BEAT * 2.5 ? frame('msheet', 0) : frame('mdone', (u - BEAT * 2.5) / (SCENE - BEAT * 2.5)), 250, 640, .95, 2)}
+    ${typeHead(t, SCENE * 4 + .02, 1, 'pin', '도착 미션', '빛기둥 안에 들어가면 자동 완료!')}`,
+  // 6. 미션 종류 ② 퀴즈
+  (t, u) => `${typeBg(u, '#ffd34e', '#ffa24c')}
+    ${phone(u < BEAT * 2 ? frame('quiz', 0) : u < BEAT * 4.5 ? frame('quiztype' + Math.min(2, Math.floor((u - BEAT * 2) / (BEAT * .8))), 0) : frame('quizok', (u - BEAT * 4.5) / (BEAT * 3.5)), 250, 640, .95, -2)}
+    ${typeHead(t, SCENE * 5 + .02, 2, 'quiz', '퀴즈 미션', '그 자리에서 문제를 맞혀요')}`,
+  // 7. 미션 종류 ③ 사진
+  (t, u) => `${typeBg(u, '#5ec8f2', '#3d7be0')}
+    ${phone(u < BEAT * 3.5 ? frame('photo', 0) : frame('photook', (u - BEAT * 3.5) / (BEAT * 4.5)), 250, 640, .95, 2)}
+    ${u > BEAT * 3.2 && u < BEAT * 4 ? `<div class="layer" style="background:#fff;opacity:${1 - (u - BEAT * 3.2) / (BEAT * .8)}"></div>` : ''}
+    ${typeHead(t, SCENE * 6 + .02, 3, 'camera', '사진 미션', '찰칵! 올리면 진행자가 확인')}`,
+  // 8. 미션 종류 ④ 현장
+  (t, u) => `${typeBg(u, '#3fd6a8', '#5fd38a')}
+    ${phone(u < BEAT * 2.5 ? frame('task', 0) : u < BEAT * 4.5 ? frame('judge', 0) : frame('approved', (u - BEAT * 4.5) / (BEAT * 3.5)), 250, 640, .95, -2)}
+    <div class="burst" style="left:640px;top:${1300 - pop(u, BEAT * 4.5, .4) * 120}px;transform:scale(${pop(u, BEAT * 4.5, .4)}) rotate(-8deg)">+20</div>
+    ${confetti(t, SCENE * 7 + BEAT * 4.5)}
+    ${typeHead(t, SCENE * 7 + .02, 4, 'flag', '현장 미션', '팀이 함께 해내면 진행자가 인정!')}`,
+  // 9. 미션 종류 ⑤ 술래잡기
+  (t, u) => `${typeBg(u, '#ff6b6b', '#9b6bff')}
+    ${phone(frame('tag', u / SCENE), 250, 640, .95, 2)}
+    ${sticker('tag', 70, 1250, 1.2 + .2 * pulse(t), -12)}
+    ${typeHead(t, SCENE * 8 + .02, 5, 'tag', '술래잡기', '팀마다 술래! 먼저 잡으면 승리')}`,
+  // 10. 남은 시간 째깍 → 누가 1등
+  (t, u) => { const tick = u < BEAT * 3;
+    return `${typeBg(u, '#ffd34e', '#ffa24c')}
+    ${phone(tick ? frame('timer', 0) : frame('result', (u - BEAT * 3) / (SCENE - BEAT * 3)), 240, 600, 1, 2)}
+    ${tick ? sticker('clock', 70, 760, 1.4 + .25 * pulse(t), -10) + cap('남은 시간 <em>째깍째깍</em>', 280, t, SCENE * 9 + .02, 112, '#ff6b6b')
+           : sticker('trophy', 70, 760, 1.4 + .2 * pulse(t), -10) + sticker('medal1', 860, 1250, 1.2 + .2 * pulse(t + BEAT / 2), 10) + confetti(t, SCENE * 9 + BEAT * 3, 30) + cap('누가 <em>1등</em>?!', 280, t, SCENE * 9 + BEAT * 3, 150, '#ff6b6b')}`; },
+];
+// 마무리: 두둥! (END, END+0.55) → 로고·제목 → COMING SOON
+const ending = t => {
+  const u = t - END, k1 = pop(u, 0, .35), k2 = pop(u, .55, .35), k3 = pop(u, 1.5, .5);
+  const shake = u > .55 && u < .9 ? Math.sin(u * 90) * 14 * (0.9 - u) / .35 : 0;
+  return `<div class="layer" id="end" style="transform:translate(${shake}px,${shake * .6}px)">${[0, 1, 2].map(k => { const ph = ((u * .6 + k / 3) % 1), r = 120 + ph * 900; return `<div class="ring" style="width:${r * 2}px;height:${r * 2}px;margin:${-r}px 0 0 ${-r}px;opacity:${(1 - ph) * .8 * k1}"></div>`; }).join('')}
+    ${Array.from({ length: 22 }, (_, k) => `<div class="star" style="left:${(k * 137) % 1040 + 20}px;top:${(k * 251) % 1820 + 40}px;width:${4 + k % 3 * 2}px;height:${4 + k % 3 * 2}px;opacity:${(.35 + .65 * Math.abs(Math.sin(u * 3 + k))) * k1}"></div>`).join('')}
+    ${k2 > 0 ? `<img class="titleimg" src="../assets/title.webp" style="transform:scale(${2.2 - 1.2 * k2});opacity:${clamp(k2 * 2)}">` : ''}
+    ${k3 > 0 ? `<div class="soon" style="opacity:${k3};transform:translateY(${(1 - k3) * 40}px)">COMING SOON</div><div class="where" style="opacity:${k3}">어디서든 모여서, 걷고 이동하며 하는 팀 미션 게임</div><div class="maker" style="opacity:${k3}">SSSOFT</div>` : ''}
+    ${[['두', 0, 130, -12], ['둥!', .55, 560, 10]].map(([w, at, x, r]) => { const k = pop(u, at, .2), fade = clamp(1.6 - u); return k > 0 && fade > 0 ? `<div class="burst" style="left:${x}px;top:230px;font-size:230px;color:#fff;transform:scale(${k}) rotate(${r}deg);opacity:${fade}">${w}</div>` : ''; }).join('')}
+    <div class="credit">Music: "Pixel Peeker Polka - faster" Kevin MacLeod (incompetech.com) · CC BY 4.0</div></div>`;
+};
+
+window.render = t => {
+  const i = Math.floor(t / SCENE);
+  stage.innerHTML = t >= END ? ending(t) : scenes[i](t, t - i * SCENE);
+  // 장면이 바뀌는 순간 흰 번쩍임
+  const f = t < END ? t % SCENE : t - END; // 장면이 바뀔 때만 (마무리 동안은 다시 번쩍이지 않게)
+  if (f < 0.12 && t > 0.05) stage.insertAdjacentHTML('beforeend', `<div class="layer" style="background:#fff;opacity:${1 - f / 0.12}"></div>`);
+  return Promise.all([...stage.querySelectorAll('img')].map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
+};
+window.TOTAL = TOTAL; window.END = END;
+window.ready = document.fonts.ready;
+</script>
+</body>
+</html>
