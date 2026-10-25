@@ -160,8 +160,9 @@ export async function buildTerrain({ center, layer = 'sat' }) {
     return lift(elevAt(ll.lat, ll.lng));
   };
   // 처음 화면: 원점 둘레 r까지 다 받을 때까지 기다린다
-  async function prime(r) {
-    want(0, 0, r);
+  // x, z: 먼저 받을 곳 (기본은 원점). 위성/지도만 바꿀 땐 지금 보던 곳부터
+  async function prime(r, x = 0, z = 0) {
+    want(x, z, r);
     while (busy || queue.length) await new Promise(res => setTimeout(res, 60));
   }
   const dispose = () => chunks.forEach((c, k) => drop(k, c));

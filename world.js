@@ -45,21 +45,26 @@ let loadSeq = 0;
 export async function loadArea(area) {
   // 지역을 연달아 바꾸면 늦게 끝난 옛 지역이 새 지역을 덮어쓰지 않게, 마지막 요청만 받아들인다
   const seq = ++loadSeq;
+  // 같은 지역에서 위성/지도만 바꾸는 거면 보던 자리·방향·거리를 그대로 둔다 (예전엔 늘 지역 가운데로 돌아가 엉뚱한 곳이 나왔다)
+  const same = !!T?.center && T.center.lat === area.center.lat && T.center.lng === area.center.lng;
   const t = await buildTerrain(area);
-  await t.prime(300); // 가운데만 받으면 바로 띄우고, 나머지는 가까운 순서로 채워 넣는다
+  await (same ? t.prime(300, cam.tx, cam.tz) : t.prime(300)); // 보는 곳만 받으면 바로 띄우고, 나머지는 가까운 순서로 채워 넣는다
   if (seq !== loadSeq) { t.dispose(); return null; }
   if (T) { scene.remove(T.group); T.dispose(); if (T.edge) { scene.remove(T.edge); T.edge.geometry.dispose(); } }
   T = t;
+  T.center = area.center;
   T.radius = area.radius;
   lightMap = area.layer === 'map';
   missions.forEach(paintMission);
   T.edgeR = area.radius;
   T.edgeVer = -1;
   scene.add(T.group);
-  Object.assign(goal, { tx: 0, tz: 0, dist: area.radius * 1.5 });
-  Object.assign(cam, { tx: 0, tz: 0, dist: area.radius * 1.5 });
-  // 이미 들어와 있던 사람·미션을 새 지형 좌표로 다시 놓는다
-  players.forEach(p => p.ll && placePlayer(p, p.ll, true));
+  if (!same) {
+    Object.assign(goal, { tx: 0, tz: 0, dist: area.radius * 1.5 });
+    Object.assign(cam, { tx: 0, tz: 0, dist: area.radius * 1.5 });
+    // 이미 들어와 있던 사람·미션을 새 지형 좌표로 다시 놓는다 (같은 지역이면 좌표가 그대로라 둔다)
+    players.forEach(p => p.ll && placePlayer(p, p.ll, true));
+  }
   missions.forEach(m => placeMission(m));
   return T;
 }
