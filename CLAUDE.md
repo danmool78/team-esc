@@ -26,7 +26,7 @@
 - 확인용 주소: `?demo`(가짜 참가자), `?fakegps=위도,경도`(GPS 대신 그 좌표)
 - `icons.js` — 이모티콘 대신 쓰는 알록달록한 SVG 아이콘(`ic(이름)`). 화면에 이모티콘을 새로 넣지 말고 여기에 아이콘을 더한다. 3D 이름표는 `iconImage`
 - `geo.js` — 위경도 ↔ 지역 미터 좌표(동 +x, 남 +z), 거리
-- `stage/kit.js`, `stage/people.js` — 그 길에서 **그대로 가져온** 미니미 인형. 고치지 말고, 그 길에서 바뀌면 다시 복사한다. 인형은 `Actor`의 pos/goal을 0에 두고 바깥 묶음(group)을 옮기며, 걷는 동안 `set('walk')`
+- `stage/kit.js`, `stage/people.js` — 그 길에서 **그대로 가져온** 미니미 인형. 고치지 말고, 그 길에서 바뀌면 다시 복사한다. 옷 색은 `world.js` outfit()이 같은 모양에 색만 바꾼 옷(겉옷 팀 색, 망토 사람마다 밝은 색, 띠 금색)을 TYPES에 따로 등록해 입힌다. 인형은 `Actor`의 pos/goal을 0에 두고 바깥 묶음(group)을 옮기며, 걷는 동안 `set('walk')`
 - `assets/vendor/three.module.min.js` — three.js 0.160.0 (그 길과 같은 판)
 - `database.rules.json` — 보안 규칙. 진행자(meta/host = 게임을 만든 사람, meta/hosts = 그가 회원 중에서 더한 진행자)만 미션·팀·판정. 진행자 더하기·빼기와 host 바꾸기는 만든 사람만, 참가자는 자기 좌표·자기 팀의 완료·자기 개인 완료만(`!data.exists()`), 사진 확인이 필요한 미션은 'wait'로만
 
