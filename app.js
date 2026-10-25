@@ -540,7 +540,11 @@ function setMode(mode) {
   gpsText('위치를 찾는 중…');
   gpsAt = Date.now();
   watchId = navigator.geolocation.watchPosition(
-    p => { const f = cleanFix({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, v: p.coords.speed }); if (f) setMyPos(f); },
+    p => {
+      // 움직이는 중이면 GPS가 알려 주는 이동 방향을 진행 방향으로 (폰을 어느 쪽으로 들었든)
+      if (p.coords.speed > 0.8 && Number.isFinite(p.coords.heading)) W.setCourse(p.coords.heading);
+      const f = cleanFix({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, v: p.coords.speed }); if (f) setMyPos(f);
+    },
     e => {
       // 권한 거절만 다시 켜는 단추를 보인다. 시간 초과는 위치 찾기가 계속 돌고 있으니 기다리면 된다.
       // 카카오톡·네이버 같은 앱 안 브라우저는 폰에서 허용해도 위치를 막기도 한다

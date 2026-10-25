@@ -532,8 +532,11 @@ export const following = () => cam.follow;
 export const headingUp = () => cam.headUp;
 // 폰 나침반 방위(도, 북에서 시계 방향). null이면 걸어간 방향으로 돌아간다
 export function setCompass(deg) { compass = deg == null || !isFinite(deg) ? null : deg * Math.PI / 180; }
-// 진행 방향(북에서 시계 방향, 라디안): 내 것은 나침반 우선, 아니면 마지막으로 걸어간 방향
-const headingOf = p => (p.me && compass != null ? compass : p.hd);
+// 진행 방향 (북에서 시계 방향, 라디안). 내 것은 ① 움직이는 중이면 GPS 이동 방향(6초 안에 받은 것) ② 멈췄으면 폰 나침반
+// ③ 둘 다 없으면 마지막으로 걸어간 방향. 다른 사람은 걸어간 방향
+let course = null, courseAt = 0;
+export function setCourse(deg) { course = deg * Math.PI / 180; courseAt = performance.now(); }
+const headingOf = p => (!p.me ? p.hd : course != null && performance.now() - courseAt < 6000 ? course : compass != null ? compass : p.hd);
 // 각도를 기준 각도 가까이로 옮긴다 (359°→1°로 돌 때 한 바퀴 거꾸로 돌지 않게)
 const near = (a, ref) => ref + Math.atan2(Math.sin(a - ref), Math.cos(a - ref));
 export function flyTo(ll, dist) {
