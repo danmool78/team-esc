@@ -712,8 +712,8 @@ function hostPanel() {
   return `<div class="code">${G.code}</div><p class="fine" style="text-align:center">참가자에게 이 코드를 알려 주세요 · <button class="link" id="hCopy" data-link="${esc(link)}">초대 링크 복사</button></p>
     <div class="hostgrid">
       ${st !== 'live' ? `<button class="btn primary small" id="hStart">${ic('play')} ${st === 'ended' ? '다시 시작' : '게임 시작'}</button>` : `<button class="btn small" id="hEnd">${ic('stop')} 게임 끝내기</button>`}
-      <button class="btn small" id="hAdd">＋ 미션 더하기</button>
-      <button class="btn small" id="hTeams">${solo() ? '방식·팀' : '팀 정하기'}</button>
+      <button class="btn small" id="hAdd">${ic('plus')} 미션 더하기</button>
+      <button class="btn small" id="hTeams">${ic('team')} ${solo() ? '방식·팀' : '팀 정하기'}</button>
       <button class="btn small" id="hEndAt">${ic('clock')} 끝나는 시간</button>
       <button class="btn small" id="hNotice">${ic('megaphone')} 알림 보내기</button>
       <button class="btn small" id="hArea">${ic('map')} 지역 바꾸기</button>
@@ -880,7 +880,7 @@ function teamEditor() {
   const names = Object.entries(G.teams).map(([tid, t]) => `<div class="row"><input type="color" value="${esc(t.color)}" data-tc="${tid}" style="width:52px;padding:4px"><input value="${esc(t.name)}" data-tn="${tid}"><button class="btn small danger" data-tdel="${tid}" title="팀 빼기">×</button></div>`).join('');
   const body = solo()
     ? `<p class="fine">개인전 — 각자 미션을 해서 개인 점수로 겨뤄요. 점수판에 사람마다 점수가 보이고, 팀은 쓰지 않아요.</p>`
-    : `<div class="stack">${names}<div class="grid2"><button class="btn small" id="tAdd">＋ 팀 더하기</button><button class="btn small primary" id="tSave">이름·색 저장</button></div></div>
+    : `<div class="stack">${names}<div class="grid2"><button class="btn small" id="tAdd">${ic('plus')} 팀 더하기</button><button class="btn small primary" id="tSave">이름·색 저장</button></div></div>
       <div class="group-h">사람마다 팀</div><div class="stack">${rows}</div>
       <label style="margin-top:12px">진행자인 나도 팀에 들어가기<select data-mem="${G.meta.host}"><option value="">들어가지 않음</option>${teamOpts(G.members[G.meta.host]?.team)}</select></label>`;
   openSheet(`<h3>방식·팀</h3><div class="seg"><button data-mode="team" class="${solo() ? '' : 'on'}">팀전</button><button data-mode="solo" class="${solo() ? 'on' : ''}">개인전</button></div>${body}`, el => {

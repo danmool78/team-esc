@@ -45,19 +45,26 @@ let loadSeq = 0;
 export async function loadArea(area) {
   // 지역을 연달아 바꾸면 늦게 끝난 옛 지역이 새 지역을 덮어쓰지 않게, 마지막 요청만 받아들인다
   const seq = ++loadSeq;
+  // 같은 지역에서 위성/지도만 바꾸는 거면 보던 자리·방향·거리를 그대로 둔다 (예전엔 늘 지역 가운데로 돌아가 엉뚱한 곳이 나왔다)
+  const same = !!T?.center && T.center.lat === area.center.lat && T.center.lng === area.center.lng;
   const t = await buildTerrain(area);
-  await t.prime(300); // 가운데만 받으면 바로 띄우고, 나머지는 가까운 순서로 채워 넣는다
+  await (same ? t.prime(300, cam.tx, cam.tz) : t.prime(300)); // 보는 곳만 받으면 바로 띄우고, 나머지는 가까운 순서로 채워 넣는다
   if (seq !== loadSeq) { t.dispose(); return null; }
   if (T) { scene.remove(T.group); T.dispose(); if (T.edge) { scene.remove(T.edge); T.edge.geometry.dispose(); } }
   T = t;
+  T.center = area.center;
   T.radius = area.radius;
+  lightMap = area.layer === 'map';
+  missions.forEach(paintMission);
   T.edgeR = area.radius;
   T.edgeVer = -1;
   scene.add(T.group);
-  Object.assign(goal, { tx: 0, tz: 0, dist: area.radius * 1.5 });
-  Object.assign(cam, { tx: 0, tz: 0, dist: area.radius * 1.5 });
-  // 이미 들어와 있던 사람·미션을 새 지형 좌표로 다시 놓는다
-  players.forEach(p => p.ll && placePlayer(p, p.ll, true));
+  if (!same) {
+    Object.assign(goal, { tx: 0, tz: 0, dist: area.radius * 1.5 });
+    Object.assign(cam, { tx: 0, tz: 0, dist: area.radius * 1.5 });
+    // 이미 들어와 있던 사람·미션을 새 지형 좌표로 다시 놓는다 (같은 지역이면 좌표가 그대로라 둔다)
+    players.forEach(p => p.ll && placePlayer(p, p.ll, true));
+  }
   missions.forEach(m => placeMission(m));
   return T;
 }
@@ -216,7 +223,8 @@ function sampleSpeed(p, t, snap) {
   const dt = (t - p.sp.t) / 1000;
   if (dt < 0.5) return;
   const vx = (p.to.x - p.sp.x) / dt, vz = (p.to.y - p.sp.z) / dt;
-  if (Math.hypot(vx, vz) * dt > 400) { p.sp = { x: p.to.x, z: p.to.y, t }; return; } // 순간 이동
+  // 순간 이동: 400m 넘게 튀거나, 시속 160km(45m/s)보다 빠르면 (테스트 모드로 미션 자리에 옮기기 등) 탄 것으로 치지 않는다
+  if (Math.hypot(vx, vz) * dt > 400 || Math.hypot(vx, vz) > 45) { p.sp = { x: p.to.x, z: p.to.y, t }; return; }
   p.vx = p.vx * 0.5 + vx * 0.5; p.vz = p.vz * 0.5 + vz * 0.5;
   p.spd = Math.hypot(p.vx, p.vz);
   p.sp = { x: p.to.x, z: p.to.y, t };
@@ -273,15 +281,26 @@ export function upsertMission(m) {
     missions.set(m.id, o);
   }
   Object.assign(o, m);
-  const col = new THREE.Color(m.color || '#f0d79a');
-  o.beam.material.color.copy(col); o.ring.material.color.copy(col); o.disc.material.color.copy(col); o.glow.material.color.copy(col);
-  o.beam.material.opacity = m.dim ? 0.25 : 0.75;
+  paintMission(o);
   const key = m.title + m.color + (m.sub || '') + (m.icon?.src || '') + !!m.icon?.complete;
   if (o.tagKey !== key) { o.tagKey = key; relabel(o, 'tag', m.title, m.dim ? '#3a4a3a' : '#5a3d10', m.sub || '', m.icon); if (!o.tag.parent) o.g.add(o.tag); }
   // 아이콘 그림이 아직 안 떴으면 뜨는 대로 이름표를 다시 그린다
   if (m.icon && !m.icon.complete) m.icon.addEventListener('load', () => missions.has(o.id) && upsertMission(o), { once: true });
   placeMission(o);
   return o;
+}
+// 빛기둥 색: 위성사진(어두운 바탕) 위에선 빛을 더해 그려 빛나 보이게, 밝은 지도(OSM) 위에선 그렇게 그리면 흰 바탕에 묻혀
+// 안 보이므로 보통으로 그리고 색을 진하게 한다
+let lightMap = false;
+function paintMission(o) {
+  const col = new THREE.Color(o.color || '#f0d79a');
+  if (lightMap) col.offsetHSL(0, 0.3, -0.25);
+  [o.beam.material, o.glow.material].forEach(mt => {
+    const b = lightMap ? THREE.NormalBlending : THREE.AdditiveBlending;
+    if (mt.blending !== b) { mt.blending = b; mt.needsUpdate = true; }
+  });
+  o.beam.material.color.copy(col); o.ring.material.color.copy(col); o.disc.material.color.copy(col); o.glow.material.color.copy(col);
+  o.beam.material.opacity = o.dim ? (lightMap ? 0.4 : 0.25) : (lightMap ? 0.9 : 0.75);
 }
 function placeMission(o) {
   if (!T) return;
