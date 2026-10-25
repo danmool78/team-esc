@@ -471,11 +471,12 @@ function pocketOff() {
 }
 function pocketTick() {
   const on = watchId != null || sim || FAKE;
-  const ago = lastSent ? Math.round((Date.now() - lastSent.at) / 1000) : null;
+  // 다시 올리기(8초마다)가 아니라 GPS가 실제로 새 값을 준 때로 센다
+  const ago = fixAt ? Math.round((Date.now() - fixAt) / 1000) : null;
   const late = watchId != null && ago != null && ago > 120; // 8초마다 보내니 2분 넘게 조용하면 위치가 안 잡히는 것 (가만히 서 있으면 폰이 새 값을 늦게 주기도 해서 넉넉히)
   $('#pkBox').classList.toggle('warn', !on || late);
   $('#pkState').textContent = !on ? '위치 공유가 꺼져 있어요' : late ? '2분 넘게 새 위치가 없어요' : '위치 보내는 중';
-  $('#pkSub').textContent = on && ago != null ? `${ago < 5 ? '방금' : ago + '초 전'} 보냄 · 오차 ${myLL?.acc ?? '-'}m` : '';
+  $('#pkSub').textContent = on && ago != null ? `${ago < 5 ? '방금' : ago + '초 전'} 위치 받음 · 오차 ${myLL?.acc ?? '-'}m` : '';
   // 화면에 글씨 자국이 남지 않게 30초마다 자리를 옮긴다
   if (Math.floor(Date.now() / 1000) % 30 === 0) $('#pkBox').style.top = 18 + Math.random() * 56 + '%';
 }
@@ -564,33 +565,24 @@ function simHome() {
   if (sim && c && (!myLL || dist(myLL, c) > (G.meta.radius || 600) * 1.5)) setMyPos({ lat: c.lat, lng: c.lng, acc: 3 });
 }
 const INAPP = /KAKAOTALK|NAVER|Instagram|FBAN|FBAV|Line\/|DaumApps/i.test(navigator.userAgent);
-// GPS 다듬기: 폰은 처음이나 실내에서 와이파이·기지국으로 잡은 큰 오차 값을 섞어 준다.
-// 좋은 값(30m 이내)을 받은 지 20초 안에 오차가 그 세 배 넘고 50m 넘는 값이 오면 버리고,
-// 최근 값을 정확도로 가중 평균해(1/오차²) 흔들림을 줄인다. 폰은 1초에 한 번쯤 새 값을 주므로
-// 서 있을 땐 20초(20개 남짓)를 모아 평균해 미션 지점에서 자리를 단단히 잡고, 걸으면 4초만 써서 몇 m 늦는 정도로 따라간다.
-let fixes = [], goodAt = 0, goodAcc = Infinity;
+// GPS 거르기: 평균은 내지 않고 받은 값을 그대로 쓴다 (늦게 따라오지 않게).
+// 다만 폰이 처음이나 실내에서 섞어 주는 와이파이·기지국 값은 버린다 — 좋은 값(30m 이내)을 받은 지 20초 안에
+// 오차가 그 세 배 넘고 50m 넘는 값
+let goodAt = 0, goodAcc = Infinity;
 function cleanFix(p) {
   const now = Date.now();
   if (p.acc <= 30) { goodAt = now; goodAcc = p.acc; }
   else if (now - goodAt < 20000 && p.acc > goodAcc * 3 && p.acc > 50) return null;
-  const avg = list => {
-    let w = 0, lat = 0, lng = 0;
-    list.forEach(f => { const k = 1 / (f.acc * f.acc); w += k; lat += f.lat * k; lng += f.lng * k; });
-    return { lat: lat / w, lng: lng / w, w };
-  };
-  // 걷는지: 폰이 준 속도, 또는 모아 둔 가장 오래된 값에서 지금까지 실제로 간 거리(초속 0.6m 넘게, 오차보다 멀리).
-  // 폰이 속도를 안 주면 천천히 걷는 걸 '서 있음'으로 봐서 20초 평균이 한참 늦게 따라오던 것을 막는다
-  const first = fixes[0], gone = first ? dist(first, p) : 0;
-  const moving = p.v > 0.6 || (first && gone > Math.max(5, p.acc) && gone / Math.max(1, (now - first.t) / 1000) > 0.6) || (fixes.length > 0 && dist(avg(fixes), p) > Math.max(6, p.acc * 2));
-  fixes = fixes.filter(f => now - f.t < (moving ? 4000 : 20000));
-  fixes.push({ ...p, t: now });
-  const m = avg(fixes), best = Math.min(...fixes.map(f => f.acc));
-  // 연달아 잰 값의 오차는 서로 닮아서 개수만큼 줄지는 않는다 — 가장 좋은 값의 절반 아래로는 말하지 않는다
-  return { lat: m.lat, lng: m.lng, acc: Math.max(1, Math.round(Math.min(p.acc, Math.max(best / 2, 1 / Math.sqrt(m.w))))) };
+  return { lat: p.lat, lng: p.lng, acc: Math.max(1, Math.round(p.acc)) };
 }
 // 게임 지역에서 이만큼 넘게 떨어진 위치는 기기가 잘못 알려 준 것으로 본다 (PC 브라우저의 와이파이 위치가 베이징으로 잡힌 일이 있었다)
 const WILD = 100e3;
+function sendPos(p) { lastSent = { ...p, at: Date.now() }; net.writePos(G.code, sim ? { ...p, sim: true } : p); }
+// 가만히 서 있으면 폰이 새 값을 안 줄 수 있다 — 8초 넘게 조용하면 마지막 자리를 다시 올려 다른 사람 화면에서 흐려지지 않게
+setInterval(() => { if (G.code && myLL && watchId != null && lastSent && Date.now() - lastSent.at > 8000) sendPos(myLL); }, 2000);
+let fixAt = 0; // 마지막으로 새 위치를 받은 때
 function setMyPos(p) {
+  fixAt = Date.now();
   if (!sim && G.meta.center && dist(p, G.meta.center) > WILD) {
     gpsText(`기기가 알려 준 위치가 이상해요 (게임 지역에서 ${fmtDist(dist(p, G.meta.center))}) — 폰에서 '정확한 위치'를 켜거나 테스트 모드를 써 주세요`);
     return;
@@ -605,10 +597,8 @@ function setMyPos(p) {
     : p.acc > 300 && Date.now() - gpsAt < 15000 ? `위치를 더 정확히 잡는 중 · 오차 ${fmtDist(p.acc)}`
     : p.acc > 300 ? `위치가 대략적으로만 잡혀요 (오차 ${fmtDist(p.acc)}) — 폰 설정에서 이 사이트의 '정확한 위치'를 켜 주세요`
     : away > 0 ? `게임 지역에서 ${fmtDist(away)} 밖 · 오차 ${p.acc}m` : `위치 공유 중 · 오차 ${p.acc}m${p.acc > 40 ? ' (실내면 커요)' : ''}`);
-  // 3m 넘게 움직였거나 8초가 지났을 때만 올린다 (배터리·데이터 아끼기)
-  const moved = !lastSent || dist(lastSent, p) > 3 || Date.now() - lastSent.at > 8000;
-  // 테스트 모드 표시(sim): 누를 때마다 뛰어가는 자리라 차·버스 계산에서 뺀다
-  if (moved) { lastSent = { ...p, at: Date.now() }; net.writePos(G.code, sim ? { ...p, sim: true } : p); }
+  // 새 위치를 받을 때마다 바로 올린다 (폰은 1초에 한 번쯤 준다). 테스트 모드 표시(sim): 누를 때마다 뛰어가는 자리라 차·버스 계산에서 뺀다
+  sendPos(p);
   if (first) { startCompass(); W.follow(net.me()); W.flyTo(p, 140); setFab(); }
   checkArrive();
   if (tab === 'missions') renderPanel();
