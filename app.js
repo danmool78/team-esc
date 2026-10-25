@@ -155,7 +155,7 @@ async function enter(code) {
       if (tab === 'feed') renderPanel(); else renderTabs();
     },
   });
-  W.follow(net.me());
+  W.follow(net.me(), true);
   // 지난번 방식을 이어 가고, 처음이면 GPS를 바로 켠다 (끄기를 골랐던 사람만 꺼진 채로). 데모는 늘 테스트
   setMode(FAKE ? 'gps' : DEMO ? 'sim' : store.get('posMode') || 'gps');
 }
@@ -331,7 +331,7 @@ function focusPlayer(uid) {
   const p = G.pos[uid], m = G.members[uid];
   if (!p) { toast(`${m?.name || ''} 님은 아직 위치를 공유하지 않았어요.`); return; }
   W.flyTo(p, 110);
-  W.follow(uid);
+  W.follow(uid, uid === net.me());
   setFab();
   toast(`${m.name} · ${teamOf(m.team).name}${myLL && uid !== net.me() ? ' · ' + fmtDist(dist(myLL, p)) : ''} — 따라가는 중`);
 }
@@ -349,7 +349,23 @@ function focusTeam(tid) {
 
 /* ---------- 지도 단추 ---------- */
 const setFab = () => $('#fabMe').classList.toggle('on', W.following() === net.me());
-$('#fabMe').onclick = () => { if (G.pos[net.me()]) { W.follow(net.me()); W.flyTo(G.pos[net.me()], 140); } else toast('먼저 위치 공유를 켜 주세요.'); setFab(); };
+// 내 위치: 나를 가운데 두고 진행 방향이 위로 오게 지도가 돈다
+$('#fabMe').onclick = () => { if (G.pos[net.me()]) { startCompass(); W.follow(net.me(), true); W.flyTo(G.pos[net.me()], 140); } else toast('먼저 위치 공유를 켜 주세요.'); setFab(); };
+W.on('unfollow', setFab);
+// 폰 나침반: 안드로이드는 deviceorientationabsolute(alpha는 반시계), 아이폰은 webkitCompassHeading(누른 뒤 허락을 받아야 한다).
+// 나침반이 없는 기기(PC)는 걸어간 방향으로 돌린다
+let compassOn = false;
+function startCompass() {
+  if (compassOn || !window.DeviceOrientationEvent) return;
+  const on = e => {
+    const h = e.webkitCompassHeading ?? (e.absolute && e.alpha != null ? 360 - e.alpha : null);
+    W.setCompass(h == null ? null : h + (screen.orientation?.angle || 0)); // 가로로 들면 그만큼 더한다
+  };
+  const listen = () => (compassOn = true) && window.addEventListener('ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation', on);
+  // 아이폰은 단추를 누른 순간에만 물을 수 있다 — 그 밖에서 부르면 조용히 넘어가고 다음 누름에 다시 묻는다
+  if (DeviceOrientationEvent.requestPermission) DeviceOrientationEvent.requestPermission().then(r => r === 'granted' && listen()).catch(() => {});
+  else listen();
+}
 $('#fabAll').onclick = () => { W.resetView(); setFab(); };
 $('#fabLayer').onclick = () => {
   const layer = G.meta.layer === 'map' ? 'sat' : 'map';
@@ -428,7 +444,7 @@ function setMyPos(p) {
   // 3m 넘게 움직였거나 8초가 지났을 때만 올린다 (배터리·데이터 아끼기)
   const moved = !lastSent || dist(lastSent, p) > 3 || Date.now() - lastSent.at > 8000;
   if (moved) { lastSent = { ...p, at: Date.now() }; net.writePos(G.code, p); }
-  if (first) { W.follow(net.me()); W.flyTo(p, 140); setFab(); }
+  if (first) { startCompass(); W.follow(net.me(), true); W.flyTo(p, 140); setFab(); }
   checkArrive();
   if (tab === 'missions') renderPanel();
 }
