@@ -537,7 +537,6 @@ W.on('tapGround', ll => {
 let watchId = null, lastSent = null, wake = null, sim = false, gpsAt = 0;
 $('#gpsBtn').onclick = () => setMode('gps');
 $('#simBtn').onclick = () => setMode('sim');
-$('#offBtn').onclick = () => setMode('off');
 function setMode(mode) {
   if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
   wake?.release?.().catch(() => {}); wake = null; wakeVid?.pause();
@@ -545,7 +544,6 @@ function setMode(mode) {
   W.setGroundFirst(sim);
   $('#gpsBtn').hidden = mode === 'gps';
   $('#simBtn').hidden = mode === 'sim';
-  $('#offBtn').hidden = mode === 'off';
   if (!DEMO && !FAKE) store.set('posMode', mode);
   if (mode === 'off') {
     // 끄면 내 좌표를 지워 다른 사람 지도에서도 내 인형이 사라진다

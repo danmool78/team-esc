@@ -163,7 +163,6 @@ summary{cursor:pointer;color:var(--gold2);font-size:14px;margin-bottom:10px}
   .credit{bottom:4px;right:424px}
 }
 /* 위치 공유 끄기는 PC에서만 — 폰은 걸으며 늘 켜 두어야 하니 실수로 끄지 않게 숨긴다 */
-@media (pointer: coarse) { #offBtn { display: none } }
 /* 주머니 모드: OLED는 검은 화소가 꺼진 셈이라 배터리를 거의 안 쓴다. 글씨는 어둡게, 같은 자리에 오래 두지 않는다 */
 .pocket{position:fixed;inset:0;z-index:50;background:#000;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .pk{position:absolute;left:50%;top:40%;transform:translateX(-50%);width:max-content;max-width:86vw;display:flex;flex-direction:column;align-items:center;gap:6px;color:#5d5546;text-align:center;font-size:13px;transition:top 1.5s}
