@@ -41,6 +41,8 @@ const ICONS = {
   flask: `<path d="M9.5 3h5M10.5 3v5.5L5.2 18A2 2 0 0 0 7 21h10a2 2 0 0 0 1.8-3l-5.3-9.5V3" fill="#eaf7ff"/><path d="M7.8 14.5h8.4l2.6 4A1.6 1.6 0 0 1 17.4 21H6.6a1.6 1.6 0 0 1-1.4-2.5z" fill="#ff7fb0"/><circle cx="10.5" cy="17.5" r="1" fill="#fff" stroke="none"/><circle cx="13.6" cy="16" r=".7" fill="#fff" stroke="none"/>`,
   // 찾기: 돋보기
   search: `<circle cx="10.5" cy="10.5" r="6" fill="#bfe9ff"/><path d="M15 15l5 5" stroke="#ffa24c" stroke-width="3"/>${shine(8.6, 8.4, 1.2)}`,
+  // 끝나는 시간: 자명종
+  clock: `<path d="M5 4.5L3 6.5M19 4.5l2 2" stroke="#ff6b6b" stroke-width="2.2"/><circle cx="12" cy="13" r="7.5" fill="#fff4e0"/><path d="M12 9v4.2l2.8 1.8" stroke="#3b6fd6" stroke-width="2"/><path d="M7 19.5l-1.2 1.6M17 19.5l1.2 1.6"/><circle cx="12" cy="13" r=".9" fill="${O}" stroke="none"/>`,
   down: `<path d="M6.5 9.5L12 15l5.5-5.5" stroke="currentColor" stroke-width="2.4"/>`,
   up: `<path d="M6.5 14.5L12 9l5.5 5.5" stroke="currentColor" stroke-width="2.4"/>`,
 };

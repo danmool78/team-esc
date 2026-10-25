@@ -1,6 +1,6 @@
 {
-  "name": "비전현장미션",
-  "short_name": "비전현장미션",
+  "name": "비전 퀘스트",
+  "short_name": "비전 퀘스트",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#15110d",

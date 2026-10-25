@@ -277,8 +277,8 @@ export function removeMission(id) {
 }
 
 /* ---------- 탈것: 빠르면 자동차, 여럿이 함께 움직이면 오픈버스 ----------
-   자동차: 시속 25km(7m/s)를 넘으면 팀 색 오픈카에 태우고, 15km(4m/s) 밑으로 내려오면 다시 걷는다.
-   오픈버스: 4명 넘게 25m 안에서 비슷한 속도로 20초 넘게 함께 움직이면 버스에 두 줄로 줄 세워 태운다.
+   자동차: 시속 25km(7m/s)를 넘으면 팀 색 오픈카에 태우고, 15km(4m/s) 밑으로 5분 넘게 있으면 내린다.
+   오픈버스: 4명 넘게 25m 안에서 비슷한 속도로 20초 넘게 함께 움직이면 버스에 두 줄로 줄 세워 태운다. 멈춰도 5분까지는 그대로.
    크기는 인형 한 명 키를 1로 그리고, 인형처럼 카메라가 멀어지면 함께 키운다 */
 const CAR_ON = 7, CAR_OFF = 4, BUS_MIN = 4, BUS_R = 25, BUS_DV = 1.5, BUS_AFTER = 20000;
 const box = (w, h, d, color) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color }));
@@ -313,47 +313,52 @@ function makeBus(rows) {
   g.userData = { L, deck: 0.58 };
   return g;
 }
-const buses = new Map(); // id → { g, rows, members[], x, z, ang }
+const buses = new Map(); // id → { g, rows, members[], x, z, ang, slowAt }
 let busSeq = 0, groupAt = 0;
-// 1초마다: 가깝고(25m) 속도가 비슷한(1.5m/s) 움직이는 사람끼리 묶고, 20초 넘게 같이 다닌 묶음을 버스에 태운다
+const STAY = 5 * 60e3; // 신호 대기·정체로 멈춰도 5분까지는 차·버스에서 내리지 않는다
+const alive = p => p.cur && !p.stale && Date.now() - (p.sp?.t || 0) < 60000;
+const avgV = list => [list.reduce((s, p) => s + p.vx, 0) / list.length, list.reduce((s, p) => s + p.vz, 0) / list.length];
+// 1초마다:
+//  1) 이미 다니는 버스 — 버스 가운데 35m 안에 있는 사람은 멈춰 있어도 그대로 탄다. 멀리 걸어가면 내리고,
+//     5분 넘게 서 있거나 사람이 셋 밑으로 줄면 버스를 없앤다
+//  2) 버스에 안 탄 움직이는 사람 — 다니는 버스 곁(25m)에서 같이 가면 바로 타고, 아니면 가깝고(25m) 속도가 비슷한(1.5m/s)
+//     사람끼리 묶어 4명 넘게 20초 넘게 같이 다니면 새 버스에 태운다
 function updateGroups(now) {
-  const wall = Date.now();
-  const cand = [...players.values()].filter(p => p.cur && !p.stale && wall - (p.sp?.t || 0) < 20000 && p.spd > (p.bus ? 0.4 : 0.8));
-  const root = new Map(cand.map(p => [p, p]));
+  const drop = (id, b) => { if (b.g) scene.remove(b.g); b.members.forEach(p => p.bus === id && (p.bus = null)); buses.delete(id); };
+  buses.forEach((b, id) => {
+    b.members = b.members.filter(p => players.get(p.uid) === p && alive(p) && Math.hypot(p.cur.x - b.x, p.cur.y - b.z) < 35);
+    players.forEach(p => { if (p.bus === id && !b.members.includes(p)) p.bus = null; });
+    if (b.members.length < BUS_MIN - 1) return drop(id, b);
+    const [vx, vz] = avgV(b.members);
+    if (Math.hypot(vx, vz) > 0.8) b.slowAt = 0; else b.slowAt ||= now;
+    if (b.slowAt && now - b.slowAt > STAY) drop(id, b);
+  });
+  const cand = [...players.values()].filter(p => !p.bus && alive(p) && p.spd > 0.8);
+  const rest = cand.filter(p => {
+    for (const [id, b] of buses) {
+      const [vx, vz] = avgV(b.members);
+      if (Math.hypot(p.cur.x - b.x, p.cur.y - b.z) < BUS_R && Math.hypot(p.vx - vx, p.vz - vz) < BUS_DV) { b.members.push(p); p.bus = id; return false; }
+    }
+    return true;
+  });
+  const root = new Map(rest.map(p => [p, p]));
   const find = p => (root.get(p) === p ? p : find(root.get(p)));
-  for (let i = 0; i < cand.length; i++) for (let j = i + 1; j < cand.length; j++) {
-    const a = cand[i], b = cand[j];
+  for (let i = 0; i < rest.length; i++) for (let j = i + 1; j < rest.length; j++) {
+    const a = rest[i], b = rest[j];
     if (a.cur.distanceTo(b.cur) < BUS_R && Math.hypot(a.vx - b.vx, a.vz - b.vz) < BUS_DV) root.set(find(a), find(b));
   }
   const groups = new Map();
-  cand.forEach(p => { const r = find(p); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(p); });
+  rest.forEach(p => { const r = find(p); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(p); });
   const inBig = new Set();
   groups.forEach(list => list.length >= BUS_MIN && list.forEach(p => inBig.add(p)));
   players.forEach(p => { if (!inBig.has(p)) p.together = 0; else p.together ||= now; });
-  const used = new Set();
   groups.forEach(list => {
-    const ready = list.filter(p => p.bus || now - p.together >= BUS_AFTER);
+    const ready = list.filter(p => now - p.together >= BUS_AFTER);
     if (ready.length < BUS_MIN) return;
-    // 이미 다니던 버스가 있으면 그 버스에 (사람이 가장 많이 겹치는 것)
-    let best = null, n = 0;
-    buses.forEach((b, id) => { const k = ready.filter(p => p.bus === id).length; if (k > n && !used.has(id)) { best = id; n = k; } });
-    if (best == null) {
-      best = ++busSeq;
-      const x = ready.reduce((s, p) => s + p.cur.x, 0) / ready.length, z = ready.reduce((s, p) => s + p.cur.y, 0) / ready.length;
-      buses.set(best, { rows: 0, members: [], x, z, ang: 0 });
-    }
-    used.add(best);
-    const b = buses.get(best);
-    b.members = ready.sort((p, q) => (p.name || '').localeCompare(q.name || ''));
-    ready.forEach(p => (p.bus = best));
+    const id = ++busSeq;
+    buses.set(id, { rows: 0, members: ready, x: ready.reduce((s, p) => s + p.cur.x, 0) / ready.length, z: ready.reduce((s, p) => s + p.cur.y, 0) / ready.length, ang: 0, slowAt: 0 });
+    ready.forEach(p => (p.bus = id));
   });
-  buses.forEach((b, id) => {
-    if (used.has(id)) return;
-    if (b.g) scene.remove(b.g);
-    b.members.forEach(p => p.bus === id && (p.bus = null));
-    buses.delete(id);
-  });
-  players.forEach(p => { if (p.bus && !buses.has(p.bus)) p.bus = null; });
 }
 // 매 장면: 버스를 사람들 가운데로 옮기고, 앞을 함께 가는 방향으로 돌리고, 자리마다 인형을 세운다
 function placeBuses(big, dt) {
@@ -543,12 +548,16 @@ function frameLoop(now) {
     const h = p.me ? headingOf(p) : null;
     p.arrow.visible = h != null;
     if (h != null) { p.arrow.rotation.y = damp(p.arrow.rotation.y, near(-h, p.arrow.rotation.y), 10, dt); p.arrow.scale.setScalar(big); }
-    // 차: 빠르게 달리는 동안만 (버스에 탄 사람은 버스로)
-    p.car = !p.seat && (p.car ? p.spd > CAR_OFF : p.spd > CAR_ON);
+    // 차: 시속 25km를 넘으면 타고, 15km 밑으로 5분 넘게 있어야 내린다 (신호 대기에 내리지 않게). 버스에 탄 사람은 버스로
+    if (p.seat) p.car = false;
+    else if (p.spd > CAR_ON) { p.car = true; p.slowAt = 0; }
+    else if (p.car && p.spd < CAR_OFF) { p.slowAt ||= now; if (now - p.slowAt > STAY) p.car = false; }
+    else if (p.car) p.slowAt = 0;
     if (p.car && !p.carG) { p.carG = makeCar(p.color || '#ffffff'); p.g.add(p.carG); }
     if (p.carG) {
       p.carG.visible = p.car;
-      if (p.car) { p.carG.scale.setScalar(big); p.carG.rotation.y = damp(p.carG.rotation.y, near(-Math.atan2(p.vx, -p.vz), p.carG.rotation.y), 6, dt); }
+      // 서 있을 땐 방향 그대로
+      if (p.car) { p.carG.scale.setScalar(big); if (p.spd > 0.5) p.carG.rotation.y = damp(p.carG.rotation.y, near(-Math.atan2(p.vx, -p.vz), p.carG.rotation.y), 6, dt); }
     }
     const a = p.actor;
     a.pos.set(0, 0); a.goal.set(0, 0);
