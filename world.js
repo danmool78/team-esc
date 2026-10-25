@@ -5,7 +5,7 @@
    지형은 카메라가 보는 곳 둘레를 조각조각 이어 받아 그린다 (terrain.js) — 지도를 끌어 옮기면 그쪽 땅이 따라 생긴다.
    인형은 실제 크기로는 점처럼 작아 보여서, 카메라가 멀어질수록 함께 키운다 (자리는 그대로, 크기만) */
 import { THREE, damp, glowTexture } from './stage/kit.js';
-import { Actor } from './stage/people.js';
+import { Actor, TYPES } from './stage/people.js';
 import { buildTerrain } from './terrain.js';
 import { iconImage } from './icons.js';
 
@@ -119,14 +119,33 @@ function relabel(holder, key, ...args) {
   return s;
 }
 
+/* ---------- 알록달록 옷 ----------
+   그 길의 옷차림(TYPES)은 밤색·흙색이라 게임 화면에선 칙칙하다. 모양은 그대로 두고 색만 바꾼 옷을 따로 등록해 입힌다
+   (stage/는 고치지 않는다): 겉옷은 팀 색(조금 밝게), 망토·두건은 사람마다 밝은 색 하나, 띠·테두리는 금색 */
+const ACCENTS = ['#ffd34e', '#ff9fc4', '#8fd8ff', '#9be38a', '#ffb36b', '#c9a8ff', '#ffffff'];
+const mix = (a, b, k) => '#' + [1, 3, 5].map(i => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - k) + parseInt(b.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0')).join('');
+function outfit(type, color, seed = '') {
+  type = TYPES[type] ? type : 'disciple';
+  if (!/^#[0-9a-f]{6}$/i.test(color || '')) return type;
+  const key = `${type}~${color}~${seed}`;
+  if (!TYPES[key]) {
+    const base = TYPES[type], h = [...seed].reduce((s, c) => (s * 31 + c.charCodeAt(0)) >>> 0, 7);
+    const accent = ACCENTS[h % ACCENTS.length];
+    TYPES[key] = { ...base, robe: mix(color, '#ffffff', 0.12), trim: '#ffd34e', sash: '#ffd34e',
+      ...(base.mantle ? { mantle: accent } : {}), ...(base.hood ? { hood: accent } : {}), ...(base.band ? { band: '#ffd34e' } : {}), ...(base.inner ? { inner: '#fffaf0' } : {}) };
+  }
+  return key;
+}
+
 /* ---------- 참가자 ---------- */
 // p: { uid, name, avatar, color, me }
 export function upsertPlayer(info) {
   let p = players.get(info.uid);
-  if (!p || p.avatar !== info.avatar) {
+  const look = outfit(info.avatar, info.color, info.uid);
+  if (!p || p.look !== look) {
     if (p) scene.remove(p.g);
     const g = new THREE.Group();
-    const actor = new Actor(info.avatar || 'disciple', 0, 0, 0);
+    const actor = new Actor(look, 0, 0, 0);
     actor.settle();
     g.add(actor.p.root);
     // 발밑 고리: 팀 색. 멀리서도 누가 어느 팀인지 보이게
@@ -156,7 +175,8 @@ export function upsertPlayer(info) {
     head.rotation.x = -Math.PI / 2; head.position.y = 0.05; // 도형의 +y가 땅 위 -z(북)를 가리킨다
     arrow.add(head); arrow.visible = false;
     g.add(arrow);
-    p = { ...(p || {}), uid: info.uid, actor, g, ring, hit, arrow, acc: null, cur: p?.cur || null, face: 0, hd: p?.hd ?? null }; // 오차 원은 새 묶음에 다시 단다
+    if (p?.carG) p.carG = null; // 차도 새 팀 색으로 다시 만든다
+    p = { ...(p || {}), look, uid: info.uid, actor, g, ring, hit, arrow, acc: null, cur: p?.cur || null, face: 0, hd: p?.hd ?? null }; // 오차 원은 새 묶음에 다시 단다
     scene.add(g);
     players.set(info.uid, p);
     p.tag = null;
@@ -626,7 +646,9 @@ export function stop() { running = false; }
 /* ---------- 인형 고르기용 그림 ---------- */
 // 고르는 화면에서 쓸 작은 그림을 한 번만 그려 둔다
 let thumbR;
-export function avatarThumb(type) {
+// color·seed를 주면 3D와 같은 알록달록 옷으로 (사람 목록), 안 주면 원래 옷 (인형 고르기)
+export function avatarThumb(type, color, seed) {
+  type = outfit(type, color, seed);
   if (!renderer) return '';
   if (!thumbR) {
     const r = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });

@@ -355,7 +355,7 @@ function missionItems(list) {
 function peopleList() {
   const row = ([uid, m]) => {
     const p = G.pos[uid], live = m.online && p && Date.now() - (p.t || 0) < STALE, s = personScore(uid);
-    return `<div class="item" data-u="${uid}"><img class="mini" src="${thumb(m.avatar)}" alt="">
+    return `<div class="item" data-u="${uid}"><img class="mini" src="${thumb(m.avatar, uid)}" alt="">
       <div class="tx"><b>${solo() ? `<span class="dot" style="background:${personColor(uid)}"></span> ` : ''}${esc(m.name)}${uid === net.me() ? ' (나)' : ''}${isHostUid(uid) ? ' · 진행자' : ''}</b>
       <small><span class="dot ${live ? 'on-dot' : 'off-dot'}"></span> ${p ? (live ? '위치 공유 중' : ago(p.t) + ' 위치') : '위치 없음'}${s.n ? ` · ${solo() ? '' : '개인 '}${s.n}개 ${s.pts}점` : ''}</small></div>
       <div class="rt">${myLL && p && uid !== net.me() ? fmtDist(dist(myLL, p)) : ''}</div></div>`;
@@ -371,7 +371,8 @@ function peopleList() {
   }).join('');
 }
 const thumbs = {};
-const thumb = t => (thumbs[t] ||= W.avatarThumb(t || 'man'));
+// 사람 목록의 작은 인형: 3D와 같은 옷 색 (팀 색 겉옷, 사람마다 망토 색)
+const thumb = (t, uid) => { const c = uid ? colorOf(uid) : '', k = `${t}|${c}|${uid || ''}`; return (thumbs[k] ||= W.avatarThumb(t || 'man', c, uid)); };
 
 /* ---------- 찾기: 별칭이나 팀 이름 → 그 미니미에게로 ---------- */
 const findEl = $('#find'), findsEl = $('#finds');
@@ -385,7 +386,7 @@ function finds(q) {
 findEl.oninput = () => {
   const r = finds(findEl.value);
   findsEl.hidden = !findEl.value.trim();
-  findsEl.innerHTML = r.length ? r.map(x => `<button data-k="${x.kind}" data-id="${x.id}">${x.avatar ? `<img class="mini" src="${thumb(x.avatar)}" alt="">` : `<span class="dot" style="background:${esc(x.color)};width:14px;height:14px"></span>`}<span><b>${esc(x.label)}</b><br><small class="fine">${esc(x.sub)}</small></span></button>`).join('') : '<div class="none">찾는 사람이나 팀이 없어요.</div>';
+  findsEl.innerHTML = r.length ? r.map(x => `<button data-k="${x.kind}" data-id="${x.id}">${x.avatar ? `<img class="mini" src="${thumb(x.avatar, x.id)}" alt="">` : `<span class="dot" style="background:${esc(x.color)};width:14px;height:14px"></span>`}<span><b>${esc(x.label)}</b><br><small class="fine">${esc(x.sub)}</small></span></button>`).join('') : '<div class="none">찾는 사람이나 팀이 없어요.</div>';
   findsEl.querySelectorAll('button').forEach(b => (b.onclick = () => { closeFind(); b.dataset.k === 'u' ? focusPlayer(b.dataset.id) : focusTeam(b.dataset.id); }));
 };
 findEl.onkeydown = e => { if (e.key === 'Enter') { const r = finds(findEl.value)[0]; if (r) { closeFind(); r.kind === 'u' ? focusPlayer(r.id) : focusTeam(r.id); } } if (e.key === 'Escape') closeFind(); };
@@ -858,7 +859,7 @@ function areaEditor() {
 // 진행자 더하기: 게임을 만든 진행자가 회원 중에서 고른다. 더해진 진행자는 미션·팀·판정·알림을 똑같이 하되, 진행자를 더하거나 빼지는 못한다
 function hostEditor() {
   const draw = () => Object.entries(G.members).filter(([u]) => u !== G.meta.host).sort(([a, x], [b, y]) => isHostUid(b) - isHostUid(a) || x.name.localeCompare(y.name))
-    .map(([uid, m]) => `<div class="item"><img class="mini" src="${thumb(m.avatar)}" alt=""><div class="tx"><b>${esc(m.name)}</b><small>${esc(teamOf(m.team).name)}${isHostUid(uid) ? ' · 진행자' : ''}</small></div>
+    .map(([uid, m]) => `<div class="item"><img class="mini" src="${thumb(m.avatar, uid)}" alt=""><div class="tx"><b>${esc(m.name)}</b><small>${esc(teamOf(m.team).name)}${isHostUid(uid) ? ' · 진행자' : ''}</small></div>
       <button class="btn small ${isHostUid(uid) ? '' : 'primary'}" data-host="${uid}">${isHostUid(uid) ? '빼기' : '진행자로'}</button></div>`).join('') || '<p class="empty">아직 들어온 회원이 없어요.</p>';
   openSheet(`<h3>진행자 더하기</h3><p class="fine">회원 중에서 골라 함께 진행해요. 더해진 진행자는 미션·팀·판정·알림을 똑같이 할 수 있어요.</p><div id="hl">${draw()}</div>`, el => {
     const bind = () => el.querySelectorAll('[data-host]').forEach(b => (b.onclick = async () => {
