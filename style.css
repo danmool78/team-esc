@@ -222,7 +222,8 @@ label.btn{flex-direction:row;justify-content:center;align-items:center;gap:4px}
   border:1.5px solid rgba(240,199,106,.75);box-shadow:0 24px 70px rgba(0,0,0,.55),inset 0 0 40px rgba(240,199,106,.06);
   -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);animation:up .5s .15s both;text-align:center}
 .login-emblem .ico{width:76px;height:76px;filter:drop-shadow(0 0 10px rgba(255,210,110,.6))}
-.login-title{font-size:44px;margin:0 0 10px}
+.login-title{margin:4px 0 10px;display:flex;justify-content:center}
+.login-title .logo-title{width:min(100%,300px)}
 .login-sub{color:#c9cfe0;font-size:14px;margin:0 0 18px}
 .login-form{display:flex;flex-direction:column;gap:12px;text-align:left}
 .fl{display:flex;flex-direction:column;gap:6px;font-size:13.5px;color:#e6e9f2;font-weight:500}
@@ -249,7 +250,8 @@ label.btn{flex-direction:row;justify-content:center;align-items:center;gap:4px}
 @media (max-height: 640px) {
   .card.login{padding:16px 20px 12px}
   .login-emblem .ico{width:46px;height:46px}
-  .login-title{font-size:34px;margin-bottom:4px}
+  .login-title{margin-bottom:4px}
+  .login-title .logo-title{width:220px}
   .login-sub{margin-bottom:10px}
   .login-form{gap:8px}
   .field,.btn.goldbtn,.login .btn.google{height:44px}
@@ -286,7 +288,9 @@ label.btn{flex-direction:row;justify-content:center;align-items:center;gap:4px}
 .sp-hero{position:relative;width:min(92vw,400px);margin:0 0 -18px;filter:drop-shadow(0 26px 30px rgba(0,0,0,.55));
   animation:pop .6s .1s cubic-bezier(.3,1.6,.5,1) both,hover 4s 1s ease-in-out infinite}
 @keyframes hover{50%{transform:translateY(-10px)}}
-.sp-title{font-size:clamp(58px,18vw,100px);margin-top:2px;animation:slam .5s .65s cubic-bezier(.2,1.4,.5,1) both}
+.sp-title{width:min(86vw,560px);margin-top:2px;animation:slam .5s .65s cubic-bezier(.2,1.4,.5,1) both}
+/* 게임 제목: 금빛 글자 그림(assets/title.webp, 배경 투명). 어두운 바탕에서 또렷하게 그림자를 깐다 */
+.logo-title{display:block;height:auto;filter:drop-shadow(0 4px 10px rgba(0,0,0,.6)) drop-shadow(0 0 18px rgba(255,190,80,.25))}
 @keyframes slam{0%{opacity:0;transform:scale(2.4)}60%{opacity:1;transform:scale(.94)}100%{transform:scale(1)}}
 /* 게임 제목 글씨: 아래 글자는 짙은 테두리와 붉은 두께(그림자만 — 아이폰은 text-stroke를 글자마다 겹쳐 그려 획이 깨진다),
    테두리는 둥글게 16방향, 두께는 그 테두리를 아래로 내려 겹친다. 그 위에 같은 글자를 금빛 그러데이션으로 덮고 반짝임이 한 번 지나간다 */
