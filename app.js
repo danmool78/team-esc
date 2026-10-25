@@ -565,20 +565,34 @@ function simHome() {
   if (sim && c && (!myLL || dist(myLL, c) > (G.meta.radius || 600) * 1.5)) setMyPos({ lat: c.lat, lng: c.lng, acc: 3 });
 }
 const INAPP = /KAKAOTALK|NAVER|Instagram|FBAN|FBAV|Line\/|DaumApps/i.test(navigator.userAgent);
-// GPS 다듬기: 최근 4초 값을 정확도로 가중 평균해(1/오차²) 흔들리지 않게 한다 (걸을 때 2~3m 늦는 정도).
-// 폰이 처음이나 실내에서 섞어 주는 와이파이·기지국 값은 버린다 — 좋은 값(30m 이내)을 받은 지 20초 안에
-// 오차가 그 세 배 넘고 50m 넘는 값
-let fixes = [], goodAt = 0, goodAcc = Infinity;
+// GPS 다듬기: 이상한 값을 먼저 거르고, 남은 최근 4초 값을 정확도로 가중 평균해(1/오차²) 흔들리지 않게 한다 (걸을 때 2~3m 늦는 정도)
+//  ① 오차가 튀는 값: 좋은 값(30m 이내)을 받은 지 20초 안에 오차가 그 세 배 넘고 50m 넘는 값, 1분 안에 좋은 값이 있었는데 150m 넘는 값
+//  ② 순간이동: 바로 앞 값에서 시속 160km(45m/s)보다 빨라야 닿는 자리 — 단, 그런 값이 세 번 연달아 서로 가까우면 정말 옮긴 것으로 받는다
+//  ③ 4초 묶음에서 혼자 튀는 값: 묶음 가운데(중앙값)에서 오차의 두 배(최소 8m)보다 먼 값은 평균에서 뺀다
+let fixes = [], goodAt = 0, goodAcc = Infinity, odd = [];
+const median = a => { const b = [...a].sort((x, y) => x - y), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
 function cleanFix(p) {
   const now = Date.now();
   if (p.acc <= 30) { goodAt = now; goodAcc = p.acc; }
-  else if (now - goodAt < 20000 && p.acc > goodAcc * 3 && p.acc > 50) return null;
+  else if ((now - goodAt < 20000 && p.acc > goodAcc * 3 && p.acc > 50) || (now - goodAt < 60000 && p.acc > 150)) return null;
+  const prev = fixes[fixes.length - 1];
+  if (prev) {
+    const d = dist(prev, p), dt = Math.max(0.5, (now - prev.t) / 1000);
+    if (d > 30 && d / dt > 45) {
+      odd.push({ ...p, t: now });
+      if (odd.length < 3 || odd.some(o => dist(o, odd[odd.length - 1]) > 30)) { if (odd.length >= 3) odd.shift(); return null; }
+      fixes = odd; odd = []; // 세 번 연달아 같은 곳 — 정말 옮겼다 (방금 값도 이 안에 있다)
+    } else odd = [];
+  }
+  if (odd.length === 0 && fixes[fixes.length - 1]?.t !== now) fixes.push({ ...p, t: now });
   fixes = fixes.filter(f => now - f.t < 4000);
-  fixes.push({ ...p, t: now });
+  const mLat = median(fixes.map(f => f.lat)), mLng = median(fixes.map(f => f.lng));
+  let keep = fixes.filter(f => dist({ lat: mLat, lng: mLng }, f) <= Math.max(8, f.acc * 2));
+  if (!keep.length) keep = [fixes[fixes.length - 1]];
   let w = 0, lat = 0, lng = 0;
-  fixes.forEach(f => { const k = 1 / (f.acc * f.acc); w += k; lat += f.lat * k; lng += f.lng * k; });
+  keep.forEach(f => { const k = 1 / (f.acc * f.acc); w += k; lat += f.lat * k; lng += f.lng * k; });
   // 연달아 잰 값의 오차는 서로 닮아서 개수만큼 줄지는 않는다 — 가장 좋은 값의 절반 아래로는 말하지 않는다
-  const best = Math.min(...fixes.map(f => f.acc));
+  const best = Math.min(...keep.map(f => f.acc));
   return { lat: lat / w, lng: lng / w, acc: Math.max(1, Math.round(Math.max(best / 2, 1 / Math.sqrt(w)))) };
 }
 // 게임 지역에서 이만큼 넘게 떨어진 위치는 기기가 잘못 알려 준 것으로 본다 (PC 브라우저의 와이파이 위치가 베이징으로 잡힌 일이 있었다)
