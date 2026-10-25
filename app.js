@@ -565,15 +565,21 @@ function simHome() {
   if (sim && c && (!myLL || dist(myLL, c) > (G.meta.radius || 600) * 1.5)) setMyPos({ lat: c.lat, lng: c.lng, acc: 3 });
 }
 const INAPP = /KAKAOTALK|NAVER|Instagram|FBAN|FBAV|Line\/|DaumApps/i.test(navigator.userAgent);
-// GPS 거르기: 평균은 내지 않고 받은 값을 그대로 쓴다 (늦게 따라오지 않게).
-// 다만 폰이 처음이나 실내에서 섞어 주는 와이파이·기지국 값은 버린다 — 좋은 값(30m 이내)을 받은 지 20초 안에
+// GPS 다듬기: 최근 4초 값을 정확도로 가중 평균해(1/오차²) 흔들리지 않게 한다 (걸을 때 2~3m 늦는 정도).
+// 폰이 처음이나 실내에서 섞어 주는 와이파이·기지국 값은 버린다 — 좋은 값(30m 이내)을 받은 지 20초 안에
 // 오차가 그 세 배 넘고 50m 넘는 값
-let goodAt = 0, goodAcc = Infinity;
+let fixes = [], goodAt = 0, goodAcc = Infinity;
 function cleanFix(p) {
   const now = Date.now();
   if (p.acc <= 30) { goodAt = now; goodAcc = p.acc; }
   else if (now - goodAt < 20000 && p.acc > goodAcc * 3 && p.acc > 50) return null;
-  return { lat: p.lat, lng: p.lng, acc: Math.max(1, Math.round(p.acc)) };
+  fixes = fixes.filter(f => now - f.t < 4000);
+  fixes.push({ ...p, t: now });
+  let w = 0, lat = 0, lng = 0;
+  fixes.forEach(f => { const k = 1 / (f.acc * f.acc); w += k; lat += f.lat * k; lng += f.lng * k; });
+  // 연달아 잰 값의 오차는 서로 닮아서 개수만큼 줄지는 않는다 — 가장 좋은 값의 절반 아래로는 말하지 않는다
+  const best = Math.min(...fixes.map(f => f.acc));
+  return { lat: lat / w, lng: lng / w, acc: Math.max(1, Math.round(Math.max(best / 2, 1 / Math.sqrt(w)))) };
 }
 // 게임 지역에서 이만큼 넘게 떨어진 위치는 기기가 잘못 알려 준 것으로 본다 (PC 브라우저의 와이파이 위치가 베이징으로 잡힌 일이 있었다)
 const WILD = 100e3;
