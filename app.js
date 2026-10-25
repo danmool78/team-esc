@@ -421,8 +421,8 @@ W.on('tapGround', ll => {
   if (sim) setMyPos({ lat: ll.lat, lng: ll.lng, acc: 3 });
 });
 
-/* ---------- 내 위치: 끔 · GPS · 지도로 테스트 ---------- */
-// 지도로 테스트: 게임 지역 밖(예: 대전에서 전주 게임)에서 시험할 때 GPS 대신 지도를 눌러 내 자리를 정한다.
+/* ---------- 내 위치: 끔 · GPS · 테스트 모드 ---------- */
+// 테스트 모드: 게임 지역 밖(예: 대전에서 전주 게임)에서 시험할 때 GPS 대신 지도를 눌러 내 자리를 정한다.
 // 다음에 들어올 때도 같은 방식으로 이어지게 기기에 기억한다
 let watchId = null, lastSent = null, wake = null, sim = false, gpsAt = 0;
 $('#gpsBtn').onclick = () => setMode('gps');
@@ -445,9 +445,10 @@ function setMode(mode) {
     return;
   }
   if (mode === 'sim') {
-    gpsText('테스트: 지도를 누르면 내 인형이 그리로 걸어가요');
-    // 아직 자리가 없으면 게임 지역 가운데에 세운다 (GPS로 받은 먼 좌표도 버린다)
+    gpsText('테스트 모드: 현장에 있는 것처럼 — 지도를 누르면 내 인형이 그리로 걸어가요');
+    // 아직 자리가 없으면 게임 지역 가운데에 세운다 (GPS로 받은 먼 좌표도 버린다). 그리고 현장에 선 내 모습으로 바로 데려간다
     simHome();
+    if (myLL) { W.follow(net.me(), true); W.flyTo(myLL, 140); setFab(); }
     return;
   }
   if (FAKE) { setMyPos(FAKE); return; }
@@ -501,14 +502,14 @@ function cleanFix(p) {
 const WILD = 100e3;
 function setMyPos(p) {
   if (!sim && G.meta.center && dist(p, G.meta.center) > WILD) {
-    gpsText(`기기가 알려 준 위치가 이상해요 (게임 지역에서 ${fmtDist(dist(p, G.meta.center))}) — 폰에서 '정확한 위치'를 켜거나 🧪 지도로 테스트를 써 주세요`);
+    gpsText(`기기가 알려 준 위치가 이상해요 (게임 지역에서 ${fmtDist(dist(p, G.meta.center))}) — 폰에서 '정확한 위치'를 켜거나 🧪 테스트 모드를 써 주세요`);
     return;
   }
   myLL = p;
   W.setAccuracy(net.me(), sim ? 0 : p.acc);
   const first = !lastSent;
   const away = !sim && G.meta.center ? dist(p, G.meta.center) - (G.meta.radius || 600) : 0;
-  gpsText(sim ? '테스트: 지도를 누르면 내 인형이 그리로 걸어가요'
+  gpsText(sim ? '테스트 모드: 현장에 있는 것처럼 — 지도를 누르면 내 인형이 그리로 걸어가요'
     // 수백 m 오차는 대개 '대략적 위치'만 허용된 것 (안드로이드 12+, iOS '정확한 위치' 끔).
     // 다만 켠 직후엔 정확한 위치도 기지국 값부터 오므로 15초는 기다려 본다
     : p.acc > 300 && Date.now() - gpsAt < 15000 ? `위치를 더 정확히 잡는 중 · 오차 ${fmtDist(p.acc)}`
@@ -575,7 +576,7 @@ function openMission(id) {
   else if (m.type === 'photo') act = `<label class="btn wide primary" style="text-align:center">📷 사진 찍어 올리기<input type="file" accept="image/*" capture="environment" id="photoIn" hidden></label><p class="msg" id="qMsg"></p>`;
   else if (m.type === 'task') act = `<button class="btn wide primary" id="taskBtn">🙌 해냈어요 — 진행자에게 확인 요청</button>`;
   else act = `<div class="box">도착! 곧 완료돼요.</div>`;
-  // 지도로 테스트 중: 미션 자리로 바로 옮겨 가 본다
+  // 테스트 모드: 미션 자리로 바로 옮겨 가 본다
   if (sim && !d) act += `<button class="btn wide" id="simGo">🧪 여기로 이동 (테스트)</button>`;
   const host = isHost() ? `<div class="hostgrid"><button class="btn small" id="mEdit">수정</button><button class="btn small" id="mToggle">${m.open === false ? '열기' : '닫기'}</button><button class="btn small danger" id="mDel">삭제</button></div>` : '';
   openSheet(`<p class="eyebrow">${TYPES[m.type]?.[0]} ${TYPES[m.type]?.[1]} · ${m.pts || 0}점</p><h3>${esc(m.title)}</h3>
