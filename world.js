@@ -118,7 +118,7 @@ export function upsertPlayer(info) {
     const hit = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 1.1, 8), new THREE.MeshBasicMaterial({ visible: false }));
     hit.position.y = 0.55; hit.userData.uid = info.uid;
     actor.p.root.add(hit);
-    p = { ...(p || {}), uid: info.uid, actor, g, ring, hit, cur: p?.cur || null, face: 0 };
+    p = { ...(p || {}), uid: info.uid, actor, g, ring, hit, acc: null, cur: p?.cur || null, face: 0 }; // 오차 원은 새 묶음에 다시 단다
     scene.add(g);
     players.set(info.uid, p);
     p.tag = null;
@@ -152,6 +152,19 @@ export function movePlayer(uid, ll, stale = false) {
   if (!p) return;
   placePlayer(p, ll);
   p.actor.showT = stale ? 0.45 : 1;
+}
+
+// 내 위치의 오차 원: 실제 크기(m)로 땅 위에 흐리게. 0이면 숨긴다
+export function setAccuracy(uid, m) {
+  const p = players.get(uid);
+  if (!p) return;
+  if (!p.acc) {
+    p.acc = new THREE.Mesh(new THREE.CircleGeometry(1, 48), new THREE.MeshBasicMaterial({ color: 0x5aa0ff, transparent: true, opacity: 0.18, depthWrite: false }));
+    p.acc.rotation.x = -Math.PI / 2; p.acc.position.y = 0.6;
+    p.g.add(p.acc);
+  }
+  p.acc.visible = m > 3;
+  p.acc.scale.setScalar(Math.max(m, 1));
 }
 
 /* ---------- 미션 표지: 빛기둥 + 도착 반경 고리 + 이름표 ---------- */

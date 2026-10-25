@@ -396,7 +396,7 @@ function setMode(mode) {
   if (!navigator.geolocation) { gpsText('이 기기는 위치를 알 수 없어요.'); setMode('off'); return; }
   gpsText('위치를 찾는 중…');
   watchId = navigator.geolocation.watchPosition(
-    p => setMyPos({ lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy) }),
+    p => { const f = cleanFix({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy }); if (f) setMyPos(f); },
     e => { gpsText(e.code === 1 ? '위치 권한이 꺼져 있어요. 브라우저 설정에서 허용해 주세요.' : '위치를 찾지 못했어요.'); $('#gpsBtn').hidden = false; },
     { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
   // 화면이 꺼지면 브라우저가 위치를 멈추므로 켜 둔다
@@ -425,13 +425,30 @@ function followArea(p) {
     if (first) toast('게임 지역 밖이라 지금 계신 곳의 지도를 보여 드려요');
   } else if (!out && localArea) { localArea = null; onMeta(); }
 }
+// GPS 다듬기: 폰은 처음이나 실내에서 와이파이·기지국으로 잡은 큰 오차 값을 섞어 준다.
+// 좋은 값(30m 이내)을 받은 지 20초 안에 오차가 그 세 배 넘고 50m 넘는 값이 오면 버리고,
+// 최근 4초의 값을 정확도로 가중 평균해(1/오차²) 흔들림을 줄인다. 걷는 사람 기준 몇 m 늦는 정도
+let fixes = [], goodAt = 0, goodAcc = Infinity;
+function cleanFix(p) {
+  const now = Date.now();
+  if (p.acc <= 30) { goodAt = now; goodAcc = p.acc; }
+  else if (now - goodAt < 20000 && p.acc > goodAcc * 3 && p.acc > 50) return null;
+  fixes = fixes.filter(f => now - f.t < 4000);
+  fixes.push({ ...p, t: now });
+  let w = 0, lat = 0, lng = 0;
+  fixes.forEach(f => { const k = 1 / (f.acc * f.acc); w += k; lat += f.lat * k; lng += f.lng * k; });
+  return { lat: lat / w, lng: lng / w, acc: Math.max(1, Math.round(Math.min(p.acc, 1 / Math.sqrt(w)))) };
+}
 function setMyPos(p) {
   myLL = p;
+  W.setAccuracy(net.me(), sim ? 0 : p.acc);
   if (!sim) followArea(p);
   const first = !lastSent;
   const away = !sim && G.meta.center ? dist(p, G.meta.center) - (G.meta.radius || 600) : 0;
   gpsText(sim ? '테스트: 지도를 누르면 내 인형이 그리로 걸어가요'
-    : away > 0 ? `내 주변 지도 · 게임 지역에서 ${fmtDist(away)} · 오차 ${p.acc}m` : `위치 공유 중 · 오차 ${p.acc}m`);
+    // 수백 m 오차는 대개 '대략적 위치'만 허용된 것 (안드로이드 12+, iOS '정확한 위치' 끔)
+    : p.acc > 300 ? `위치가 대략적으로만 잡혀요 (오차 ${fmtDist(p.acc)}) — 폰 설정에서 이 사이트의 '정확한 위치'를 켜 주세요`
+    : away > 0 ? `내 주변 지도 · 게임 지역에서 ${fmtDist(away)} · 오차 ${p.acc}m` : `위치 공유 중 · 오차 ${p.acc}m${p.acc > 40 ? ' (실내면 커요)' : ''}`);
   // 3m 넘게 움직였거나 8초가 지났을 때만 올린다 (배터리·데이터 아끼기)
   const moved = !lastSent || dist(lastSent, p) > 3 || Date.now() - lastSent.at > 8000;
   if (moved) { lastSent = { ...p, at: Date.now() }; net.writePos(G.code, p); }
