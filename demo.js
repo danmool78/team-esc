@@ -62,6 +62,9 @@ const BOTS = [
   ['b1', '하늘', 'man', 't1'], ['b2', '소망', 'woman', 't1'], ['b3', '믿음', 'peter', 't1'],
   ['b4', '사랑', 'woman2', 't2'], ['b5', '온유', 'traveler', 't2'], ['b6', '기쁨', 'martha', 't2'], ['b7', '화평', 'shepherd', 't3'],
 ];
+// 탈것 확인용: 함께 걷는 단체 5명(20초 뒤 오픈버스)과 차로 달리는 1명
+const TOUR = [['c1', '은혜', 'man'], ['c2', '진리', 'woman'], ['c3', '생명', 'shepherd'], ['c4', '빛', 'woman2'], ['c5', '평안', 'elder']];
+const DRIVER = ['d1', '바람', 'official', 't2'];
 function seed() {
   if (S.games.DEMO) return;
   const F = makeFrame(JEONJU);
@@ -76,6 +79,19 @@ function seed() {
   const members = { [ME]: { name: '데모', avatar: 'disciple', team: 't1', online: true } };
   const pos = { [ME]: { ...at(0, 0), acc: 5, t: now() } };
   BOTS.forEach(([id, name, avatar, team], i) => { members[id] = { name, avatar, team, online: true }; pos[id] = { ...at(Math.sin(i) * 200, Math.cos(i) * 200), acc: 6, t: now() }; });
+  TOUR.forEach(([id, name, avatar]) => { members[id] = { name, avatar, team: 't3', online: true }; });
+  members[DRIVER[0]] = { name: DRIVER[1], avatar: DRIVER[2], team: DRIVER[3], online: true };
+  // 단체는 지름 360m 원을 걸음 빠르기(1.4m/s)로 줄지어 돌고, 차는 지름 700m 원을 시속 40km로 돈다
+  let tourA = 0, carA = 0;
+  const moveExtras = () => {
+    tourA += 1.4 / 180; carA += 11 / 350;
+    TOUR.forEach(([id], i) => {
+      const a = tourA - i * 0.012, side = (i % 2 ? 2 : -2);
+      pos[id] = { ...at(60 + Math.cos(a) * (180 + side) + (Math.random() - 0.5), -40 + Math.sin(a) * (180 + side) + (Math.random() - 0.5)), acc: 6, t: now() };
+    });
+    pos[DRIVER[0]] = { ...at(Math.cos(carA) * 350, Math.sin(carA) * 350), acc: 8, t: now() };
+  };
+  moveExtras();
   S.games.DEMO = {
     meta: { name: '한옥마을 팀 미션 (데모)', host: ME, center: JEONJU, radius: 600, layer: 'sat', status: 'live', created: now() },
     teams: { t1: { name: '청팀', color: '#3d7be0' }, t2: { name: '홍팀', color: '#e0503d' }, t3: { name: '녹팀', color: '#3dae6a' } },
@@ -86,6 +102,7 @@ function seed() {
   setInterval(() => {
     const g = S.games.DEMO;
     if (g.meta.status !== 'live') return;
+    moveExtras();
     BOTS.forEach(([id, name, , team]) => {
       const p = g.pos[id];
       let mid = goals[id];

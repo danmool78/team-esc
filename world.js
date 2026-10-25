@@ -175,6 +175,7 @@ export function removePlayer(uid) {
   if (!p) return;
   scene.remove(p.g);
   players.delete(uid);
+  buses.forEach(b => (b.members = b.members.filter(m => m !== p)));
 }
 function placePlayer(p, ll, snap) {
   p.ll = ll;
@@ -186,12 +187,25 @@ function placePlayer(p, ll, snap) {
   if (snap || !p.hdFrom) p.hdFrom = p.to.clone();
   else if (p.to.distanceTo(p.hdFrom) > 400) p.hdFrom = p.to.clone(); // 순간 이동(테스트 모드로 옮기기 등)은 걸어간 방향이 아니다
   else if (p.to.distanceTo(p.hdFrom) > 3) { p.hd = Math.atan2(p.to.x - p.hdFrom.x, -(p.to.y - p.hdFrom.y)); p.hdFrom = p.to.clone(); }
+  sampleSpeed(p, ll.t || Date.now(), snap);
+}
+// 속도: 새로 받은 좌표(서버 시각 t)마다 앞 좌표와 견줘 m/s와 속도 벡터를 부드럽게 잰다. 같은 좌표가 다시 오면 건너뛴다
+function sampleSpeed(p, t, snap) {
+  if (snap || !p.sp) { p.sp = { x: p.to.x, z: p.to.y, t }; p.spd = 0; p.vx = p.vz = 0; return; }
+  const dt = (t - p.sp.t) / 1000;
+  if (dt < 0.5) return;
+  const vx = (p.to.x - p.sp.x) / dt, vz = (p.to.y - p.sp.z) / dt;
+  if (Math.hypot(vx, vz) * dt > 400) { p.sp = { x: p.to.x, z: p.to.y, t }; return; } // 순간 이동
+  p.vx = p.vx * 0.5 + vx * 0.5; p.vz = p.vz * 0.5 + vz * 0.5;
+  p.spd = Math.hypot(p.vx, p.vz);
+  p.sp = { x: p.to.x, z: p.to.y, t };
 }
 // 새 좌표가 오면 그 자리까지 걸어간다. stale: 오래 소식이 없으면 흐리게
 export function movePlayer(uid, ll, stale = false) {
   const p = players.get(uid);
   if (!p) return;
   placePlayer(p, ll);
+  p.stale = stale;
   p.actor.showT = stale ? 0.45 : 1;
 }
 
@@ -260,6 +274,107 @@ function placeMission(o) {
 export function removeMission(id) {
   const o = missions.get(id);
   if (o) { scene.remove(o.g); missions.delete(id); }
+}
+
+/* ---------- 탈것: 빠르면 자동차, 여럿이 함께 움직이면 오픈버스 ----------
+   자동차: 시속 25km(7m/s)를 넘으면 팀 색 오픈카에 태우고, 15km(4m/s) 밑으로 내려오면 다시 걷는다.
+   오픈버스: 4명 넘게 25m 안에서 비슷한 속도로 20초 넘게 함께 움직이면 버스에 두 줄로 줄 세워 태운다.
+   크기는 인형 한 명 키를 1로 그리고, 인형처럼 카메라가 멀어지면 함께 키운다 */
+const CAR_ON = 7, CAR_OFF = 4, BUS_MIN = 4, BUS_R = 25, BUS_DV = 1.5, BUS_AFTER = 20000;
+const box = (w, h, d, color) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color }));
+const wheel = (x, z, r = 0.17) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.12, 14), new THREE.MeshLambertMaterial({ color: '#2b2522' })); m.rotation.z = Math.PI / 2; m.position.set(x, r, z); return m; };
+// 상자 하나를 (x, y, z) 자리에 붙인다 (y는 상자 가운데 높이)
+const put = (g, w, h, d, color, x, y, z) => { const m = box(w, h, d, color); m.position.set(x, y, z); g.add(m); return m; };
+// 오픈카: 팀 색 몸통 + 흰 줄 + 앞 유리. 인형은 가운데 서서 윗몸이 보인다 (앞은 -z)
+function makeCar(color) {
+  const g = new THREE.Group();
+  put(g, 0.95, 0.32, 1.7, color, 0, 0.34, 0);
+  put(g, 0.97, 0.06, 1.72, '#fff6e0', 0, 0.42, 0); // 옆줄 (윗면은 팀 색 그대로)
+  put(g, 0.9, 0.16, 0.12, '#2b2522', 0, 0.6, 0.6); // 뒷자리 등받이
+  const glass = new THREE.Mesh(new THREE.PlaneGeometry(0.86, 0.3), new THREE.MeshBasicMaterial({ color: '#bfe9ff', transparent: true, opacity: 0.7, side: THREE.DoubleSide }));
+  glass.position.set(0, 0.66, -0.45); glass.rotation.x = -0.35; g.add(glass);
+  put(g, 0.2, 0.08, 0.04, '#ffe27a', -0.3, 0.4, -0.86); put(g, 0.2, 0.08, 0.04, '#ffe27a', 0.3, 0.4, -0.86); // 앞등
+  [[-0.47, -0.55], [0.47, -0.55], [-0.47, 0.55], [0.47, 0.55]].forEach(([x, z]) => g.add(wheel(x, z)));
+  return g;
+}
+// 오픈버스: 노란 몸통, 지붕 없이 낮은 난간, 앞 운전석. rows 줄 × 2명
+function makeBus(rows) {
+  const g = new THREE.Group(), L = rows * 0.62 + 1.4;
+  put(g, 1.15, 0.38, L, '#ffc93c', 0, 0.36, 0);
+  put(g, 1.17, 0.07, L + 0.02, '#ff6b6b', 0, 0.56, 0);
+  // 난간: 양옆과 뒤
+  [-0.56, 0.56].forEach(x => put(g, 0.05, 0.3, L - 0.9, '#3fbfd9', x, 0.74, 0.45));
+  put(g, 1.15, 0.3, 0.05, '#3fbfd9', 0, 0.74, L / 2 - 0.03);
+  // 운전석: 앞 덮개와 유리
+  put(g, 1.15, 0.22, 0.7, '#ffc93c', 0, 0.68, -L / 2 + 0.36);
+  put(g, 1.1, 0.42, 0.06, '#bfe9ff', 0, 0.98, -L / 2 + 0.74);
+  const n = Math.max(2, Math.round(L / 1.1));
+  for (let i = 0; i < n; i++) { const z = -L / 2 + 0.35 + (i * (L - 0.7)) / (n - 1); g.add(wheel(-0.58, z, 0.2), wheel(0.58, z, 0.2)); }
+  g.userData = { L, deck: 0.58 };
+  return g;
+}
+const buses = new Map(); // id → { g, rows, members[], x, z, ang }
+let busSeq = 0, groupAt = 0;
+// 1초마다: 가깝고(25m) 속도가 비슷한(1.5m/s) 움직이는 사람끼리 묶고, 20초 넘게 같이 다닌 묶음을 버스에 태운다
+function updateGroups(now) {
+  const wall = Date.now();
+  const cand = [...players.values()].filter(p => p.cur && !p.stale && wall - (p.sp?.t || 0) < 20000 && p.spd > (p.bus ? 0.4 : 0.8));
+  const root = new Map(cand.map(p => [p, p]));
+  const find = p => (root.get(p) === p ? p : find(root.get(p)));
+  for (let i = 0; i < cand.length; i++) for (let j = i + 1; j < cand.length; j++) {
+    const a = cand[i], b = cand[j];
+    if (a.cur.distanceTo(b.cur) < BUS_R && Math.hypot(a.vx - b.vx, a.vz - b.vz) < BUS_DV) root.set(find(a), find(b));
+  }
+  const groups = new Map();
+  cand.forEach(p => { const r = find(p); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(p); });
+  const inBig = new Set();
+  groups.forEach(list => list.length >= BUS_MIN && list.forEach(p => inBig.add(p)));
+  players.forEach(p => { if (!inBig.has(p)) p.together = 0; else p.together ||= now; });
+  const used = new Set();
+  groups.forEach(list => {
+    const ready = list.filter(p => p.bus || now - p.together >= BUS_AFTER);
+    if (ready.length < BUS_MIN) return;
+    // 이미 다니던 버스가 있으면 그 버스에 (사람이 가장 많이 겹치는 것)
+    let best = null, n = 0;
+    buses.forEach((b, id) => { const k = ready.filter(p => p.bus === id).length; if (k > n && !used.has(id)) { best = id; n = k; } });
+    if (best == null) {
+      best = ++busSeq;
+      const x = ready.reduce((s, p) => s + p.cur.x, 0) / ready.length, z = ready.reduce((s, p) => s + p.cur.y, 0) / ready.length;
+      buses.set(best, { rows: 0, members: [], x, z, ang: 0 });
+    }
+    used.add(best);
+    const b = buses.get(best);
+    b.members = ready.sort((p, q) => (p.name || '').localeCompare(q.name || ''));
+    ready.forEach(p => (p.bus = best));
+  });
+  buses.forEach((b, id) => {
+    if (used.has(id)) return;
+    if (b.g) scene.remove(b.g);
+    b.members.forEach(p => p.bus === id && (p.bus = null));
+    buses.delete(id);
+  });
+  players.forEach(p => { if (p.bus && !buses.has(p.bus)) p.bus = null; });
+}
+// 매 장면: 버스를 사람들 가운데로 옮기고, 앞을 함께 가는 방향으로 돌리고, 자리마다 인형을 세운다
+function placeBuses(big, dt) {
+  buses.forEach(b => {
+    const m = b.members.filter(p => p.cur);
+    if (!m.length) return;
+    const rows = Math.ceil(m.length / 2);
+    if (rows !== b.rows) { if (b.g) scene.remove(b.g); b.g = makeBus(rows); b.rows = rows; scene.add(b.g); }
+    const cx = m.reduce((s, p) => s + p.cur.x, 0) / m.length, cz = m.reduce((s, p) => s + p.cur.y, 0) / m.length;
+    b.x = damp(b.x, cx, 3, dt); b.z = damp(b.z, cz, 3, dt);
+    const vx = m.reduce((s, p) => s + p.vx, 0), vz = m.reduce((s, p) => s + p.vz, 0);
+    if (Math.hypot(vx, vz) > 0.1) b.ang = damp(b.ang, near(-Math.atan2(vx, -vz), b.ang), 3, dt); // yaw 0 = 북(-z)을 봄
+    b.g.position.set(b.x, T.heightAt(b.x, b.z), b.z);
+    b.g.rotation.y = b.ang;
+    b.g.scale.setScalar(big);
+    const L = b.g.userData.L, c = Math.cos(b.ang), s = Math.sin(b.ang);
+    m.forEach((p, i) => {
+      const sx = i % 2 ? 0.27 : -0.27, sz = -L / 2 + 1.25 + Math.floor(i / 2) * 0.62; // 운전석 뒤부터 두 줄
+      p.seat = { x: b.x + (sx * c + sz * s) * big, z: b.z + (-sx * s + sz * c) * big, y: b.g.position.y + b.g.userData.deck * big, face: Math.atan2(-Math.sin(b.ang), -Math.cos(b.ang)) };
+    });
+  });
 }
 
 /* ---------- 카메라 ---------- */
@@ -413,6 +528,9 @@ function frameLoop(now) {
   // 인형 크기: 가까이선 사람 크기(1.7m 남짓)로, 멀어지면 화면에서 알아볼 만큼 키운다
   const big = Math.max(2.5, cam.dist * 0.05);
   const t = now / 1000;
+  if (now - groupAt > 1000) { groupAt = now; updateGroups(now); }
+  players.forEach(p => (p.seat = null));
+  placeBuses(big, dt);
   players.forEach(p => {
     if (!p.cur) { p.g.visible = false; return; }
     p.g.visible = true;
@@ -425,13 +543,21 @@ function frameLoop(now) {
     const h = p.me ? headingOf(p) : null;
     p.arrow.visible = h != null;
     if (h != null) { p.arrow.rotation.y = damp(p.arrow.rotation.y, near(-h, p.arrow.rotation.y), 10, dt); p.arrow.scale.setScalar(big); }
+    // 차: 빠르게 달리는 동안만 (버스에 탄 사람은 버스로)
+    p.car = !p.seat && (p.car ? p.spd > CAR_OFF : p.spd > CAR_ON);
+    if (p.car && !p.carG) { p.carG = makeCar(p.color || '#ffffff'); p.g.add(p.carG); }
+    if (p.carG) {
+      p.carG.visible = p.car;
+      if (p.car) { p.carG.scale.setScalar(big); p.carG.rotation.y = damp(p.carG.rotation.y, near(-Math.atan2(p.vx, -p.vz), p.carG.rotation.y), 6, dt); }
+    }
     const a = p.actor;
     a.pos.set(0, 0); a.goal.set(0, 0);
-    a.faceT = p.face;
-    a.set(moving ? 'walk' : 'idle');
+    a.faceT = p.seat ? p.seat.face : p.face;
+    a.set(moving && !p.seat && !p.car ? 'walk' : 'idle');
     a.big = big;
     a.update(t, dt);
-    p.g.position.set(p.cur.x, T.heightAt(p.cur.x, p.cur.y), p.cur.y);
+    if (p.seat) p.g.position.set(p.seat.x, p.seat.y, p.seat.z);
+    else p.g.position.set(p.cur.x, T.heightAt(p.cur.x, p.cur.y) + (p.car ? 0.3 * big : 0), p.cur.y);
     const s = cam.dist * 0.019 * p.tag.userData.h;
     p.tag.scale.set(s * p.tag.userData.aspect, s, 1);
     p.tag.position.y = big * 1.05 + s * 0.7;
