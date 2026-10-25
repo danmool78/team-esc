@@ -5,7 +5,7 @@
                                  host = 게임을 만든 진행자(바꿀 수 없음), hosts = 그가 회원 중에서 더한 진행자(host·hosts 말고는 똑같이 진행)
      games/{code}/teams/{tid}    { name, color }
      games/{code}/members/{uid}  { name, avatar, team, online, joined }
-     games/{code}/pos/{uid}      { lat, lng, acc, t }      — 걸을 때마다 몇 초에 한 번
+     games/{code}/pos/{uid}      { lat, lng, acc, t, sim }  — 걸을 때마다 몇 초에 한 번 (sim: 테스트 모드)
      games/{code}/missions/{mid} { title, desc, type: arrive|quiz|photo|task, each, lat, lng, r, q, ah, pts, order, open }
                                  each = 개인 미션 (팀원 각자 해서 점수를 팀에 보탠다). 개인전(mode solo)이면 모든 미션이 개인 미션
      games/{code}/done/{tid}/{mid} { by, name, t, pts, status: ok|wait }

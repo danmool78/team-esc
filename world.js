@@ -219,6 +219,8 @@ function placePlayer(p, ll, snap) {
 }
 // 속도: 새로 받은 좌표(서버 시각 t)마다 앞 좌표와 견줘 m/s와 속도 벡터를 부드럽게 잰다. 같은 좌표가 다시 오면 건너뛴다
 function sampleSpeed(p, t, snap) {
+  // 테스트 모드(지도를 눌러 옮기는 자리)는 걸은 게 아니니 속도를 재지 않는다
+  if (p.ll?.sim) { p.sp = { x: p.to.x, z: p.to.y, t }; p.spd = 0; p.vx = p.vz = 0; return; }
   if (snap || !p.sp) { p.sp = { x: p.to.x, z: p.to.y, t }; p.spd = 0; p.vx = p.vz = 0; return; }
   const dt = (t - p.sp.t) / 1000;
   if (dt < 0.5) return;
