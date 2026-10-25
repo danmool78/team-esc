@@ -590,7 +590,7 @@ function areaEditor() {
     <form class="stack" id="af">
       <label>중심<select id="aC"><option value="here">지금 내 위치 (GPS)</option><option value="jeonju">전주 한옥마을</option><option value="custom">직접 입력 (위도, 경도)</option><option value="keep">그대로 두고 반경만</option></select></label>
       <input id="aLL" placeholder="36.3504, 127.3845" hidden>
-      <label>반경<select id="aR">${[300, 600, 1000, 1500, 2500].map(v => `<option value="${v}" ${v === r ? 'selected' : ''}>${fmtDist(v)}</option>`).join('')}</select></label>
+      <label>반경 — 작을수록 위성사진이 선명해요<select id="aR">${[200, 300, 500, 800, 1000].map(v => `<option value="${v}" ${v === r ? 'selected' : ''}>${fmtDist(v)}</option>`).join('')}</select></label>
       <p class="fine">이미 만든 미션은 자리를 옮기지 않아요. 새 지역 밖에 남은 미션은 진행 탭에서 지우거나 고쳐 주세요.${far ? ` (지금도 지역 밖 미션 ${far}개)` : ''}</p>
       <button class="btn primary">바꾸기</button><p class="msg" id="aMsg"></p></form>`, el => {
     const sel = el.querySelector('#aC');
