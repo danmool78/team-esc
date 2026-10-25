@@ -89,6 +89,23 @@ fs.mkdirSync(OUT, { recursive: true });
     await seq(p, 'result', 24, 60);
     return b.close();
   }
+  // ONLY=map3d: 지도 모드 + 3D 건물 위로 팀원들이 돌아다닌다
+  if (process.env.ONLY === 'map3d') {
+    p = await page();
+    await p.tap('#grip');
+    await p.tap('#fabLayer'); await p.waitForTimeout(9000);
+    await p.mouse.click(250, 260); await p.waitForTimeout(1500);
+    await seq(p, 'mapthree', 36, 60, async i => { if (i % 12 === 0) await p.mouse.click(180 + (i % 24) * 3, 250); });
+    return b.close();
+  }
+  // ONLY=tag: 술래잡기 미션 창 (술래가 팀마다 한 명, 내가 술래)
+  if (process.env.ONLY === 'tag') {
+    p = await page();
+    await p.evaluate(() => document.querySelector('.item[data-m="mtag"]').click()); await p.waitForTimeout(1200);
+    await p.evaluate(() => document.querySelector('#simGo')?.remove());
+    await seq(p, 'tag', 12, 80);
+    return b.close();
+  }
   // ONLY=beacons: 넓게 내려다본 지도에 미션 빛기둥들
   if (process.env.ONLY === 'beacons') {
     p = await page();
