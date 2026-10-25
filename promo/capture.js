@@ -18,8 +18,28 @@ fs.mkdirSync(OUT, { recursive: true });
   };
   const go = async (p, who) => { await p.fill('#find', who); await p.waitForTimeout(300); await p.keyboard.press('Enter'); };
 
-  // ONLY=bus 처럼 주면 버스부터만 다시 찍는다
   let p;
+  // ONLY=drive: 내가 차를 타고 남천교 청연루까지 달려가 현장 미션을 하는 장면만
+  if (process.env.ONLY === 'drive') {
+    p = await page();
+    await p.tap('#grip');
+    const M = { lat: 35.81079, lng: 127.15328 }, S = { lat: M.lat - 0.0011, lng: M.lng - 0.0014 };
+    const N = 14; // 1초에 한 번, 약 12m씩 (시속 40km 남짓)
+    for (let k = 0; k <= N; k++) {
+      const f = k / N * 0.88; // 미션 반경 바로 앞에서 멈춘다
+      await p.evaluate(async ll => (await import('/demo.js')).writePos('DEMO', { ...ll, acc: 4 }), { lat: S.lat + (M.lat - S.lat) * f, lng: S.lng + (M.lng - S.lng) * f });
+      if (k <= 1) await p.waitForTimeout(1000); // 처음 두 번은 속도를 잴 시간
+      for (let j = 0; j < 4 && k > 1; j++) await p.screenshot({ path: `${OUT}/drv-${String((k - 2) * 4 + j).padStart(3, '0')}.jpg`, quality: 88 }).then(() => p.waitForTimeout(150));
+    }
+    // 도착 → 현장 미션 창 → 확인 요청
+    await p.evaluate(() => document.querySelector('.item[data-m="m5"]').click()); await p.waitForTimeout(600);
+    await p.evaluate(() => document.querySelector('#simGo')?.click()); await p.waitForTimeout(1500);
+    await seq(p, 'task', 1);
+    await p.evaluate(() => document.querySelector('#taskBtn')?.click());
+    await seq(p, 'taskdone', 12, 80);
+    return b.close();
+  }
+  // ONLY=bus 처럼 주면 버스부터만 다시 찍는다
   if (process.env.ONLY !== 'bus') {
   // 1) 3D 지도: 내가 걸어가고 팀원들이 돌아다닌다
   p = await page();

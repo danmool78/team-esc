@@ -141,17 +141,19 @@ const scenes = [
     ${phone(frame('bus', u / SCENE), 240, 600, 1, -2)}
     ${sticker('bus', 60 + Math.sin(t * 3) * 20, 1350, 1.5, -6)}
     ${cap('다 같이 움직이면', 220, t, SCENE * 5 + .02, 110)}${cap('<em>오픈버스</em> 탑승!', 360, t, SCENE * 5 + BEAT * 3, 132, '#4cc3f0')}`,
-  // 7. 자동차 · 남은 시간
-  (t, u) => `<div class="layer bg" style="--a:#4cc3f0;--b:#5fd38a"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
-    ${phone(u < BEAT * 4 ? frame('car', u / (BEAT * 4)) : frame('timer', 0), 240, 600, 1, u < BEAT * 4 ? 3 : -3)}
-    ${u < BEAT * 4 ? cap('빠르면 <em>자동차</em> 부릉!', 280, t, SCENE * 6 + .02, 112, '#ffd34e') : cap('남은 시간 <em>째깍째깍</em>', 280, t, SCENE * 6 + BEAT * 4, 112, '#ff6b6b')}
-    ${u >= BEAT * 4 ? sticker('clock', 830, 1300, 1.4 + .2 * pulse(t), 10) : ''}`,
-  // 8. 누가 1등
-  (t, u) => `<div class="layer bg" style="--a:#ffd34e;--b:#ffa24c"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
-    ${phone(frame('result', u / SCENE), 240, 600, 1, 2)}
-    ${sticker('trophy', 70, 760, 1.4 + .2 * pulse(t), -10)}${sticker('medal1', 860, 1250, 1.2 + .2 * pulse(t + BEAT / 2), 10)}
-    ${confetti(t, SCENE * 7 + BEAT * 2, 30)}
-    ${cap('누가 <em>1등</em>?!', 280, t, SCENE * 7 + .02, 150, '#ff6b6b')}`,
+  // 7. 차 타고 미션 장소로 → 도착하면 현장 미션
+  (t, u) => { const drive = u < BEAT * 4, v = u - BEAT * 4;
+    return `<div class="layer bg" style="--a:#4cc3f0;--b:#5fd38a"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
+    ${phone(drive ? frame('drv', u / (BEAT * 4)) : v < BEAT * 2.6 ? frame('task', 0) : frame('taskdone', (v - BEAT * 2.6) / (BEAT * 1.4)), 240, 600, 1, drive ? 3 : -3)}
+    ${drive ? cap('차 타고 <em>미션 장소</em>로', 230, t, SCENE * 6 + .02, 112, '#ffd34e') + cap('부릉~!', 380, t, SCENE * 6 + BEAT * 2, 130, '#fff59a')
+            : cap('도착하면 <em>현장 미션</em>!', 260, t, SCENE * 6 + BEAT * 4, 116, '#ffd34e') + sub('해내면 진행자가 확인 → 점수 쏙', 1820, t, SCENE * 6 + BEAT * 5)}
+    ${drive ? '' : sticker('flag', 840, 1250, 1.4 + .2 * pulse(t), 10)}`; },
+  // 8. 남은 시간 째깍 → 누가 1등
+  (t, u) => { const tick = u < BEAT * 3;
+    return `<div class="layer bg" style="--a:#ffd34e;--b:#ffa24c"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
+    ${phone(tick ? frame('timer', 0) : frame('result', (u - BEAT * 3) / (SCENE - BEAT * 3)), 240, 600, 1, 2)}
+    ${tick ? sticker('clock', 70, 760, 1.4 + .25 * pulse(t), -10) + cap('남은 시간 <em>째깍째깍</em>', 280, t, SCENE * 7 + .02, 112, '#ff6b6b')
+           : sticker('trophy', 70, 760, 1.4 + .2 * pulse(t), -10) + sticker('medal1', 860, 1250, 1.2 + .2 * pulse(t + BEAT / 2), 10) + confetti(t, SCENE * 7 + BEAT * 3, 30) + cap('누가 <em>1등</em>?!', 280, t, SCENE * 7 + BEAT * 3, 150, '#ff6b6b')}`; },
 ];
 // 마무리: 두둥! (END, END+0.55) → 로고·제목 → COMING SOON
 const ending = t => {
