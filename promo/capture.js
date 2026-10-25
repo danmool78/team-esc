@@ -27,7 +27,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const N = 14; // 1초에 한 번, 약 12m씩 (시속 40km 남짓)
     for (let k = 0; k <= N; k++) {
       const f = k / N * 0.88; // 미션 반경 바로 앞에서 멈춘다
-      await p.evaluate(async ll => (await import('/demo.js')).writePos('DEMO', { ...ll, acc: 4 }), { lat: S.lat + (M.lat - S.lat) * f, lng: S.lng + (M.lng - S.lng) * f });
+      await p.evaluate(async ll => (await import('/demo.js?v=__BUILD__')).writePos('DEMO', { ...ll, acc: 4 }), { lat: S.lat + (M.lat - S.lat) * f, lng: S.lng + (M.lng - S.lng) * f });
       if (k <= 1) await p.waitForTimeout(1000); // 처음 두 번은 속도를 잴 시간
       for (let j = 0; j < 4 && k > 1; j++) await p.screenshot({ path: `${OUT}/drv-${String((k - 2) * 4 + j).padStart(3, '0')}.jpg`, quality: 88 }).then(() => p.waitForTimeout(150));
     }
@@ -80,7 +80,7 @@ fs.mkdirSync(OUT, { recursive: true });
     await p.evaluate(() => document.querySelector('#jOk').click());
     await seq(p, 'approved', 16, 80);
     // 점수가 쌓인 뒤: 끝나기 5분 전 → 게임 끝 → 결과
-    await p.evaluate(async () => (await import('/demo.js')).saveMeta('DEMO', { endAt: Date.now() + 299000 })); await p.waitForTimeout(2500);
+    await p.evaluate(async () => (await import('/demo.js?v=__BUILD__')).saveMeta('DEMO', { endAt: Date.now() + 299000 })); await p.waitForTimeout(2500);
     await p.evaluate(() => document.querySelector('.tabs button[data-tab=missions]').click()); await p.tap('#grip'); await p.waitForTimeout(500);
     await seq(p, 'timer', 1);
     await p.evaluate(() => document.querySelector('.tabs button[data-tab=host]').click()); await p.waitForTimeout(400);
@@ -136,7 +136,7 @@ fs.mkdirSync(OUT, { recursive: true });
   // ONLY=basic: 버스·자동차 없이 지도·미션·남은 시간·결과만
   if (process.env.ONLY === 'basic') {
     p = await page();
-    await p.evaluate(async () => (await import('/demo.js')).saveMeta('DEMO', { endAt: Date.now() + 299000 })); await p.waitForTimeout(2500);
+    await p.evaluate(async () => (await import('/demo.js?v=__BUILD__')).saveMeta('DEMO', { endAt: Date.now() + 299000 })); await p.waitForTimeout(2500);
     await p.tap('#grip'); await p.waitForTimeout(500);
     await seq(p, 'timer', 1);
     await p.evaluate(() => { document.querySelector('.tabs button[data-tab=host]').click(); });
@@ -149,15 +149,15 @@ fs.mkdirSync(OUT, { recursive: true });
   p = await page('&crowd');
   await p.tap('#grip'); await go(p, '은혜'); await p.waitForTimeout(34000);
   await p.mouse.move(200, 300); await p.mouse.wheel(0, 250); await p.waitForTimeout(2000);
-  const step = async () => { await p.evaluate(async () => (await import('/demo.js')).pause(false)); await p.waitForTimeout(1000); await p.evaluate(async () => (await import('/demo.js')).pause(true)); await p.waitForTimeout(700); };
-  await p.evaluate(async () => (await import('/demo.js')).pause(true));
+  const step = async () => { await p.evaluate(async () => (await import('/demo.js?v=__BUILD__')).pause(false)); await p.waitForTimeout(1000); await p.evaluate(async () => (await import('/demo.js?v=__BUILD__')).pause(true)); await p.waitForTimeout(700); };
+  await p.evaluate(async () => (await import('/demo.js?v=__BUILD__')).pause(true));
   await seq(p, 'bus', 32, 0, step);
   // 4) 자동차
   await go(p, '바람'); await step(); await step();
   await seq(p, 'car', 24, 0, step);
-  await p.evaluate(async () => (await import('/demo.js')).pause(false));
+  await p.evaluate(async () => (await import('/demo.js?v=__BUILD__')).pause(false));
   // 5) 끝나는 시간 5분 전 → 6) 결과
-  await p.evaluate(async () => (await import('/demo.js')).saveMeta('DEMO', { endAt: Date.now() + 299000 })); await p.waitForTimeout(2500);
+  await p.evaluate(async () => (await import('/demo.js?v=__BUILD__')).saveMeta('DEMO', { endAt: Date.now() + 299000 })); await p.waitForTimeout(2500);
   await seq(p, 'timer', 1);
   await p.tap('#grip'); await p.tap('.tabs button[data-tab=host]');
   await p.evaluate(() => { document.querySelector('#hEnd').click(); document.querySelector('#hEnd')?.click(); });

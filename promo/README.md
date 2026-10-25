@@ -1,23 +1,24 @@
 # 비전 퀘스트 — 홍보 쇼츠
 
-`vision-quest-shorts.mp4` — 1080×1920, 31초, 30fps. 장면은 배경음악 박자(143.6 BPM)에 맞춰 2마디마다 바뀐다.
+`vision-quest-shorts.mp4` — 1080×1920, 약 38초, 30fps. 장면은 배경음악 박자(143.6 BPM)에 맞춰 2마디마다 바뀐다.
 
-1. 전주 한옥마을이 게임판이 된다 (직접 그린 한옥·홍살문·은행나무 + 앱의 미니미)
-2. 지도 위 빛기둥이 바로 미션 장소
-3. 지도 보며 우리 팀 함께 출발
-4. 멀리 있는 미션은 차 타고 부릉
-5. 도착하면 현장 미션 — 해냈어요
-6. 진행자가 확인하면 점수 쏙 (+20)
-7. 도착 · 퀴즈 · 사진 미션 가득
-8. 남은 시간 째깍째깍 → 누가 1등?! (결과 화면)
-9. 두둥! 비전 퀘스트 — COMING SOON
+1. 다 같이 버스 타고 미션 현장 도착
+2. 우리가 모인 곳이 게임판이 된다 (떠 있는 마을 그림 + 앱의 미니미)
+3. 지도 위 빛기둥이 바로 미션 장소
+4. 3D 지도(지도 모드 3D 건물) 보며 우리 팀 함께 출발
+5. 미션 종류 ① 도착
+6. 미션 종류 ② 퀴즈
+7. 미션 종류 ③ 사진
+8. 미션 종류 ④ 현장 (+20)
+9. 미션 종류 ⑤ 술래잡기
+10. 남은 시간 째깍째깍 → 누가 1등?! (결과 화면)
+11. 두둥! 금빛 비전 퀘스트 — COMING SOON · SSSOFT
 
 ## 다시 만들기
 ```sh
 python3 -m http.server 8765 &        # 저장소 맨 위에서
 mkdir -p promo/audio && curl -o promo/audio/bgm.mp3 "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Pixel%20Peeker%20Polka%20-%20faster.mp3"
-node promo/capture.js                 # 앱 데모 화면 촬영 → promo/cap
-node promo/avatars.js                 # 미니미 그림
+sh promo/capture-all.sh               # 앱 데모 화면 촬영 → promo/cap (미니미 그림도)
 python3 promo/audio.py                # 음악 + 두둥 → promo/audio/final.wav
 node promo/render.js                  # shorts.html을 30fps로 찍어 mp4로 (node promo/render.js 3 15 처럼 주면 그 초의 정지 화면만)
 ```
