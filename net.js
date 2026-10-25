@@ -1,7 +1,8 @@
 /* Firebase: 로그인(이메일·구글)과 실시간 데이터베이스.
    자료 구조 (database.rules.json과 같게)
      users/{uid}                 { name, gender, avatar }
-     games/{code}/meta           { name, host, center{lat,lng}, radius, layer, status: ready|live|ended, created }
+     games/{code}/meta           { name, host, hosts{uid:true}, center{lat,lng}, radius, layer, status: ready|live|ended, created }
+                                 host = 게임을 만든 진행자(바꿀 수 없음), hosts = 그가 회원 중에서 더한 진행자(host·hosts 말고는 똑같이 진행)
      games/{code}/teams/{tid}    { name, color }
      games/{code}/members/{uid}  { name, avatar, team, online, joined }
      games/{code}/pos/{uid}      { lat, lng, acc, t }      — 걸을 때마다 몇 초에 한 번
@@ -88,6 +89,8 @@ export function watch(code, h) {
 /* ---------- 쓰기 ---------- */
 export const writePos = (code, p) => set(G(code, 'pos/' + uid()), { ...p, t: serverTimestamp() });
 export const clearPos = code => remove(G(code, 'pos/' + uid()));
+// 진행자 더하기·빼기: 게임을 만든 진행자만 (규칙이 막는다)
+export const setCohost = (code, who, on) => set(G(code, `meta/hosts/${who}`), on ? true : null);
 export const setStatus = (code, status) => set(G(code, 'meta/status'), status);
 export const saveMeta = (code, patch) => update(G(code, 'meta'), patch);
 export const saveTeams = (code, teams) => set(G(code, 'teams'), teams);

@@ -25,7 +25,7 @@
 - `geo.js` — 위경도 ↔ 지역 미터 좌표(동 +x, 남 +z), 거리
 - `stage/kit.js`, `stage/people.js` — 그 길에서 **그대로 가져온** 미니미 인형. 고치지 말고, 그 길에서 바뀌면 다시 복사한다. 인형은 `Actor`의 pos/goal을 0에 두고 바깥 묶음(group)을 옮기며, 걷는 동안 `set('walk')`
 - `assets/vendor/three.module.min.js` — three.js 0.160.0 (그 길과 같은 판)
-- `database.rules.json` — 보안 규칙. 진행자(meta/host)만 미션·팀·판정, 참가자는 자기 좌표·자기 팀의 완료만(`!data.exists()`), 사진 확인이 필요한 미션은 'wait'로만
+- `database.rules.json` — 보안 규칙. 진행자(meta/host = 게임을 만든 사람, meta/hosts = 그가 회원 중에서 더한 진행자)만 미션·팀·판정. 진행자 더하기·빼기와 host 바꾸기는 만든 사람만, 참가자는 자기 좌표·자기 팀의 완료만(`!data.exists()`), 사진 확인이 필요한 미션은 'wait'로만
 
 ## 게임 규칙의 요점
 - 인형: 가입 때 남/여만 고르면 그 길의 옷차림(`OUTFITS`) 중 하나를 무작위로 입힌다. 다시 뽑기 가능. 별칭(2~12자)은 필수 — 이름표와 검색에 쓰인다

@@ -40,6 +40,7 @@ const feed = (code, team, text) => { const f = { id: 'f' + now() + Math.random()
 
 export const writePos = async (code, p) => { S.games[code].pos[ME] = { ...p, t: now() }; fire(code); };
 export const clearPos = async code => { delete S.games[code].pos[ME]; fire(code); };
+export const setCohost = async (code, who, on) => { const m = S.games[code].meta; m.hosts ||= {}; if (on) m.hosts[who] = true; else delete m.hosts[who]; fire(code); };
 export const setStatus = async (code, s) => { S.games[code].meta.status = s; fire(code); };
 export const saveMeta = async (code, p) => { Object.assign(S.games[code].meta, p); fire(code); };
 export const saveTeams = async (code, t) => { S.games[code].teams = t; fire(code); };
