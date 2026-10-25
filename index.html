@@ -50,11 +50,22 @@
   };
   setTimeout(function () { window.hideSplash(true); }, 19000); // 비상구(20초)보다 먼저
   // 시작 음악: SSSOFT가 걷힐 때부터 웅장한 오케스트라 인트로 11초 (OpenGameArt 'Production Theme Intro [Epic Orchestra]', CC0).
-  // 시작 화면이 걷혀도 로그인 화면에서 끝까지 흐른다. 폰 브라우저는 손대기 전의 소리를 막으므로, 막히면 조용히 넘어간다
-  setTimeout(function () {
-    if (!document.getElementById('splash')) return;
-    try { var a = new Audio('assets/intro.mp3'); a.volume = 0.5; var p = a.play(); if (p && p.catch) p.catch(function () {}); window.__introAudio = a; } catch (e) {}
-  }, 1000);
+  // 시작 화면이 걷혀도 로그인 화면에서 끝까지 흐른다. 브라우저(특히 폰)는 화면을 한 번 누르기 전엔 소리를 막으므로,
+  // 막히면 처음 누르는 순간(시작 화면을 넘기거나 로그인 화면을 만질 때) 틀어 준다 — 앱을 연 뒤 30초 안에만
+  (function () {
+    var a = null, played = false, t0 = Date.now();
+    function play() {
+      if (played || Date.now() - t0 > 30000) return;
+      try {
+        a = a || new Audio('assets/intro.mp3'); a.volume = 0.5;
+        var p = a.play();
+        if (p && p.then) p.then(function () { played = true; off(); }, function () {}); else { played = true; off(); }
+      } catch (e) {}
+    }
+    function off() { ['pointerdown', 'keydown', 'touchend'].forEach(function (k) { document.removeEventListener(k, play, true); }); }
+    ['pointerdown', 'keydown', 'touchend'].forEach(function (k) { document.addEventListener(k, play, true); });
+    setTimeout(play, 1000);
+  })();
 </script>
 
 <!-- 로그인 -->
