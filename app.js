@@ -128,7 +128,10 @@ async function enter(code) {
   const msg = $('#lobbyMsg');
   const meta = await net.gameMeta(code).catch(() => null);
   if (!meta) { msg.className = 'msg err'; msg.textContent = `'${code}' 게임을 찾지 못했어요.`; return; }
-  await net.joinGame(code, profile);
+  msg.className = 'msg'; msg.textContent = '들어가는 중…';
+  try { await net.joinGame(code, profile); }
+  catch (er) { msg.className = 'msg err'; msg.textContent = `들어가지 못했어요 (${er.code || er.message}). 진행자에게 알려 주세요.`; return; }
+  msg.textContent = '';
   net.presence(code);
   store.set('lastGame', code);
   history.replaceState(null, '', `?${DEMO ? 'demo&' : ''}${FAKE ? `fakegps=${FAKE.lat},${FAKE.lng}&` : ''}g=${code}`);
