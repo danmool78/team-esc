@@ -1,6 +1,7 @@
 /* 3D 세계: 지형 위에 참가자 인형과 미션 표지를 세우고, 비스듬히 내려다보는 카메라로 그린다.
    조작은 그 길(the-way-jesus)의 3D 지형 모드와 같게 — 마우스: 끌면 옮기고, 오른쪽 버튼(또는 Shift)으로 끌면 돌리고 기울이고, 바퀴로 당긴다.
    손가락: 하나로 옮기고, 둘로 벌려 당기고 비틀어 돌리고 함께 위아래로 밀어 기울인다.
+   지형은 카메라가 보는 곳 둘레를 조각조각 이어 받아 그린다 (terrain.js) — 지도를 끌어 옮기면 그쪽 땅이 따라 생긴다.
    인형은 실제 크기로는 점처럼 작아 보여서, 카메라가 멀어질수록 함께 키운다 (자리는 그대로, 크기만) */
 import { THREE, damp, glowTexture } from './stage/kit.js';
 import { Actor } from './stage/people.js';
@@ -29,7 +30,7 @@ if (renderer) {
   wrap.appendChild(renderer.domElement);
 }
 
-let T = null; // 지형 {mesh, heightAt, frame, half}
+let T = null; // 지형 {group, heightAt, frame, want, radius}
 const players = new Map(), missions = new Map();
 const cam = { tx: 0, tz: 0, dist: 520, pitch: 0.85, yaw: 0, follow: null };
 const goal = { ...cam };
@@ -39,20 +40,13 @@ export const on = (k, f) => (hooks[k] = f);
 /* ---------- 지형 ---------- */
 export async function loadArea(area) {
   const t = await buildTerrain(area);
-  if (T) { scene.remove(T.mesh); T.mesh.geometry.dispose(); T.mesh.material.map.dispose(); T.mesh.material.dispose(); }
+  await t.prime(Math.min(area.radius * 1.3, 900));
+  if (T) { scene.remove(T.group); T.dispose(); if (T.edge) scene.remove(T.edge); }
   T = t;
-  scene.add(T.mesh);
-  // 지역 테두리: 게임 반경을 땅 위에 점선으로
-  if (T.edge) scene.remove(T.edge);
-  const pts = [];
-  for (let a = 0; a <= 128; a++) {
-    const x = Math.sin(a / 128 * Math.PI * 2) * area.radius, z = Math.cos(a / 128 * Math.PI * 2) * area.radius;
-    pts.push(new THREE.Vector3(x, T.heightAt(x, z) + 2, z));
-  }
-  T.edge = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineDashedMaterial({ color: 0xfff0c0, dashSize: 14, gapSize: 10, transparent: true, opacity: 0.8 }));
-  T.edge.computeLineDistances();
-  scene.add(T.edge);
-  scene.fog.near = area.radius * 1.4; scene.fog.far = area.radius * 4.5;
+  T.radius = area.radius;
+  T.edgeR = area.edge ?? area.radius;
+  T.edgeVer = -1;
+  scene.add(T.group);
   Object.assign(goal, { tx: 0, tz: 0, dist: area.radius * 1.5 });
   Object.assign(cam, { tx: 0, tz: 0, dist: area.radius * 1.5 });
   // 이미 들어와 있던 사람·미션을 새 지형 좌표로 다시 놓는다
@@ -61,6 +55,22 @@ export async function loadArea(area) {
   return T;
 }
 export const frame = () => T && T.frame;
+// 지역 테두리: 게임 반경을 땅 위에 점선으로. 조각이 새로 생길 때마다 땅 높이에 다시 맞춘다
+let edgeAt = 0;
+function drawEdge(now) {
+  if (!T.edgeR || T.edgeVer === T.version || now - edgeAt < 500) return;
+  edgeAt = now; T.edgeVer = T.version;
+  if (T.edge) { scene.remove(T.edge); T.edge.geometry.dispose(); }
+  const pts = [];
+  for (let a = 0; a <= 128; a++) {
+    const x = Math.sin(a / 128 * Math.PI * 2) * T.edgeR, z = Math.cos(a / 128 * Math.PI * 2) * T.edgeR;
+    pts.push(new THREE.Vector3(x, T.heightAt(x, z) + 2, z));
+  }
+  T.edge = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), edgeMat);
+  T.edge.computeLineDistances();
+  scene.add(T.edge);
+}
+const edgeMat = new THREE.LineDashedMaterial({ color: 0xfff0c0, dashSize: 14, gapSize: 10, transparent: true, opacity: 0.8 });
 
 /* ---------- 이름표: 캔버스 글씨를 스프라이트로 ---------- */
 function label(text, color = '#1d1813', sub = '') {
@@ -205,14 +215,15 @@ export function flyTo(ll, dist) {
   Object.assign(goal, { tx: x, tz: z });
   if (dist) goal.dist = dist;
 }
-export function resetView() { cam.follow = null; Object.assign(goal, { tx: 0, tz: 0, yaw: 0, pitch: 0.85, dist: T ? T.half * 1.1 : 520 }); }
+export function resetView() { cam.follow = null; Object.assign(goal, { tx: 0, tz: 0, yaw: 0, pitch: 0.85, dist: T ? T.radius * 1.5 : 520 }); }
 export const viewDist = () => cam.dist;
 
 function clampGoal() {
-  const lim = T ? T.half : 1000;
+  // 어디로든 옮길 수 있다 (가는 곳마다 지형을 받아 그린다). 평면 근사가 크게 틀어지지 않는 30km까지만
+  const lim = 30000;
   goal.tx = Math.max(-lim, Math.min(lim, goal.tx));
   goal.tz = Math.max(-lim, Math.min(lim, goal.tz));
-  goal.dist = Math.max(25, Math.min(lim * 3, goal.dist));
+  goal.dist = Math.max(25, Math.min(2500, goal.dist));
   goal.pitch = Math.max(0.3, Math.min(1.5, goal.pitch));
 }
 // 화면에서 끈 만큼 땅 위에서 옮긴다 (카메라 방위 기준)
@@ -285,7 +296,7 @@ function tap(cx, cy) {
     if (u.mid && hooks.tapMission) return hooks.tapMission(u.mid);
   }
   if (T && hooks.tapGround) {
-    const g = ray.intersectObject(T.mesh, false)[0];
+    const g = ray.intersectObject(T.group, true)[0];
     if (g) hooks.tapGround(T.frame.toLL(g.point.x, g.point.z));
   }
 }
@@ -314,6 +325,12 @@ function frameLoop(now) {
   const cp = Math.cos(cam.pitch);
   camera.position.set(cam.tx + Math.sin(cam.yaw) * cp * cam.dist, ty + Math.sin(cam.pitch) * cam.dist, cam.tz + Math.cos(cam.yaw) * cp * cam.dist);
   camera.lookAt(cam.tx, ty, cam.tz);
+  // 보는 곳 둘레의 지형 조각을 요청한다. 받아 둔 범위 바깥은 안개로 가린다
+  const loadR = Math.max(450, Math.min(1600, cam.dist * 1.4));
+  T.want(cam.tx, cam.tz, loadR);
+  scene.fog.near = cam.dist * 0.8;
+  scene.fog.far = cam.dist + loadR * 1.1;
+  drawEdge(now);
 
   // 인형 크기: 가까이선 사람 크기(1.7m 남짓)로, 멀어지면 화면에서 알아볼 만큼 키운다
   const big = Math.max(2.5, cam.dist * 0.05);
@@ -344,6 +361,7 @@ function frameLoop(now) {
     m.pillar.scale.set(r, beamH, r);
     m.glow.scale.setScalar(r * 7);
     m.glow.position.y = 2;
+    m.g.position.y = T.heightAt(m.g.position.x, m.g.position.z); // 조각이 늦게 생기면 그 높이로
     m.glow.material.opacity = (m.dim ? 0.35 : 0.8) + Math.sin(t * 2.5) * 0.15;
     const s = cam.dist * 0.018 * m.tag.userData.h;
     m.tag.scale.set(s * m.tag.userData.aspect, s, 1);

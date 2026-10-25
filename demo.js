@@ -63,12 +63,13 @@ function seed() {
   if (S.games.DEMO) return;
   const F = makeFrame(JEONJU);
   const at = (x, z) => F.toLL(x, z);
+  // 실제 자리 (OpenStreetMap Nominatim으로 찾은 좌표, 최명희문학관·홍살문은 지도에서 어림)
   const M = [
-    ['경기전 홍살문', 'arrive', -130, -40], ['전동성당 앞', 'arrive', -230, -120], ['오목대 정자', 'quiz', 240, 120, '오목대에서 잔치를 연 사람은? (힌트: 조선을 세움)', '이성계'],
-    ['향교 은행나무', 'photo', 120, 330], ['남천교 청연루', 'task', -60, 320], ['최명희문학관', 'arrive', 40, -60], ['자만벽화마을', 'quiz', 380, -60, '벽화마을 이름 두 글자', '자만'],
+    ['경기전 홍살문', 'arrive', 35.8153, 127.1506], ['전동성당 앞', 'arrive', 35.81333, 127.14946], ['오목대 정자', 'quiz', 35.81404, 127.15415, '오목대에서 잔치를 연 사람은? (힌트: 조선을 세움)', '이성계'],
+    ['향교 은행나무', 'photo', 35.81258, 127.15715], ['남천교 청연루', 'task', 35.81079, 127.15328], ['최명희문학관', 'arrive', 35.8152, 127.1527], ['자만벽화마을', 'quiz', 35.81414, 127.15716, '벽화마을 이름 두 글자', '자만'],
   ];
   const missions = {};
-  M.forEach(([title, type, x, z, q, a], i) => { const ll = at(x, z); missions['m' + i] = { title, type, lat: ll.lat, lng: ll.lng, r: 25, pts: type === 'arrive' ? 10 : 20, order: i, open: true, desc: '데모 미션', ...(q ? { q, ans: a } : {}) }; });
+  M.forEach(([title, type, lat, lng, q, a], i) => { missions['m' + i] = { title, type, lat, lng, r: 25, pts: type === 'arrive' ? 10 : 20, order: i, open: true, desc: '데모 미션', ...(q ? { q, ans: a } : {}) }; });
   const members = { [ME]: { name: '데모', avatar: 'disciple', team: 't1', online: true } };
   const pos = { [ME]: { ...at(0, 0), acc: 5, t: now() } };
   BOTS.forEach(([id, name, avatar, team], i) => { members[id] = { name, avatar, team, online: true }; pos[id] = { ...at(Math.sin(i) * 200, Math.cos(i) * 200), acc: 6, t: now() }; });

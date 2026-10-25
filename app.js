@@ -169,7 +169,7 @@ function onMeta() {
   const key = [center?.lat, center?.lng, G.meta.radius, G.meta.layer].join();
   if (key !== G.areaKey && center) {
     G.areaKey = key;
-    W.loadArea({ center, radius: G.meta.radius || 600, layer: G.meta.layer || 'sat' }).then(t => {
+    W.loadArea({ center, radius: G.meta.radius || 600, edge: localArea ? 0 : null, layer: G.meta.layer || 'sat' }).then(t => {
       $('#credit').textContent = [t.credit, t.demOk ? '고도 © Mapzen/AWS Terrain Tiles' : ''].filter(Boolean).join(' · ');
       syncPlayers(); syncMissions();
     });
@@ -410,14 +410,15 @@ function simHome() {
   const c = G.meta.center;
   if (sim && c && (!myLL || dist(myLL, c) > (G.meta.radius || 600) * 1.5)) setMyPos({ lat: c.lat, lng: c.lng, acc: 3 });
 }
-// 내 주변 지도: GPS로 받은 내 자리가 게임 지역 밖이면(예: 대전에서 전주 게임) 내 자리를 가운데로 지형을 새로 만들어
-// 내 화면에서만 보여 준다. 반경의 절반 넘게 걸어 나가면 다시 만들고, 게임 지역에 들어오면 원래 지도로 돌아간다
+// 내 주변 지도: GPS로 받은 내 자리가 게임 지역 밖이면(예: 대전에서 전주 게임) 내 자리를 원점으로 지형을 새로 받아
+// 내 화면에서만 보여 준다. 지형은 카메라를 따라 이어 받으므로 걸어 다녀도 다시 만들 필요는 없고,
+// 원점에서 20km 넘게 가면(평면 근사가 틀어지기 전에) 한 번 옮긴다. 게임 지역에 들어오면 원래 지도로 돌아간다
 let localArea = null;
 function followArea(p) {
   const c = G.meta.center, R = G.meta.radius || 600;
   if (!c) return;
   const out = dist(p, c) > R * 1.2;
-  if (out && (!localArea || dist(p, localArea) > R * 0.5)) {
+  if (out && (!localArea || dist(p, localArea) > 20000)) {
     const first = !localArea;
     localArea = { lat: p.lat, lng: p.lng };
     onMeta();

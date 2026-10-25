@@ -1,19 +1,22 @@
-/* 게임 지역의 3D 지형.
-   높이: AWS Open Data의 Terrain Tiles(terrarium, SRTM 등 공개 고도 자료)를 줌 15로 받아 이어 붙인다.
-   겉그림: 위성사진(Esri World Imagery의 Clarity — 기본 영상은 전주 상공이 줌마다 구름에 덮여 있었다) 또는 지도(OpenStreetMap) 타일을 이어 붙여 입힌다.
-   받지 못하면 높이로 음영을 그려 대신한다 (오프라인·차단된 망에서도 지형은 보이게) */
+/* 3D 지형: 지도를 옮기는 대로 이어 받아 그리는 조각 지형.
+   조각 하나 = 웹 메르카토르 줌 16 타일 하나 (전주에서 한 변 약 500m).
+   카메라가 보는 곳 둘레의 조각을 가까운 것부터 받아 만들고, 멀어진 조각은 버린다.
+   높이: AWS Open Data의 Terrain Tiles(terrarium, SRTM 등 공개 고도 자료) 줌 15.
+   겉그림: 위성사진(Esri World Imagery의 Clarity — 기본 영상은 전주 상공이 줌마다 구름에 덮여 있었다) 또는 지도(OpenStreetMap) 줌 17 타일 넷.
+   조각 경계의 높이는 모두 같은 함수(elevAt)로 구하므로 이웃 조각과 틈 없이 맞물린다 */
 import { THREE } from './stage/kit.js';
 import { makeFrame, lngPx, latPx } from './geo.js';
 
 export const EXAG = 1.6; // 높이 과장 배율 — 전주는 낮은 언덕이라 실제 비율로는 밋밋하다
-const HZ = 15;           // 높이 타일 줌 (≈ 4m/픽셀)
-const SEG = 220;         // 지형 격자 칸 수
+const ZD = 15, ZC = 16, ZI = 17; // 높이 · 조각 · 겉그림 줌
+const N = 40;                    // 조각 하나의 격자 칸 수 (≈ 12m 간격)
+const BUSY = 4;                  // 한꺼번에 만드는 조각 수
 
 export const LAYERS = {
-  sat: { url: (z, x, y) => `https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`, max: 17, credit: '위성사진 © Esri, Maxar, Earthstar Geographics' },
-  map: { url: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`, max: 18, credit: '지도 © OpenStreetMap 기여자' },
+  sat: { url: (z, x, y) => `https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`, credit: '위성사진 © Esri, Maxar, Earthstar Geographics' },
+  map: { url: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`, credit: '지도 © OpenStreetMap 기여자' },
 };
-const DEM = (z, x, y) => `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
+const DEM = (x, y) => `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${ZD}/${x}/${y}.png`;
 
 const loadImg = src => new Promise(res => {
   const im = new Image();
@@ -22,104 +25,148 @@ const loadImg = src => new Promise(res => {
   im.onerror = () => res(null);
   im.src = src;
 });
+// 메르카토르 전체 픽셀 → 위경도
+const pxLng = (x, z) => x / (256 * 2 ** z) * 360 - 180;
+const pxLat = (y, z) => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / (256 * 2 ** z)))) * 180 / Math.PI;
 
-// 위경도 범위를 덮는 타일을 받아 한 장의 캔버스로 잇는다. ox, oy: 캔버스 왼쪽 위의 전체 픽셀 좌표
-async function mosaic(bb, z, url) {
-  const x0 = Math.floor(lngPx(bb.lng0, z) / 256), x1 = Math.floor(lngPx(bb.lng1, z) / 256);
-  const y0 = Math.floor(latPx(bb.lat1, z) / 256), y1 = Math.floor(latPx(bb.lat0, z) / 256);
-  const c = document.createElement('canvas');
-  c.width = (x1 - x0 + 1) * 256; c.height = (y1 - y0 + 1) * 256;
-  const g = c.getContext('2d', { willReadFrequently: true });
-  const jobs = [];
-  let miss = 0;
-  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++)
-    jobs.push(loadImg(url(z, x, y)).then(im => (im ? g.drawImage(im, (x - x0) * 256, (y - y0) * 256) : miss++)));
-  await Promise.all(jobs);
-  return { c, g, z, ox: x0 * 256, oy: y0 * 256, miss, total: jobs.length };
+/* ---------- 고도 타일: 받아서 미터 값 배열로 풀어 둔다 (여러 게임·지역이 함께 쓴다) ---------- */
+const demWait = new Map(), demData = new Map();
+function dem(x, y) {
+  const k = x + '/' + y;
+  if (!demWait.has(k)) demWait.set(k, loadImg(DEM(x, y)).then(im => {
+    if (!im) return null;
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(im, 0, 0);
+    const d = g.getImageData(0, 0, 256, 256).data, h = new Float32Array(256 * 256);
+    for (let i = 0; i < h.length; i++) h[i] = d[i * 4] * 256 + d[i * 4 + 1] + d[i * 4 + 2] / 256 - 32768;
+    demData.set(k, h);
+    return h;
+  }));
+  return demWait.get(k);
+}
+// 고도(m). 그 자리의 고도 타일이 아직 없으면 null
+function elevAt(lat, lng) {
+  const fx = lngPx(lng, ZD) - 0.5, fy = latPx(lat, ZD) - 0.5;
+  const tx = Math.floor((fx + 0.5) / 256), ty = Math.floor((fy + 0.5) / 256);
+  const h = demData.get(tx + '/' + ty);
+  if (!h) return null;
+  const lx = Math.max(0, Math.min(254.999, fx - tx * 256)), ly = Math.max(0, Math.min(254.999, fy - ty * 256));
+  const ix = Math.floor(lx), iy = Math.floor(ly), u = lx - ix, v = ly - iy, a = iy * 256 + ix;
+  return (h[a] * (1 - u) + h[a + 1] * u) * (1 - v) + (h[a + 256] * (1 - u) + h[a + 257] * u) * v;
 }
 
-// 겉그림 줌: 지역 전체가 3000픽셀 안에 들어오는 가장 자세한 줌
-function pickZoom(bb, max) {
-  for (let z = max; z > 10; z--) {
-    const w = lngPx(bb.lng1, z) - lngPx(bb.lng0, z);
-    if (w <= 3000) return z;
-  }
-  return 11;
-}
-
-export async function buildTerrain({ center, radius, layer = 'sat' }) {
+/* ---------- 조각 지형 ---------- */
+// area: { center, layer } — center가 지역 좌표의 원점(0, 0)
+export async function buildTerrain({ center, layer = 'sat' }) {
   const F = makeFrame(center);
-  const half = radius * 1.35; // 반경 바깥으로 조금 더 깔아 가장자리가 보이지 않게
-  const a = F.toLL(-half, half), b = F.toLL(half, -half);
-  const bb = { lat0: a.lat, lng0: a.lng, lat1: b.lat, lng1: b.lng };
-
   const L = LAYERS[layer] || LAYERS.sat;
-  const [dem, img] = await Promise.all([mosaic(bb, HZ, DEM), mosaic(bb, pickZoom(bb, L.max), L.url)]);
-  const demData = dem.miss < dem.total ? dem.g.getImageData(0, 0, dem.c.width, dem.c.height).data : null;
+  const group = new THREE.Group();
+  group.name = 'terrain';
+  const chunks = new Map(); // 'x/y' → { mesh, H, ready, dead }
+  const queue = [];
+  let busy = 0, demOk = false, version = 0;
 
-  // 고도(m): terrarium = R·256 + G + B/256 − 32768
-  const elev = (lat, lng) => {
-    if (!demData) return 0;
-    const fx = lngPx(lng, HZ) - dem.ox - 0.5, fy = latPx(lat, HZ) - dem.oy - 0.5;
-    const ix = Math.max(0, Math.min(dem.c.width - 2, Math.floor(fx))), iy = Math.max(0, Math.min(dem.c.height - 2, Math.floor(fy)));
-    const tx = fx - ix, ty = fy - iy;
-    const at = (x, y) => { const i = (y * dem.c.width + x) * 4; return demData[i] * 256 + demData[i + 1] + demData[i + 2] / 256 - 32768; };
-    return (at(ix, iy) * (1 - tx) + at(ix + 1, iy) * tx) * (1 - ty) + (at(ix, iy + 1) * (1 - tx) + at(ix + 1, iy + 1) * tx) * ty;
-  };
-  const base = elev(center.lat, center.lng);
+  // 원점 고도를 0으로: 처음 받은 가운데 고도 타일에서 잰다
+  await dem(Math.floor(lngPx(center.lng, ZD) / 256), Math.floor(latPx(center.lat, ZD) / 256));
+  const base = elevAt(center.lat, center.lng) ?? 0;
+  const lift = e => (e == null ? 0 : (e - base) * EXAG);
 
-  // 격자의 높이를 미리 구해 둔다 (heightAt은 이 격자를 보간)
-  const N = SEG + 1, H = new Float32Array(N * N), step = (half * 2) / SEG;
-  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-    const ll = F.toLL(-half + i * step, -half + j * step);
-    H[j * N + i] = (elev(ll.lat, ll.lng) - base) * EXAG;
+  async function make(tx, ty, c) {
+    // 오른쪽·아래 경계는 이웃 타일의 첫 픽셀이라, 거기 걸친 고도 타일까지 기다린다
+    const dx = [Math.floor(tx / 2), Math.floor((tx + 1) / 2)], dy = [Math.floor(ty / 2), Math.floor((ty + 1) / 2)];
+    const jobs = [];
+    for (const x of new Set(dx)) for (const y of new Set(dy)) jobs.push(dem(x, y));
+    const cv = document.createElement('canvas'); cv.width = cv.height = 512;
+    const g = cv.getContext('2d');
+    let got = 0;
+    for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++)
+      jobs.push(loadImg(L.url(ZI, tx * 2 + i, ty * 2 + j)).then(im => { if (im) { g.drawImage(im, i * 256, j * 256); got++; } }));
+    await Promise.all(jobs);
+    if (c.dead) return;
+    demOk ||= demData.size > 0;
+
+    const pos = new Float32Array((N + 1) ** 2 * 3), uv = new Float32Array((N + 1) ** 2 * 2), H = new Float32Array((N + 1) ** 2);
+    for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
+      const k = j * (N + 1) + i;
+      const lat = pxLat(ty * 256 + (j / N) * 256, ZC), lng = pxLng(tx * 256 + (i / N) * 256, ZC);
+      const [x, z] = F.toXZ(lat, lng);
+      H[k] = lift(elevAt(lat, lng));
+      pos.set([x, H[k], z], k * 3);
+      uv.set([i / N, 1 - j / N], k * 2);
+    }
+    const idx = [];
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const a = j * (N + 1) + i, b = a + 1, d = a + N + 1, e = d + 1;
+      idx.push(a, d, b, b, d, e);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    let map = null;
+    if (got) { map = new THREE.CanvasTexture(cv); map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; }
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map, color: map ? 0xffffff : 0x8f9a6c, roughness: 0.95 }));
+    mesh.receiveShadow = true;
+    Object.assign(c, { mesh, H, ready: true });
+    group.add(mesh);
+    version++;
   }
-  const heightAt = (x, z) => {
-    const fx = Math.max(0, Math.min(SEG - 1e-3, (x + half) / step)), fz = Math.max(0, Math.min(SEG - 1e-3, (z + half) / step));
-    const i = Math.floor(fx), j = Math.floor(fz), tx = fx - i, tz = fz - j;
-    const h = (ii, jj) => H[jj * N + ii];
-    return (h(i, j) * (1 - tx) + h(i + 1, j) * tx) * (1 - tz) + (h(i, j + 1) * (1 - tx) + h(i + 1, j + 1) * tx) * tz;
-  };
-
-  const geo = new THREE.PlaneGeometry(half * 2, half * 2, SEG, SEG);
-  geo.rotateX(-Math.PI / 2); // 눕힌 판: 꼭짓점 순서가 북서 → 남동으로 x, z와 같다
-  const pos = geo.attributes.position, uv = geo.attributes.uv;
-  const useImg = img.miss < img.total;
-  for (let k = 0; k < pos.count; k++) {
-    const x = pos.getX(k), z = pos.getZ(k);
-    const i = Math.round((x + half) / step), j = Math.round((z + half) / step);
-    pos.setY(k, H[j * N + i]);
-    if (useImg) {
-      const ll = F.toLL(x, z);
-      uv.setXY(k, (lngPx(ll.lng, img.z) - img.ox) / img.c.width, 1 - (latPx(ll.lat, img.z) - img.oy) / img.c.height);
+  function pump() {
+    while (busy < BUSY && queue.length) {
+      const [tx, ty] = queue.shift(), c = chunks.get(tx + '/' + ty);
+      if (!c || c.dead) continue;
+      busy++;
+      make(tx, ty, c).catch(() => {}).finally(() => { busy--; pump(); });
     }
   }
-  geo.computeVertexNormals();
-
-  const tex = new THREE.CanvasTexture(useImg ? img.c : shade(H, N));
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 }));
-  mesh.receiveShadow = true;
-  mesh.name = 'terrain';
-  return { mesh, heightAt, frame: F, half, credit: useImg ? L.credit : '', demOk: !!demData };
-}
-
-// 겉그림을 받지 못했을 때: 높이에 따라 들판색과 북서쪽 빛의 음영을 칠한다
-function shade(H, N) {
-  const c = document.createElement('canvas');
-  c.width = c.height = N;
-  const g = c.getContext('2d'), im = g.createImageData(N, N);
-  let lo = Infinity, hi = -Infinity;
-  H.forEach(h => { lo = Math.min(lo, h); hi = Math.max(hi, h); });
-  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-    const h = H[j * N + i], t = (h - lo) / (hi - lo || 1);
-    const dx = H[j * N + Math.min(N - 1, i + 1)] - H[j * N + Math.max(0, i - 1)];
-    const dz = H[Math.min(N - 1, j + 1) * N + i] - H[Math.max(0, j - 1) * N + i];
-    const lit = 1 + (-dx - dz) * 0.04;
-    const k = (j * N + i) * 4;
-    im.data[k] = (120 + t * 70) * lit; im.data[k + 1] = (140 + t * 40) * lit; im.data[k + 2] = (90 + t * 30) * lit; im.data[k + 3] = 255;
+  function drop(k, c) {
+    c.dead = true;
+    if (c.mesh) { group.remove(c.mesh); c.mesh.geometry.dispose(); c.mesh.material.map?.dispose(); c.mesh.material.dispose(); }
+    chunks.delete(k);
   }
-  g.putImageData(im, 0, 0);
-  return c;
+
+  // 카메라가 보는 곳(x, z) 둘레 반경 r(m)의 조각을 원한다: 없는 것은 가까운 순서로 받고, 2.2배 넘게 먼 것은 버린다
+  let last = null;
+  function want(x, z, r) {
+    if (last && Math.hypot(x - last.x, z - last.z) < 40 && Math.abs(r - last.r) < last.r * 0.15) return;
+    last = { x, z, r };
+    const ll = F.toLL(x, z);
+    const cx = lngPx(ll.lng, ZC) / 256, cy = latPx(ll.lat, ZC) / 256;
+    const tm = 40075016 * Math.cos(ll.lat * Math.PI / 180) / 2 ** ZC; // 조각 한 변(m)
+    const rt = r / tm;
+    const add = [];
+    for (let ty = Math.floor(cy - rt); ty <= Math.floor(cy + rt); ty++) for (let tx = Math.floor(cx - rt); tx <= Math.floor(cx + rt); tx++) {
+      const d = Math.hypot(tx + 0.5 - cx, ty + 0.5 - cy);
+      if (d > rt + 0.71) continue;
+      const k = tx + '/' + ty;
+      if (!chunks.has(k)) { chunks.set(k, { tx, ty }); add.push([d, tx, ty]); }
+    }
+    chunks.forEach((c, k) => { if (Math.hypot(c.tx + 0.5 - cx, c.ty + 0.5 - cy) > rt * 2.2 + 1) drop(k, c); });
+    // 새로 원하는 것을 맨 앞에, 가까운 것부터
+    queue.unshift(...add.sort((a, b) => a[0] - b[0]).map(([, tx, ty]) => [tx, ty]));
+    pump();
+  }
+
+  // 높이: 다 만든 조각이면 그 격자에서, 아니면 받아 둔 고도 타일에서 바로, 그것도 없으면 0
+  const heightAt = (x, z) => {
+    const ll = F.toLL(x, z);
+    const gx = lngPx(ll.lng, ZC) / 256, gy = latPx(ll.lat, ZC) / 256;
+    const tx = Math.floor(gx), ty = Math.floor(gy), c = chunks.get(tx + '/' + ty);
+    if (c?.ready) {
+      const fx = (gx - tx) * N, fy = (gy - ty) * N, i = Math.min(N - 1, Math.floor(fx)), j = Math.min(N - 1, Math.floor(fy)), u = fx - i, v = fy - j;
+      const h = (a, b) => c.H[b * (N + 1) + a];
+      return (h(i, j) * (1 - u) + h(i + 1, j) * u) * (1 - v) + (h(i, j + 1) * (1 - u) + h(i + 1, j + 1) * u) * v;
+    }
+    return lift(elevAt(ll.lat, ll.lng));
+  };
+  // 처음 화면: 원점 둘레 r까지 다 받을 때까지 기다린다
+  async function prime(r) {
+    want(0, 0, r);
+    while (busy || queue.length) await new Promise(res => setTimeout(res, 60));
+  }
+  const dispose = () => chunks.forEach((c, k) => drop(k, c));
+
+  return { group, heightAt, frame: F, want, prime, dispose, credit: L.credit, get demOk() { return demOk; }, get version() { return version; } };
 }
