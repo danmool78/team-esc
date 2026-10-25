@@ -1,12 +1,13 @@
 /* 3D 세계: 지형 위에 참가자 인형과 미션 표지를 세우고, 비스듬히 내려다보는 카메라로 그린다.
    조작은 그 길(the-way-jesus)의 3D 지형 모드와 같게 — 마우스: 끌면 옮기고, 오른쪽 버튼(또는 Shift)으로 끌면 돌리고 기울이고, 바퀴로 당긴다.
    손가락: 하나로 옮기고, 둘로 벌려 당기고 비틀어 돌리고 함께 위아래로 밀어 기울인다.
-   내 위치 따라가기(◎): 나는 늘 화면 가운데, 진행 방향이 화면 위로 오게 지도가 돌고 움직인다.
+   내 위치(◎): 한 번 누르면 나를 가운데 두고 따라가고, 한 번 더 누르면 진행 방향 고정 — 가는 방향이 화면 위로 오게 지도가 돌고 움직인다.
    지형은 카메라가 보는 곳 둘레를 조각조각 이어 받아 그린다 (terrain.js) — 지도를 끌어 옮기면 그쪽 땅이 따라 생긴다.
    인형은 실제 크기로는 점처럼 작아 보여서, 카메라가 멀어질수록 함께 키운다 (자리는 그대로, 크기만) */
 import { THREE, damp, glowTexture } from './stage/kit.js';
 import { Actor, TYPES } from './stage/people.js';
 import { buildTerrain } from './terrain.js';
+import { setBuildingsOn } from './buildings.js';
 import { iconImage } from './icons.js';
 
 const wrap = document.getElementById('world');
@@ -69,6 +70,8 @@ export async function loadArea(area) {
   return T;
 }
 export const frame = () => T && T.frame;
+// 지도 모드의 3D 건물 켜고 끄기
+export const setBuildings = setBuildingsOn;
 // 게임 반경: 땅 위에 깔린 금색 띠(폭 EDGE m). 지도는 반경과 상관없이 어디로든 옮겨 볼 수 있고, 이 띠만 게임 지역을 알려 준다.
 // 조각이 새로 생길 때마다 띠를 땅 높이에 다시 맞춘다
 const EDGE = 5, edgeMat = new THREE.MeshBasicMaterial({ color: 0xffd36a, transparent: true, opacity: 0.75, depthWrite: false, side: THREE.DoubleSide });
@@ -128,7 +131,7 @@ function relabel(holder, key, ...args) {
 
 /* ---------- 알록달록 옷 ----------
    그 길의 옷차림(TYPES)은 밤색·흙색이라 게임 화면에선 칙칙하다. 모양은 그대로 두고 색만 바꾼 옷을 따로 등록해 입힌다
-   (stage/는 고치지 않는다): 겉옷은 팀 색(조금 밝게), 망토·두건은 사람마다 밝은 색 하나, 띠·테두리는 금색 */
+   (stage/는 고치지 않는다): 겉옷은 각자 고른 색(조금 밝게), 망토·두건은 사람마다 밝은 색 하나, 띠·테두리는 금색 */
 const ACCENTS = ['#ffd34e', '#ff9fc4', '#8fd8ff', '#9be38a', '#ffb36b', '#c9a8ff', '#ffffff'];
 const mix = (a, b, k) => '#' + [1, 3, 5].map(i => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - k) + parseInt(b.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0')).join('');
 function outfit(type, color, seed = '') {
@@ -145,10 +148,10 @@ function outfit(type, color, seed = '') {
 }
 
 /* ---------- 참가자 ---------- */
-// p: { uid, name, avatar, color, me }
+// p: { uid, name, avatar, robe(옷 색), color(팀 색), me }
 export function upsertPlayer(info) {
   let p = players.get(info.uid);
-  const look = outfit(info.avatar, info.color, info.uid);
+  const look = outfit(info.avatar, info.robe || info.color, info.uid); // 겉옷은 각자 고른 색, 팀은 이름표·고리 색으로
   if (!p || p.look !== look) {
     if (p) scene.remove(p.g);
     const g = new THREE.Group();
@@ -269,10 +272,10 @@ export function upsertMission(m) {
     const beam = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 20, 1, true), new THREE.MeshBasicMaterial({ map: beamTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
     beam.position.y = 0.5;
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.96, 1, 64), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
-    ring.rotation.x = -Math.PI / 2;
-    const disc = new THREE.Mesh(new THREE.CircleGeometry(1, 64), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.16, depthWrite: false }));
-    disc.rotation.x = -Math.PI / 2;
+    // 반경 고리·원판은 땅 높이를 따라 굽혀 깐다(drapeMission) — 평평한 판은 비탈에서 땅에 묻혀 사라졌다
+    const ring = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+    const disc = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }));
+    ring.renderOrder = disc.renderOrder = 2;
     const hit = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 8), new THREE.MeshBasicMaterial({ visible: false }));
     hit.position.y = 0.5; hit.userData.mid = m.id;
     const pillar = new THREE.Group();
@@ -309,9 +312,41 @@ function placeMission(o) {
   const [x, z] = T.frame.toXZ(o.lat, o.lng);
   const y = T.heightAt(x, z);
   o.g.position.set(x, y, z);
-  const r = Math.max(o.r || 0, 4);
-  o.ring.scale.setScalar(r); o.disc.scale.setScalar(r);
-  o.ring.position.y = o.disc.position.y = 1.2;
+  drapeMission(o);
+}
+// 반경 고리(띠)와 원판을 땅 위 0.8m에 땅 모양대로 깐다. 좌표는 표지 묶음(땅 높이 y에 놓인 g) 기준.
+// 지형 조각이 새로 생기면(T.version) 다시 깐다
+function drapeMission(o) {
+  o.drapeVer = T.version; o.drapeAt = performance.now();
+  const r = Math.max(o.r || 0, 4), S = 72, R = 6, bw = Math.max(1.2, r * 0.04);
+  const { x: gx, y: gy, z: gz } = o.g.position;
+  const at = (x, z) => [x, T.heightAt(gx + x, gz + z) - gy + 0.8, z];
+  const ringPos = [], ringIdx = [];
+  for (let a = 0; a <= S; a++) {
+    const s = Math.sin(a / S * Math.PI * 2), c = Math.cos(a / S * Math.PI * 2);
+    ringPos.push(...at(s * (r - bw), c * (r - bw)), ...at(s * r, c * r));
+    if (a < S) ringIdx.push(a * 2, a * 2 + 1, a * 2 + 2, a * 2 + 1, a * 2 + 3, a * 2 + 2);
+  }
+  // 원판: 가운데 한 점 + 동심원 R겹
+  const discPos = [...at(0, 0)], discIdx = [];
+  for (let k = 1; k <= R; k++) for (let a = 0; a < S; a++) {
+    const rr = r * k / R, t = a / S * Math.PI * 2;
+    discPos.push(...at(Math.sin(t) * rr, Math.cos(t) * rr));
+  }
+  const v = (k, a) => (k === 0 ? 0 : 1 + (k - 1) * S + (a % S));
+  for (let a = 0; a < S; a++) {
+    discIdx.push(0, v(1, a), v(1, a + 1));
+    for (let k = 1; k < R; k++) discIdx.push(v(k, a), v(k + 1, a), v(k + 1, a + 1), v(k, a), v(k + 1, a + 1), v(k, a + 1));
+  }
+  const set = (mesh, pos, idx) => {
+    mesh.geometry.dispose();
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    mesh.geometry = g;
+  };
+  set(o.ring, ringPos, ringIdx);
+  set(o.disc, discPos, discIdx);
 }
 export function removeMission(id) {
   const o = missions.get(id);
@@ -322,37 +357,109 @@ export function removeMission(id) {
    자동차: 시속 25km(7m/s)를 넘으면 팀 색 오픈카에 태우고, 15km(4m/s) 밑으로 5분 넘게 있으면 내린다.
    오픈버스: 4명 넘게 25m 안에서 비슷한 속도로 20초 넘게 함께 움직이면 버스에 두 줄로 줄 세워 태운다. 멈춰도 5분까지는 그대로.
    크기는 인형 한 명 키를 1로 그리고, 인형처럼 카메라가 멀어지면 함께 키운다 */
+// 차·버스와 탄 사람의 크기 — 가까이선 실제 크기(VEH: 인형 한 명 키 2.5m 남짓, 차 길이 4m 남짓)로 지도와 함께 줄어들고,
+// 멀리 빼서 점처럼 사라질 만큼 작아지면 그때부터는 화면에서 알아볼 만한 크기를 지킨다 (걷는 인형보다는 작게)
+const VEH = 2.5, VEH_MIN = 0.022;
+// 차에 탄 사람: 차보다 조금 작게(차 크기의 0.7배) 좌석 높이에 세워 앞유리·차체와 겹치지 않게
+const CAR_RIDER = 0.7, CAR_SEAT = 0.4;
+let veh = VEH;
 const CAR_ON = 7, CAR_OFF = 4, BUS_MIN = 4, BUS_R = 25, BUS_DV = 1.5, BUS_AFTER = 20000;
-const box = (w, h, d, color) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color }));
-const wheel = (x, z, r = 0.17) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.12, 14), new THREE.MeshLambertMaterial({ color: '#2b2522' })); m.rotation.z = Math.PI / 2; m.position.set(x, r, z); return m; };
-// 상자 하나를 (x, y, z) 자리에 붙인다 (y는 상자 가운데 높이)
-const put = (g, w, h, d, color, x, y, z) => { const m = box(w, h, d, color); m.position.set(x, y, z); g.add(m); return m; };
-// 오픈카: 팀 색 몸통 + 흰 줄 + 앞 유리. 인형은 가운데 서서 윗몸이 보인다 (앞은 -z)
-function makeCar(color) {
+// 재질은 색마다 한 번만 만든다 (차·버스가 여럿이어도 같은 색은 함께 쓴다)
+const vmats = new Map();
+const vmat = (color, basic) => { const k = color + (basic ? 'b' : ''); if (!vmats.has(k)) vmats.set(k, basic ? new THREE.MeshBasicMaterial({ color }) : new THREE.MeshLambertMaterial({ color })); return vmats.get(k); };
+// 바퀴: 검은 타이어 + 밝은 휠캡 + 가운데 색 점
+function wheel(x, z, r = 0.17, cap = '#ffd34e') {
   const g = new THREE.Group();
-  put(g, 0.95, 0.32, 1.7, color, 0, 0.34, 0);
-  put(g, 0.97, 0.06, 1.72, '#fff6e0', 0, 0.42, 0); // 옆줄 (윗면은 팀 색 그대로)
-  put(g, 0.9, 0.16, 0.12, '#2b2522', 0, 0.6, 0.6); // 뒷자리 등받이
-  const glass = new THREE.Mesh(new THREE.PlaneGeometry(0.86, 0.3), new THREE.MeshBasicMaterial({ color: '#bfe9ff', transparent: true, opacity: 0.7, side: THREE.DoubleSide }));
-  glass.position.set(0, 0.66, -0.45); glass.rotation.x = -0.35; g.add(glass);
-  put(g, 0.2, 0.08, 0.04, '#ffe27a', -0.3, 0.4, -0.86); put(g, 0.2, 0.08, 0.04, '#ffe27a', 0.3, 0.4, -0.86); // 앞등
-  [[-0.47, -0.55], [0.47, -0.55], [-0.47, 0.55], [0.47, 0.55]].forEach(([x, z]) => g.add(wheel(x, z)));
+  const tire = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.13, 18), vmat('#2b2522'));
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.58, r * 0.58, 0.14, 14), vmat('#e8e2d6'));
+  const dot = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.22, r * 0.22, 0.15, 10), vmat(cap));
+  g.add(tire, hub, dot);
+  g.rotation.z = Math.PI / 2; g.position.set(x, r, z);
   return g;
 }
-// 오픈버스: 노란 몸통, 지붕 없이 낮은 난간, 앞 운전석. 길이 L은 탈 사람 수로 (seating)
-function makeBus(L) {
+// 옆모습(앞이 +x)을 폭만큼 밀어 둥근 몸통을 만든다 → 차의 앞(-z)을 보게 돌린다
+function bodyFrom(shape, width, color) {
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: width, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 3, curveSegments: 10 });
+  geo.translate(0, 0, -width / 2); geo.rotateY(Math.PI / 2);
+  return new THREE.Mesh(geo, vmat(color));
+}
+const ball = (g, r, color, x, y, z, basic) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 8), vmat(color, basic)); m.position.set(x, y, z); g.add(m); return m; };
+// 상자 하나를 (x, y, z) 자리에 붙인다 (y는 상자 가운데 높이)
+const put = (g, w, h, d, color, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), vmat(color)); m.position.set(x, y, z); g.add(m); return m; };
+// 오픈카: 둥근 팀 색 몸통, 보닛 흰 줄, 금테 앞 유리, 좌석, 앞등·뒷등, 크롬 범퍼, 거울. 인형은 가운데 서서 윗몸이 보인다 (앞은 -z)
+function makeCar(color) {
   const g = new THREE.Group();
-  put(g, 1.15, 0.38, L, '#ffc93c', 0, 0.36, 0);
-  put(g, 1.17, 0.07, L + 0.02, '#ff6b6b', 0, 0.56, 0);
-  // 난간: 양옆과 뒤
-  [-0.56, 0.56].forEach(x => put(g, 0.05, 0.3, L - 0.9, '#3fbfd9', x, 0.74, 0.45));
-  put(g, 1.15, 0.3, 0.05, '#3fbfd9', 0, 0.74, L / 2 - 0.03);
-  // 운전석: 앞 덮개와 유리
-  put(g, 1.15, 0.22, 0.7, '#ffc93c', 0, 0.68, -L / 2 + 0.36);
-  put(g, 1.1, 0.42, 0.06, '#bfe9ff', 0, 0.98, -L / 2 + 0.74);
-  const n = Math.max(2, Math.round(L / 1.1));
-  for (let i = 0; i < n; i++) { const z = -L / 2 + 0.35 + (i * (L - 0.7)) / (n - 1); g.add(wheel(-0.58, z, 0.2), wheel(0.58, z, 0.2)); }
-  g.userData = { L, deck: 0.58 };
+  const sh = new THREE.Shape();
+  sh.moveTo(-0.8, 0.18); sh.lineTo(0.8, 0.18);
+  sh.quadraticCurveTo(0.9, 0.19, 0.89, 0.33); sh.quadraticCurveTo(0.87, 0.45, 0.68, 0.47);
+  sh.lineTo(0.24, 0.5); sh.lineTo(0.2, 0.41); sh.lineTo(-0.44, 0.41); sh.lineTo(-0.48, 0.5);
+  sh.lineTo(-0.7, 0.5); sh.quadraticCurveTo(-0.9, 0.48, -0.89, 0.32); sh.quadraticCurveTo(-0.88, 0.19, -0.8, 0.18);
+  g.add(bodyFrom(sh, 0.84, color));
+  put(g, 0.18, 0.012, 0.62, '#ffffff', 0, 0.535, -0.55).rotation.x = -0.06; // 보닛 줄
+  // 앞 유리: 하늘빛 유리
+  const glass = new THREE.Mesh(new THREE.PlaneGeometry(0.84, 0.26), new THREE.MeshBasicMaterial({ color: '#bfe9ff', transparent: true, opacity: 0.55, side: THREE.DoubleSide }));
+  glass.position.set(0, 0.66, -0.2); glass.rotation.x = 0.45; g.add(glass); // 위쪽이 뒤(실내 쪽)로 눕게 (앞은 -z)
+  // 좌석 (크림색 등받이)
+  [-0.2, 0.2].forEach(x => { put(g, 0.3, 0.08, 0.26, '#fff4e0', x, 0.48, 0.05); put(g, 0.3, 0.26, 0.07, '#fff4e0', x, 0.6, 0.2); });
+  put(g, 0.72, 0.22, 0.07, '#fff4e0', 0, 0.58, 0.5);
+  // 앞등·뒷등·범퍼·거울
+  [-0.28, 0.28].forEach(x => { ball(g, 0.065, '#fff7c2', x, 0.37, -0.9, true); ball(g, 0.05, '#ff4d4d', x, 0.4, 0.91, true); });
+  put(g, 0.8, 0.07, 0.06, '#d9d4c8', 0, 0.23, -0.93); put(g, 0.8, 0.07, 0.06, '#d9d4c8', 0, 0.23, 0.93);
+  [-0.47, 0.47].forEach(x => put(g, 0.07, 0.06, 0.04, color, x * 1.06, 0.6, -0.12));
+  [[-0.44, -0.52], [0.44, -0.52], [-0.44, 0.52], [0.44, 0.52]].forEach(([x, z]) => g.add(wheel(x, z)));
+  return g;
+}
+// 행선판 글씨: 한 번만 그려 모든 버스가 함께 쓴다
+let signTex = null;
+function busSign() {
+  if (!signTex) {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 112;
+    const x = c.getContext('2d');
+    x.fillStyle = '#2b2118'; x.fillRect(0, 0, 512, 112);
+    x.fillStyle = '#ffd34e'; x.font = '900 64px "Noto Sans KR", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText('비전 퀘스트', 256, 60);
+    signTex = new THREE.CanvasTexture(c); signTex.colorSpace = THREE.SRGBColorSpace;
+  }
+  return signTex;
+}
+// 오픈버스: 둥근 노란 몸통, 아래층 창문 띠와 빨간 줄, 앞 유리·그릴·앞등, 위층은 지붕 없이 하늘색 난간과 기둥, 앞에 행선판.
+// 길이 L은 탈 사람 수로 (seating). 사람은 위층 바닥(deck)에 줄 맞춰 선다
+function makeBus(L) {
+  const g = new THREE.Group(), W = 1.12, h = L / 2;
+  const sh = new THREE.Shape();
+  sh.moveTo(-h + 0.08, 0.17); sh.lineTo(h - 0.14, 0.17); sh.quadraticCurveTo(h, 0.17, h, 0.32);
+  sh.lineTo(h, 0.48); sh.quadraticCurveTo(h, 0.6, h - 0.14, 0.6); sh.lineTo(-h + 0.08, 0.6);
+  sh.quadraticCurveTo(-h, 0.6, -h, 0.52); sh.lineTo(-h, 0.25); sh.quadraticCurveTo(-h, 0.17, -h + 0.08, 0.17);
+  g.add(bodyFrom(sh, W - 0.08, '#ffc93c'));
+  // 옆: 빨간 줄, 창문 띠와 창살
+  [-1, 1].forEach(sd => {
+    const x = sd * (W / 2 + 0.005);
+    put(g, 0.02, 0.05, L - 0.2, '#ff6b6b', x, 0.27, 0);
+    put(g, 0.02, 0.13, L - 0.5, '#9fdcff', x, 0.43, 0.05);
+    for (let z = -h + 0.3; z < h - 0.15; z += 0.42) put(g, 0.025, 0.15, 0.04, '#3b2a1a', x, 0.43, z);
+  });
+  // 앞: 큰 유리, 그릴, 앞등 / 뒤: 뒷등
+  put(g, W - 0.24, 0.17, 0.02, '#9fdcff', 0, 0.45, -h - 0.04);
+  put(g, 0.5, 0.07, 0.02, '#3b2a1a', 0, 0.27, -h - 0.04);
+  [-0.4, 0.4].forEach(x => { ball(g, 0.06, '#fff7c2', x, 0.27, -h - 0.03, true); ball(g, 0.05, '#ff4d4d', x, 0.3, h + 0.03, true); });
+  put(g, W - 0.1, 0.06, 0.06, '#d9d4c8', 0, 0.2, -h - 0.05);
+  // 위층: 낮은 하늘색 벽, 기둥, 윗 난간
+  const D = 0.64, R = D + 0.3;
+  [-1, 1].forEach(sd => {
+    const x = sd * (W / 2 - 0.03);
+    put(g, 0.04, 0.12, L - 0.1, '#3fbfd9', x, D + 0.06, 0);
+    put(g, 0.05, 0.04, L - 0.1, '#ffffff', x, R, 0);
+    for (let z = -h + 0.1; z <= h - 0.05; z += 0.45) put(g, 0.035, R - D, 0.035, '#ffffff', x, (R + D) / 2, z);
+  });
+  put(g, W - 0.06, 0.12, 0.04, '#3fbfd9', 0, D + 0.06, h - 0.05); put(g, W - 0.06, 0.04, 0.05, '#ffffff', 0, R, h - 0.05);
+  // 행선판: 위층 앞에 서 있는 판
+  put(g, W - 0.04, 0.26, 0.05, '#2b2118', 0, D + 0.13, -h + 0.06);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.12, 0.22), new THREE.MeshBasicMaterial({ map: busSign() }));
+  sign.position.set(0, D + 0.13, -h + 0.03); sign.rotation.y = Math.PI; g.add(sign);
+  const sign2 = sign.clone(); sign2.position.z = -h + 0.09; sign2.rotation.y = 0; g.add(sign2); // 뒤에서도 보이게
+  const n = Math.max(2, Math.round(L / 1.6));
+  for (let i = 0; i < n; i++) { const z = -h + 0.42 + (i * (L - 0.84)) / (n - 1); g.add(wheel(-0.56, z, 0.2, '#ff6b6b'), wheel(0.56, z, 0.2, '#ff6b6b')); }
+  g.userData = { L, deck: D };
   return g;
 }
 const buses = new Map(); // id → { g, rows, members[], x, z, ang, slowAt }
@@ -420,7 +527,8 @@ function settle(obj, x, z, ang, hl, hw) {
   return Math.max(T.heightAt(x, z), (hF + hB) / 2, (hR + hL) / 2);
 }
 // 매 장면: 버스를 사람들 가운데로 옮기고, 앞을 함께 가는 방향으로 돌리고, 자리마다 인형을 세운다
-function placeBuses(big, dt) {
+function placeBuses(dt) {
+  const big = veh; // 버스는 지도와 함께 줄어드는 크기 (최소 크기는 지킨다)
   buses.forEach(b => {
     const m = b.members.filter(p => p.cur);
     if (!m.length) return;
@@ -456,10 +564,14 @@ function placeBuses(big, dt) {
 // headUp: 그 사람의 진행 방향이 화면 위로 오게 지도를 돌린다 (내 위치 따라가기)
 export function follow(uid, headUp = false) { cam.follow = uid; cam.headUp = !!uid && headUp; }
 export const following = () => cam.follow;
+export const headingUp = () => cam.headUp;
 // 폰 나침반 방위(도, 북에서 시계 방향). null이면 걸어간 방향으로 돌아간다
 export function setCompass(deg) { compass = deg == null || !isFinite(deg) ? null : deg * Math.PI / 180; }
-// 진행 방향(북에서 시계 방향, 라디안): 내 것은 나침반 우선, 아니면 마지막으로 걸어간 방향
-const headingOf = p => (p.me && compass != null ? compass : p.hd);
+// 진행 방향 (북에서 시계 방향, 라디안). 내 것은 ① 움직이는 중이면 GPS 이동 방향(6초 안에 받은 것) ② 멈췄으면 폰 나침반
+// ③ 둘 다 없으면 마지막으로 걸어간 방향. 다른 사람은 걸어간 방향
+let course = null, courseAt = 0;
+export function setCourse(deg) { course = deg * Math.PI / 180; courseAt = performance.now(); }
+const headingOf = p => (!p.me ? p.hd : course != null && performance.now() - courseAt < 6000 ? course : compass != null ? compass : p.hd);
 // 각도를 기준 각도 가까이로 옮긴다 (359°→1°로 돌 때 한 바퀴 거꾸로 돌지 않게)
 const near = (a, ref) => ref + Math.atan2(Math.sin(a - ref), Math.cos(a - ref));
 export function flyTo(ll, dist) {
@@ -497,7 +609,8 @@ function unfollow() {
 
 /* ---------- 손가락·마우스 ---------- */
 const ptrs = new Map();
-let gesture = null, downAt = null;
+// multi: 이번 손짓에 두 손가락이 닿은 적 있음 — 다 뗄 때까지 남은 한 손가락으론 옮기지 않는다 (벌려 당기다 따라가기가 풀리지 않게)
+let gesture = null, downAt = null, multi = false, drag0 = null;
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 if (renderer) {
   const el = renderer.domElement;
@@ -506,6 +619,7 @@ if (renderer) {
     el.setPointerCapture(e.pointerId);
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
     downAt = ptrs.size === 1 ? { x: e.clientX, y: e.clientY, t: performance.now() } : null;
+    if (ptrs.size === 1) { multi = false; drag0 = { x: e.clientX, y: e.clientY }; } else multi = true;
     gesture = null;
   });
   el.addEventListener('pointermove', e => {
@@ -514,8 +628,9 @@ if (renderer) {
     const dx = e.clientX - p.x, dy = e.clientY - p.y;
     if (ptrs.size === 1) {
       if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 6) downAt = null;
-      if (e.buttons & 2 || e.shiftKey) { goal.yaw -= dx * 0.006; goal.pitch += dy * 0.005; clampGoal(); }
-      else pan(dx, dy);
+      if (e.buttons & 2 || e.shiftKey) { if (!cam.headUp) goal.yaw -= dx * 0.006; goal.pitch += dy * 0.005; clampGoal(); }
+      // 따라가는 중엔 손가락이 16px 넘게 끌려야 옮긴다 (두 번째 손가락이 조금 늦게 닿아도 풀리지 않게)
+      else if (!multi && !(cam.follow && Math.hypot(e.clientX - drag0.x, e.clientY - drag0.y) < 16)) pan(dx, dy);
       p.x = e.clientX; p.y = e.clientY;
       return;
     }
@@ -527,18 +642,18 @@ if (renderer) {
     goal.dist *= before.d / Math.max(after.d, 1);
     let da = after.ang - before.ang;
     if (da > Math.PI) da -= Math.PI * 2; if (da < -Math.PI) da += Math.PI * 2;
-    if (Math.abs(da) > 0.004 && cam.headUp) cam.headUp = false; // 손으로 돌리면 진행 방향 맞추기를 멈춘다 (가운데 따라가기는 그대로)
-    goal.yaw -= da;
+    if (!cam.headUp) goal.yaw -= da; // 진행 방향 고정 중엔 손으로 돌리지 않는다 (벌려 당기기·기울이기는 그대로)
     goal.pitch += (after.my - before.my) * 0.004;
     clampGoal();
   });
   const up = e => {
     ptrs.delete(e.pointerId);
+    if (!ptrs.size) multi = false;
     if (downAt && performance.now() - downAt.t < 450) tap(e.clientX, e.clientY);
     downAt = null;
   };
   el.addEventListener('pointerup', up);
-  el.addEventListener('pointercancel', e => { ptrs.delete(e.pointerId); downAt = null; });
+  el.addEventListener('pointercancel', e => { ptrs.delete(e.pointerId); downAt = null; if (!ptrs.size) multi = false; });
   el.addEventListener('wheel', e => { e.preventDefault(); goal.dist *= Math.exp(e.deltaY * 0.0012); clampGoal(); }, { passive: false });
 }
 
@@ -602,10 +717,11 @@ function frameLoop(now) {
 
   // 인형 크기: 가까이선 사람 크기(1.7m 남짓)로, 멀어지면 화면에서 알아볼 만큼 키운다
   const big = Math.max(2.5, cam.dist * 0.05);
+  veh = Math.max(VEH, cam.dist * VEH_MIN);
   const t = now / 1000;
   if (now - groupAt > 1000) { groupAt = now; updateGroups(now); }
   players.forEach(p => (p.seat = null));
-  placeBuses(big, dt);
+  placeBuses(dt);
   players.forEach(p => {
     if (!p.cur) { p.g.visible = false; return; }
     p.g.visible = true;
@@ -627,21 +743,21 @@ function frameLoop(now) {
     if (p.carG) {
       p.carG.visible = p.car;
       if (p.car) {
-        p.carG.scale.setScalar(big);
+        p.carG.scale.setScalar(veh);
         if (p.spd > 0.5) p.carAng = damp(p.carAng || 0, near(-Math.atan2(p.vx, -p.vz), p.carAng || 0), 6, dt); // 서 있을 땐 방향 그대로
         // 인형 묶음은 차 안에 서도록 0.3만큼 올렸으니, 차는 그만큼 내리고 비탈에 맞춰 기울인다
-        const y = settle(p.carG, p.cur.x, p.cur.y, p.carAng || 0, 0.8 * big, 0.45 * big);
-        p.carG.position.y = y - T.heightAt(p.cur.x, p.cur.y) - 0.3 * big;
+        const y = settle(p.carG, p.cur.x, p.cur.y, p.carAng || 0, 0.8 * veh, 0.45 * veh);
+        p.carG.position.y = y - T.heightAt(p.cur.x, p.cur.y) - CAR_SEAT * veh;
       }
     }
     const a = p.actor;
     a.pos.set(0, 0); a.goal.set(0, 0);
     a.faceT = p.seat ? p.seat.face : p.face;
     a.set(moving && !p.seat && !p.car ? 'walk' : 'idle');
-    a.big = big * (p.seat?.k || 1); // 버스에 많이 타면 작게
+    a.big = p.seat ? veh * p.seat.k : p.car ? veh * CAR_RIDER : big; // 탄 사람은 차·버스에 맞춘 크기 (차는 조금 작게, 버스에 많이 타면 더 작게)
     a.update(t, dt);
     if (p.seat) p.g.position.set(p.seat.x, p.seat.y, p.seat.z);
-    else p.g.position.set(p.cur.x, T.heightAt(p.cur.x, p.cur.y) + (p.car ? 0.3 * big : 0), p.cur.y);
+    else p.g.position.set(p.cur.x, T.heightAt(p.cur.x, p.cur.y) + (p.car ? CAR_SEAT * veh : 0), p.cur.y);
     const s = cam.dist * 0.019 * p.tag.userData.h;
     p.tag.scale.set(s * p.tag.userData.aspect, s, 1);
     p.tag.position.y = a.big * 1.05 + s * 0.7;
@@ -654,6 +770,7 @@ function frameLoop(now) {
     m.glow.scale.setScalar(r * 7);
     m.glow.position.y = 2;
     m.g.position.y = T.heightAt(m.g.position.x, m.g.position.z); // 조각이 늦게 생기면 그 높이로
+    if (m.drapeVer !== T.version && now - m.drapeAt > 500) drapeMission(m);
     m.glow.material.opacity = (m.dim ? 0.35 : 0.8) + Math.sin(t * 2.5) * 0.15;
     const s = cam.dist * 0.018 * m.tag.userData.h;
     m.tag.scale.set(s * m.tag.userData.aspect, s, 1);

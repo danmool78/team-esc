@@ -7,6 +7,7 @@
    조각 경계의 높이는 모두 같은 함수(elevAt)로 구하므로 이웃 조각과 틈 없이 맞물린다 */
 import { THREE } from './stage/kit.js';
 import { makeFrame, lngPx, latPx } from './geo.js';
+import { makeBuildings } from './buildings.js';
 
 export const EXAG = 1.6; // 높이 과장 배율 — 전주는 낮은 언덕이라 실제 비율로는 밋밋하다
 const ZD = 15, ZC = 17;          // 높이 · 조각(=겉그림) 줌
@@ -31,17 +32,20 @@ const pxLng = (x, z) => x / (256 * 2 ** z) * 360 - 180;
 const pxLat = (y, z) => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / (256 * 2 ** z)))) * 180 / Math.PI;
 
 /* ---------- 고도 타일: 받아서 미터 값 배열로 풀어 둔다 (여러 게임·지역이 함께 쓴다) ---------- */
-const demWait = new Map(), demData = new Map();
+// 오래 안 쓴 것부터 버려 최대 DEM_MAX장(한 장 256KB, 한 변 약 1km)만 둔다 — 차로 멀리 가도 메모리가 계속 늘지 않게
+const demWait = new Map(), demData = new Map(), DEM_MAX = 64;
 function dem(x, y) {
   const k = x + '/' + y;
-  if (!demWait.has(k)) demWait.set(k, loadImg(DEM(x, y)).then(im => {
+  if (demWait.has(k)) { const p = demWait.get(k); demWait.delete(k); demWait.set(k, p); return p; } // 방금 쓴 것으로 맨 뒤에
+  for (const old of demWait.keys()) { if (demWait.size < DEM_MAX) break; demWait.delete(old); demData.delete(old); }
+  demWait.set(k, loadImg(DEM(x, y)).then(im => {
     if (!im) return null;
     const c = document.createElement('canvas'); c.width = c.height = 256;
     const g = c.getContext('2d', { willReadFrequently: true });
     g.drawImage(im, 0, 0);
     const d = g.getImageData(0, 0, 256, 256).data, h = new Float32Array(256 * 256);
     for (let i = 0; i < h.length; i++) h[i] = d[i * 4] * 256 + d[i * 4 + 1] + d[i * 4 + 2] / 256 - 32768;
-    demData.set(k, h);
+    if (demWait.has(k)) demData.set(k, h); // 받는 사이 버려졌으면 담지 않는다
     return h;
   }));
   return demWait.get(k);
@@ -125,9 +129,17 @@ export async function buildTerrain({ center, layer = 'sat' }) {
     chunks.delete(k);
   }
 
+  // 지도 모드면 3D 건물도 (바탕 지도와 같은 오픈스트리트맵 자료라 윤곽이 지도와 맞는다)
+  const bld = layer === 'map' ? makeBuildings({
+    F, ground: (lat, lng) => lift(elevAt(lat, lng)),
+    ready: (lat, lng) => dem(Math.floor(lngPx(lng, ZD) / 256), Math.floor(latPx(lat, ZD) / 256)),
+  }) : null;
+  if (bld) group.add(bld.group);
+
   // 카메라가 보는 곳(x, z) 둘레 반경 r(m)의 조각을 원한다: 없는 것은 가까운 순서로 받고, 2.2배 넘게 먼 것은 버린다
   let last = null;
   function want(x, z, r) {
+    bld?.want(x, z, r);
     if (last && Math.hypot(x - last.x, z - last.z) < 40 && Math.abs(r - last.r) < last.r * 0.15) return;
     last = { x, z, r };
     const ll = F.toLL(x, z);
@@ -165,7 +177,7 @@ export async function buildTerrain({ center, layer = 'sat' }) {
     want(x, z, r);
     while (busy || queue.length) await new Promise(res => setTimeout(res, 60));
   }
-  const dispose = () => chunks.forEach((c, k) => drop(k, c));
+  const dispose = () => { chunks.forEach((c, k) => drop(k, c)); bld?.dispose(); };
 
   return { group, heightAt, frame: F, want, prime, dispose, credit: L.credit, get demOk() { return demOk; }, get version() { return version; } };
 }

@@ -11,7 +11,7 @@
   // 비상구: 앱이 시작하다 오류가 나거나 20초 안에 첫 화면이 안 뜨면 '다시 불러오기'를 보인다 (행사 중 진갈색 빈 화면에 갇히지 않게)
   addEventListener('error', function () { if (!window.__booted) setTimeout(rescue, 300); });
   setTimeout(function () { if (!window.__booted) rescue(); }, 20000);
-  function rescue() { var r = document.getElementById('rescue'); if (r && !window.__booted) r.hidden = false; }
+  function rescue() { var r = document.getElementById('rescue'); if (r && !window.__booted) { r.hidden = false; window.hideSplash && hideSplash(true); } }
   async function hardReload() {
     try { (await navigator.serviceWorker?.getRegistrations() || []).forEach(function (x) { x.unregister(); }); } catch (e) {}
     try { (await caches.keys()).filter(function (k) { return k.indexOf('tiles') < 0; }).forEach(function (k) { caches.delete(k); }); } catch (e) {}
@@ -26,30 +26,78 @@
 <meta name="apple-mobile-web-app-title" content="비전 퀘스트">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Gowun+Batang:wght@400;700&family=Noto+Sans+KR:wght@400;500;700&family=Montserrat:wght@300;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<!-- 시작 화면: 먼저 검은 바탕에 SSSOFT가 1초쯤 살며시 떴다 지고, 이어서 로고와 '비전 퀘스트'가 등장한다. 앱을 불러오는 동안의 빈 화면도 이것으로 덮는다.
+     앱을 연 뒤 4초쯤 지나면 사라진다(누르면 바로). 시작에 실패해 비상구가 뜰 땐 그 전에 걷는다 -->
+<div class="splash paint" id="splash" onclick="window.hideSplash && hideSplash(true)">
+  <div class="intro"><div class="intro-in"><b>SSSOFT</b><i></i><small>Spark · Shape · Ship</small></div></div>
+  <img class="sp-art" src="assets/splash-bg.webp" alt="">
+  <div class="ripples"><i></i><i></i><i></i></div><div class="stars"></div>
+  <img class="sp-hero" src="assets/hero.svg" alt="">
+  <img class="sp-title logo-title" src="assets/title.webp" alt="비전 퀘스트">
+  <div class="sp-sub">VISION QUEST</div>
+  <div class="sp-tag">어디서든 모여서, 걷고 이동하며 하는 팀 미션 게임</div>
+</div>
+<script>
+  // 시작 화면 걷기: 너무 빨리 사라지면 등장이 안 보이니 연 뒤 4초는 둔다 (SSSOFT 1.2초 + 등장 + 다 등장한 화면을 1초쯤)
+  window.hideSplash = function (now) {
+    var s = document.getElementById('splash'); if (!s || s.classList.contains('out')) return;
+    var wait = now ? 0 : Math.max(0, 4000 - performance.now());
+    setTimeout(function () { s.classList.add('out'); setTimeout(function () { s.remove(); }, 500); }, wait);
+  };
+  setTimeout(function () { window.hideSplash(true); }, 19000); // 비상구(20초)보다 먼저
+  // 시작 음악: SSSOFT가 걷힐 때부터 웅장한 오케스트라 인트로 11초 (OpenGameArt 'Production Theme Intro [Epic Orchestra]', CC0).
+  // 시작 화면이 걷혀도 로그인 화면에서 끝까지 흐른다. 브라우저(특히 폰)는 화면을 한 번 누르기 전엔 소리를 막으므로,
+  // 막히면 처음 누르는 순간(시작 화면을 넘기거나 로그인 화면을 만질 때) 틀어 준다 — 앱을 연 뒤 30초 안에만
+  (function () {
+    var a = null, played = false, t0 = Date.now();
+    function play() {
+      if (played || Date.now() - t0 > 30000) return;
+      try {
+        a = a || new Audio('assets/intro.mp3'); a.volume = 0.5;
+        var p = a.play();
+        if (p && p.then) p.then(function () { played = true; off(); }, function () {}); else { played = true; off(); }
+      } catch (e) {}
+    }
+    function off() { ['pointerdown', 'keydown', 'touchend'].forEach(function (k) { document.removeEventListener(k, play, true); }); }
+    ['pointerdown', 'keydown', 'touchend'].forEach(function (k) { document.addEventListener(k, play, true); });
+    setTimeout(play, 1000);
+  })();
+</script>
 
 <!-- 로그인 -->
-<section id="auth" class="screen center" hidden>
-  <div class="card narrow">
-    <p class="eyebrow">VISION QUEST</p>
-    <h1 class="title">비전 퀘스트</h1>
-    <p class="fine">팀원들과 실제로 걸으며 미션을 풀어요. 누가 어디 있는지, 상대 팀이 몇 개를 해냈는지 지도에서 바로 보여요.</p>
-    <button id="googleBtn" class="btn wide google"><span>G</span> 구글 계정으로 시작</button>
-    <div class="or">또는 이메일</div>
-    <form id="emailForm" class="stack">
-      <input id="email" type="email" placeholder="이메일" autocomplete="email" required>
-      <input id="pw" type="password" placeholder="비밀번호 (6자 이상)" autocomplete="current-password" minlength="6" required>
-      <button class="btn wide primary" id="emailBtn">로그인</button>
+<!-- 대문(로그인): 떠 있는 마을 그림을 깔고, 남색 유리 카드에 로그인. 넓은 화면은 카드가 오른쪽, 세로 폰은 그림 아래 -->
+<section id="auth" class="screen gate" hidden>
+  <img class="gate-art" src="assets/splash-bg.webp" alt="">
+  <div class="card login">
+    <h1 class="login-title"><img class="logo-title" src="assets/title.webp" alt="비전 퀘스트"></h1>
+    <p class="login-sub" id="authSub">로그인하고 새로운 여정을 시작하세요</p>
+    <form id="emailForm" class="login-form">
+      <label class="fl">이메일
+        <span class="field"><i data-ic="mail"></i><input id="email" type="email" placeholder="이메일을 입력하세요" autocomplete="email" required></span></label>
+      <label class="fl">비밀번호
+        <span class="field"><i data-ic="lock"></i><input id="pw" type="password" placeholder="비밀번호를 입력하세요" autocomplete="current-password" minlength="6" required>
+          <button type="button" class="eye" id="pwEye" data-ic="eye" aria-label="비밀번호 보기"></button></span></label>
+      <div class="row between login-opts">
+        <label class="check"><input type="checkbox" id="remember" checked><span></span>로그인 유지</label>
+        <button type="button" class="link gold" id="resetBtn">비밀번호 찾기</button>
+      </div>
+      <button class="btn wide goldbtn" id="emailBtn">로그인</button>
     </form>
-    <div class="row between fine">
-      <button class="link" id="toggleSign">처음이에요 — 가입하기</button>
-      <button class="link" id="resetBtn">비밀번호를 잊었어요</button>
-    </div>
+    <div class="or">또는</div>
+    <button id="googleBtn" class="btn wide google" data-ic="google">Google로 계속하기</button>
+    <p class="login-alt"><span id="toggleQ">아직 계정이 없으신가요?</span> <button type="button" class="link gold" id="toggleSign">회원가입</button></p>
     <p class="msg" id="authMsg"></p>
+    <p class="login-foot"><a href="privacy.html" target="_blank" rel="noopener">개인정보처리방침</a></p>
   </div>
+  <!-- 사업자 정보 -->
+  <footer class="biz">
+    <span>상호 에스에스소프트(SSSOFT)</span><span>대표 김성수</span><span>사업자등록번호 772-01-03846</span><span>전화 042-670-7577</span><span>이메일 sssoft1004@gmail.com</span>
+    <small>© 2026 SSSOFT. All rights reserved.</small>
+  </footer>
 </section>
 
 <!-- 처음 한 번: 이름과 인형 -->
@@ -57,7 +105,7 @@
   <div class="card narrow">
     <p class="eyebrow">내 인형</p>
     <h2 class="title sm">지도 위에서 나를 대신할 인형</h2>
-    <div class="avatarbox"><img id="avatarImg" alt=""><button class="btn ghost small" id="reroll" data-ic="dice">다시 뽑기</button></div>
+    <div class="avatarbox"><img id="avatarImg" alt=""><button class="btn ghost small" id="reroll" data-ic="dice">다시 뽑기</button><div class="robes" id="robes" aria-label="옷 색 고르기"></div></div>
     <div class="seg" id="genderSeg"><button data-g="m" class="on">남자</button><button data-g="f">여자</button></div>
     <label class="fine">별칭 — 지도 이름표와 검색에 쓰여요
       <input id="profName" placeholder="별칭 (2~12자)" maxlength="12" minlength="2"></label>
@@ -84,7 +132,7 @@
         <input id="cName" placeholder="게임 이름 (예: 한옥마을 팀 미션)" required>
         <label>방식 — 팀 수는 게임 중에도 바꿀 수 있어요 <select id="cTeams"><option value="solo">개인전 (각자 점수)</option><option value="2">팀전 2팀</option><option value="3" selected>팀전 3팀</option><option value="4">팀전 4팀</option><option value="5">팀전 5팀</option><option value="6">팀전 6팀</option><option value="7">팀전 7팀</option><option value="8">팀전 8팀</option><option value="9">팀전 9팀</option><option value="10">팀전 10팀</option></select></label>
         <label>게임 지역 중심
-          <select id="cCenter"><option value="jeonju">전주 한옥마을</option><option value="here">지금 내 위치</option><option value="custom">직접 입력 (위도, 경도)</option></select>
+          <select id="cCenter"><option value="here">지금 내 위치</option><option value="jeonju">전주 한옥마을</option><option value="custom">직접 입력 (위도, 경도)</option></select>
         </label>
         <input id="cLL" placeholder="35.8155, 127.1525" hidden>
         <label>반경 — 작을수록 위성사진이 선명해요 <select id="cRadius"><option value="200">200m</option><option value="300">300m</option><option value="500" selected>500m (권장)</option><option value="800">800m</option><option value="1000">1km</option></select></label>
@@ -100,19 +148,19 @@
   <div id="world"></div>
   <div class="nogl" id="nogl" hidden>이 기기에서는 3D를 그릴 수 없어요. 아래 목록으로 확인해 주세요.</div>
   <header class="hud">
-    <div class="gtitle"><b id="gName"></b><small id="gStatus"></small><span class="timer" id="gTimer" hidden></span></div>
+    <div class="gtitle"><b id="gName"></b><small id="gStatus"></small><span class="timer" id="gTimer" hidden></span><button class="sig" id="sendIc" data-ic="signal" title="위치 전송 상태" hidden></button></div>
     <div class="scores" id="scores"></div>
   </header>
   <div class="fabs">
-    <button class="fab" id="fabMe" title="내 위치" data-ic="locate"></button>
+    <button class="fab" id="fabMe" title="내 위치" data-ic="locateOff"></button>
     <button class="fab" id="fabAll" title="전체 보기" data-ic="expand"></button>
     <button class="fab" id="fabLayer" title="위성/지도" data-ic="map"></button>
+    <button class="fab" id="fabBld" title="3D 건물 켜기/끄기 (지도 모드)" data-ic="building" hidden></button>
     <button class="fab" id="fabPocket" title="주머니 모드 — 화면을 까맣게 하고 위치만 계속 보내요" data-ic="moon"></button>
   </div>
   <div class="gpsbar" id="gpsBar">
     <button class="btn primary small" id="gpsBtn" data-ic="pin">위치 공유 켜기</button>
-    <button class="btn small" id="simBtn" title="GPS 대신 게임 현장(전주) 가운데에 서고, 지도를 누르면 그리로 걸어가요 (현장 밖에서 시험할 때)" data-ic="flask">테스트 모드</button>
-    <button class="btn small" id="offBtn" hidden>위치 공유 끄기</button>
+    <button class="btn small" id="simBtn" title="GPS 대신 게임 현장 가운데에 서고, 지도를 누르면 그리로 걸어가요 (현장 밖에서 시험할 때)" data-ic="flask">테스트 모드</button>
     <span id="gpsText"></span>
   </div>
   <div class="placing" id="placing" hidden>지도를 눌러 미션 위치를 고르세요 <button class="link" id="placeCancel">취소</button></div>
@@ -140,7 +188,7 @@
 <!-- 비상구 화면 (위 스크립트가 띄운다) -->
 <div class="rescue" id="rescue" hidden><div><b>앱을 불러오지 못했어요</b><p>새 판으로 바뀌는 중이었을 수 있어요.</p><button class="btn primary" onclick="hardReload()">다시 불러오기</button></div></div>
 
-<script type="module" src="app.js"></script>
+<script type="module" src="app.js?v=__BUILD__"></script>
 <!-- 주머니 모드: 화면은 켜 둔 채(위치가 계속 나가게) 까맣게 덮는다. 길게 눌러야 풀린다 -->
 <div class="pocket" id="pocket" hidden>
   <div class="pk" id="pkBox">

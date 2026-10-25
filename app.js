@@ -3,7 +3,8 @@
    지도: 실제 GPS 좌표를 몇 초마다 올리고, 모두의 좌표를 받아 미니미 인형이 그 자리까지 걸어가게 한다.
    점수판: 팀마다 해낸 미션 수와 점수를 위에 늘 보이고, 바뀌는 순간 반짝인다 */
 import { JEONJU, dist, fmtDist } from './geo.js';
-import * as W from './world.js';
+// 3D 장면은 판 번호를 붙여 불러온다 — 폰이 예전 world.js를 들고 있으면 새 app.js가 부르는 함수가 없어 위치가 멈췄다
+import * as W from './world.js?v=__BUILD__';
 import { ic, iconImage, iconURL } from './icons.js';
 
 // 판 번호: 배포 때 GitHub Actions가 index.html과 같이 커밋 번호로 바꾼다. 홈 화면 앱이 예전 index.html을 들고 있으면
@@ -20,7 +21,7 @@ const FAKE = (() => { const v = new URLSearchParams(location.search).get('fakegp
 // 화면 크기 고정: 아이폰 사파리는 확대 금지(user-scalable=no)를 무시하므로 두 손가락 확대를 직접 막는다 (3D 지도 위의 두 손가락은 지도가 쓴다)
 ['gesturestart', 'gesturechange'].forEach(k => document.addEventListener(k, e => e.preventDefault()));
 document.addEventListener('touchmove', e => { if (e.touches.length > 1 && !e.target.closest('#world')) e.preventDefault(); }, { passive: false });
-const net = await import(DEMO ? './demo.js' : './net.js');
+const net = await import((DEMO ? './demo.js' : './net.js') + '?v=' + BUILD);
 const $ = s => document.querySelector(s);
 // 이모티콘 대신 귀여운 SVG 아이콘: data-ic가 붙은 단추 앞에 넣고, 찾기 칸에는 돋보기를 깐다
 document.querySelectorAll('[data-ic]').forEach(el => el.insertAdjacentHTML('afterbegin', ic(el.dataset.ic)));
@@ -38,7 +39,7 @@ const TEAM_PRESET = [['청팀', '#3d7be0'], ['홍팀', '#e0503d'], ['녹팀', '#
 // 개인전: 사람마다 색 (uid로 늘 같은 색)
 const PERSON_COLORS = ['#3d7be0', '#e0503d', '#3dae6a', '#d9a520', '#8e5bd6', '#e8862e', '#3fbfd9', '#e06aa8', '#7fae3a', '#c0763f', '#5a6fd6', '#d6455f'];
 const personColor = uid => PERSON_COLORS[[...uid].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % PERSON_COLORS.length];
-const TYPES = { arrive: ['pin', '도착'], quiz: ['quiz', '퀴즈'], photo: ['camera', '사진'], task: ['flag', '현장 미션'] };
+const TYPES = { arrive: ['pin', '도착'], quiz: ['quiz', '퀴즈'], photo: ['camera', '사진'], task: ['flag', '현장 미션'], tag: ['tag', '술래잡기'] };
 const tic = type => ic(TYPES[type]?.[0] || 'pin');
 // 알림(팀 없는 소식)은 확성기 아이콘으로 — 예전 소식 앞의 이모티콘은 떼어 낸다
 const plain = t => String(t || '').replace(/^📣\s*/u, '');
@@ -47,7 +48,7 @@ const STALE = 90e3; // 이만큼 좌표가 안 오면 흐리게
 
 const screens = ['auth', 'profile', 'lobby', 'game'];
 // 첫 화면이 뜨면 시작 성공 — index.html의 비상구를 닫는다
-const show = id => { screens.forEach(s => ($('#' + s).hidden = s !== id)); window.__booted = true; if ($('#rescue')) $('#rescue').hidden = true; };
+const show = id => { screens.forEach(s => ($('#' + s).hidden = s !== id)); window.__booted = true; if ($('#rescue')) $('#rescue').hidden = true; window.hideSplash?.(); };
 let user = null, profile = null;
 
 /* ---------- 로그인 ---------- */
@@ -55,9 +56,15 @@ let signing = false;
 $('#toggleSign').onclick = () => {
   signing = !signing;
   $('#emailBtn').textContent = signing ? '가입하기' : '로그인';
-  $('#toggleSign').textContent = signing ? '이미 가입했어요 — 로그인' : '처음이에요 — 가입하기';
+  $('#authSub').textContent = signing ? '가입하고 함께 여정을 시작하세요' : '로그인하고 새로운 여정을 시작하세요';
+  $('#toggleQ').textContent = signing ? '이미 계정이 있으신가요?' : '아직 계정이 없으신가요?';
+  $('#toggleSign').textContent = signing ? '로그인' : '회원가입';
+  $('#pw').placeholder = signing ? '비밀번호를 정하세요 (6자 이상)' : '비밀번호를 입력하세요';
   $('#pw').autocomplete = signing ? 'new-password' : 'current-password';
 };
+$('#pwEye').onclick = () => { const p = $('#pw'); p.type = p.type === 'password' ? 'text' : 'password'; $('#pwEye').classList.toggle('on', p.type === 'text'); };
+// 로그인 유지: 끄면 이 브라우저 창을 닫을 때 로그아웃 (같이 쓰는 폰·PC에서)
+const remember = () => net.setRemember?.($('#remember').checked);
 const authErr = e => {
   const m = { 'auth/invalid-credential': '이메일이나 비밀번호가 맞지 않아요.', 'auth/email-already-in-use': '이미 가입한 이메일이에요. 로그인해 주세요.', 'auth/weak-password': '비밀번호는 6자 이상으로 해 주세요.', 'auth/invalid-email': '이메일 주소를 확인해 주세요.', 'auth/popup-closed-by-user': '구글 로그인 창이 닫혔어요.', 'auth/operation-not-allowed': '아직 이 로그인 방식이 켜져 있지 않아요 (Firebase 콘솔에서 켜야 해요).', 'auth/configuration-not-found': '아직 로그인 설정이 되어 있지 않아요 (Firebase 콘솔 → Authentication 시작).' }[e.code];
   $('#authMsg').className = 'msg err';
@@ -66,9 +73,9 @@ const authErr = e => {
 $('#emailForm').onsubmit = async e => {
   e.preventDefault();
   $('#authMsg').textContent = '';
-  try { await (signing ? net.signUp : net.signIn)($('#email').value.trim(), $('#pw').value); } catch (er) { authErr(er); }
+  try { await remember(); await (signing ? net.signUp : net.signIn)($('#email').value.trim(), $('#pw').value); } catch (er) { authErr(er); }
 };
-$('#googleBtn').onclick = () => net.google().catch(authErr);
+$('#googleBtn').onclick = () => Promise.resolve(remember()).then(() => net.google()).catch(authErr);
 $('#resetBtn').onclick = async () => {
   const em = $('#email').value.trim();
   if (!em) { $('#authMsg').textContent = '이메일을 먼저 적어 주세요.'; return; }
@@ -76,9 +83,17 @@ $('#resetBtn').onclick = async () => {
 };
 
 /* ---------- 별칭·인형 ---------- */
-let draft = { gender: 'm', avatar: pick(OUTFITS.m) };
+// 옷 색은 각자 고른다 (팀은 이름표·발밑 고리 색으로 구분하니 옷은 자유). 망토는 사람마다 밝은 색, 띠는 금색
+const ROBES = ['#f4efe4', '#3d7be0', '#e0503d', '#3dae6a', '#ffcf3a', '#8e5bd6', '#e8862e', '#3fbfd9', '#e06aa8', '#7fae3a', '#2b2d3a'];
+let draft = { gender: 'm', avatar: pick(OUTFITS.m), robe: pick(ROBES) };
+// 옷 색: 고른 색, 아직 안 골랐으면(예전 가입자) 사람마다 정해진 밝은 색
+const robeOf = uid => G.members[uid]?.robe || personColor(uid);
+const myThumb = (t, robe) => W.avatarThumb(t, robe || profile?.robe || personColor(net.me() || 'me'), net.me() || '');
+$('#robes').innerHTML = ROBES.map(c => `<button type="button" data-c="${c}" style="background:${c}" aria-label="옷 색"></button>`).join('');
+$('#robes').onclick = e => { const c = e.target.closest('button')?.dataset.c; if (c) { draft.robe = c; drawDraft(); } };
 function drawDraft() {
-  $('#avatarImg').src = W.avatarThumb(draft.avatar);
+  $('#avatarImg').src = myThumb(draft.avatar, draft.robe);
+  document.querySelectorAll('#robes button').forEach(b => b.classList.toggle('on', b.dataset.c === draft.robe));
   document.querySelectorAll('#genderSeg button').forEach(b => b.classList.toggle('on', b.dataset.g === draft.gender));
 }
 document.querySelectorAll('#genderSeg button').forEach(b => (b.onclick = () => { draft.gender = b.dataset.g; draft.avatar = pick(OUTFITS[draft.gender]); drawDraft(); }));
@@ -88,7 +103,7 @@ $('#reroll').onclick = () => {
   drawDraft();
 };
 function editProfile() {
-  draft = profile ? { gender: profile.gender || 'm', avatar: profile.avatar } : { gender: 'm', avatar: pick(OUTFITS.m) };
+  draft = profile ? { gender: profile.gender || 'm', avatar: profile.avatar, robe: profile.robe || personColor(net.me()) } : { gender: 'm', avatar: pick(OUTFITS.m), robe: pick(ROBES) };
   $('#profName').value = profile?.name || (user.name || '').slice(0, 12);
   drawDraft();
   show('profile');
@@ -96,7 +111,7 @@ function editProfile() {
 $('#profSave').onclick = async () => {
   const name = $('#profName').value.trim();
   if (name.length < 2) { $('#profName').focus(); $('#profName').placeholder = '별칭을 2자 이상 적어 주세요'; return; }
-  profile = { name, gender: draft.gender, avatar: draft.avatar };
+  profile = { name, gender: draft.gender, avatar: draft.avatar, robe: draft.robe };
   await net.saveProfile(profile);
   // 이미 들어가 있던 게임의 이름표·인형도 바꾼다
   if (G.code) net.joinGame(G.code, profile);
@@ -105,7 +120,7 @@ $('#profSave').onclick = async () => {
 
 /* ---------- 게임 고르기 ---------- */
 function toLobby() {
-  $('#lobbyAvatar').src = W.avatarThumb(profile.avatar);
+  $('#lobbyAvatar').src = myThumb(profile.avatar);
   $('#lobbyName').textContent = profile.name;
   $('#lobbyEmail').textContent = user.email || '';
   show('lobby');
@@ -185,7 +200,7 @@ async function enter(code) {
     meta: v => { G.meta = v; onMeta(); },
     teams: v => { G.teams = v; refresh(); },
     members: v => { G.members = v; refresh(); },
-    pos: v => { G.pos = v; syncPlayers(); if (tab === 'people') renderPanel(); },
+    pos: v => { G.pos = v; syncPlayers(); checkTag(); if (tab === 'people') renderPanel(); },
     missions: v => { G.missions = v; refresh(); checkArrive(); },
     done: v => { G.done = v; refresh(); },
     pdone: v => { G.pdone = v; refresh(); },
@@ -196,9 +211,9 @@ async function enter(code) {
       if (tab === 'feed') renderPanel(); else renderTabs();
     },
   });
-  W.follow(net.me(), true);
-  // 지난번 방식을 이어 가고, 처음이면 GPS를 바로 켠다 (끄기를 골랐던 사람만 꺼진 채로). 데모는 늘 테스트
-  setMode(FAKE ? 'gps' : DEMO ? 'sim' : store.get('posMode') || 'gps');
+  W.follow(net.me());
+  // 테스트 모드는 그때만 — 다시 열면 GPS로 (전에 시험해 본 폰이 행사 날 테스트 모드에 갇히지 않게). 끄기를 고른 것만 기억한다
+  setMode(FAKE ? 'gps' : DEMO ? 'sim' : store.get('posMode') === 'off' ? 'off' : 'gps');
 }
 
 function onMeta() {
@@ -210,8 +225,13 @@ function onMeta() {
   tickTimer();
   checkResults();
   $('#hostTab').hidden = !isHost();
+  // 테스트 모드 단추도 진행자에게만. 진행자에서 빠졌는데 테스트 모드였으면 GPS로 돌아간다 (데모는 그대로)
+  $('#simBtn').hidden = sim || !isHost();
+  if (sim && !isHost() && !DEMO && G.meta.host) setMode('gps');
   if (tab === 'host' && !isHost()) { tab = 'missions'; renderTabs(); renderPanel(); } // 진행자에서 빠지면 진행 탭을 닫는다
   simHome();
+  // 3D 건물 단추는 지도 모드일 때만 (지도 단추 바로 밑)
+  $('#fabBld').hidden = G.meta.layer !== 'map';
   const center = G.meta.center;
   const key = [center?.lat, center?.lng, G.meta.radius, G.meta.layer].join();
   if (key !== G.areaKey && center) {
@@ -275,13 +295,16 @@ function renderScores() {
 function syncPlayers() {
   if (!W.frame()) return;
   const now = Date.now();
-  Object.entries(G.members).forEach(([uid, m]) => {
+  // 한 사람에서 탈이 나도 나머지 사람은 계속 옮긴다
+  Object.entries(G.members).forEach(([uid, m]) => { try {
     const p = G.pos[uid];
     if (!p) { W.removePlayer(uid); return; }
     const stale = !m.online || now - (p.t || 0) > STALE;
-    W.upsertPlayer({ uid, name: m.name, avatar: m.avatar, color: colorOf(uid), team: m.team, me: uid === net.me(), sub: stale ? ago(p.t) : '' });
+    // 술래잡기 중인 술래는 이름표 아래에 '술래'
+    const it = isIt(uid);
+    W.upsertPlayer({ uid, name: m.name, avatar: m.avatar, robe: robeOf(uid), color: colorOf(uid), team: m.team, me: uid === net.me(), sub: [it ? '술래' : '', stale ? ago(p.t) : ''].filter(Boolean).join(' · ') });
     W.movePlayer(uid, p, stale);
-  });
+  } catch (e) { console.error(e); } });
 }
 function syncMissions() {
   if (!W.frame()) return;
@@ -371,8 +394,8 @@ function peopleList() {
   }).join('');
 }
 const thumbs = {};
-// 사람 목록의 작은 인형: 3D와 같은 옷 색 (팀 색 겉옷, 사람마다 망토 색)
-const thumb = (t, uid) => { const c = uid ? colorOf(uid) : '', k = `${t}|${c}|${uid || ''}`; return (thumbs[k] ||= W.avatarThumb(t || 'man', c, uid)); };
+// 사람 목록의 작은 인형: 3D와 같은 옷 (각자 고른 겉옷 색, 사람마다 망토 색)
+const thumb = (t, uid) => { const c = uid ? robeOf(uid) : '', k = `${t}|${c}|${uid || ''}`; return (thumbs[k] ||= W.avatarThumb(t || 'man', c, uid)); };
 
 /* ---------- 찾기: 별칭이나 팀 이름 → 그 미니미에게로 ---------- */
 const findEl = $('#find'), findsEl = $('#finds');
@@ -397,7 +420,7 @@ function focusPlayer(uid) {
   const p = G.pos[uid], m = G.members[uid];
   if (!p) { toast(`${m?.name || ''} 님은 아직 위치를 공유하지 않았어요.`); return; }
   W.flyTo(p, 110);
-  W.follow(uid, uid === net.me());
+  W.follow(uid);
   setFab();
   toast(`${m.name}${solo() ? '' : ' · ' + teamOf(m.team).name}${myLL && uid !== net.me() ? ' · ' + fmtDist(dist(myLL, p)) : ''} — 따라가는 중`);
 }
@@ -414,9 +437,27 @@ function focusTeam(tid) {
 }
 
 /* ---------- 지도 단추 ---------- */
-const setFab = () => $('#fabMe').classList.toggle('on', W.following() === net.me());
-// 내 위치: 나를 가운데 두고 진행 방향이 위로 오게 지도가 돈다
-$('#fabMe').onclick = () => { if (G.pos[net.me()]) { startCompass(); W.follow(net.me(), true); W.flyTo(G.pos[net.me()], 140); } else toast(watchId != null ? '내 위치를 찾는 중이에요. 잠시만요.' : '먼저 위치 공유를 켜 주세요.'); setFab(); };
+// 내 위치 단추: 꺼짐(회색 과녁) → 따라가기(파란 과녁) → 진행 방향 고정(파란 화살) → 꺼짐. 아이콘이 단계마다 바뀐다
+let fabMode = null;
+const setFab = () => {
+  const mode = W.following() !== net.me() ? '' : W.headingUp() ? 'nav' : 'on';
+  $('#fabMe').classList.toggle('on', mode === 'on');
+  $('#fabMe').classList.toggle('nav', mode === 'nav');
+  if (mode !== fabMode) { fabMode = mode; $('#fabMe').innerHTML = ic(mode === 'nav' ? 'nav' : mode === 'on' ? 'locate' : 'locateOff'); }
+};
+// 첫 번째: 내 자리로 다시 날아가(화면 갱신) 따라간다. 지도 방향은 그대로.
+// 두 번째: 진행 방향 고정 — 나는 가운데, 가는 방향이 늘 위, 배율은 지금 그대로. 지도가 내 걸음에 맞춰 돌고 움직인다.
+// 세 번째: 따라가기를 푼다
+$('#fabMe').onclick = () => {
+  if (!G.pos[net.me()]) { toast(watchId != null ? '내 위치를 찾는 중이에요. 잠시만요.' : '먼저 위치 공유를 켜 주세요.'); return; }
+  startCompass();
+  const mode = W.following() !== net.me() ? '' : W.headingUp() ? 'nav' : 'on';
+  if (mode === '') { W.follow(net.me(), false); W.flyTo(G.pos[net.me()], 140); }
+  else if (mode === 'on') { W.follow(net.me(), true); toast('진행 방향 고정 — 내가 가는 방향이 늘 위로 와요', 'nav'); }
+  else { W.follow(null); toast('따라가기를 껐어요', 'locateOff'); }
+  setFab();
+};
+setFab();
 W.on('unfollow', setFab);
 // 폰 나침반: 안드로이드는 deviceorientationabsolute(alpha는 반시계), 아이폰은 webkitCompassHeading(누른 뒤 허락을 받아야 한다).
 // 나침반이 없는 기기(PC)는 걸어간 방향으로 돌린다
@@ -440,7 +481,7 @@ $('#fabPocket').onclick = () => {
   if (!myLL) { toast('먼저 위치 공유를 켜 주세요.'); return; }
   $('#pocket').hidden = false;
   W.stop();
-  navigator.wakeLock?.request('screen').then(w => (wake = w)).catch(() => {});
+  keepAwake();
   document.documentElement.requestFullscreen?.().catch(() => {}); // 위쪽 알림줄까지 가린다 (아이폰은 안 돼도 그만)
   pocketTick();
   pocketT = setInterval(pocketTick, 1000);
@@ -453,11 +494,13 @@ function pocketOff() {
 }
 function pocketTick() {
   const on = watchId != null || sim || FAKE;
-  const ago = lastSent ? Math.round((Date.now() - lastSent.at) / 1000) : null;
+  // 다시 올리기(8초마다)가 아니라 GPS가 실제로 새 값을 준 때로 센다
+  const ago = fixAt ? Math.round((Date.now() - fixAt) / 1000) : null;
   const late = watchId != null && ago != null && ago > 120; // 8초마다 보내니 2분 넘게 조용하면 위치가 안 잡히는 것 (가만히 서 있으면 폰이 새 값을 늦게 주기도 해서 넉넉히)
-  $('#pkBox').classList.toggle('warn', !on || late);
-  $('#pkState').textContent = !on ? '위치 공유가 꺼져 있어요' : late ? '2분 넘게 새 위치가 없어요' : '위치 보내는 중';
-  $('#pkSub').textContent = on && ago != null ? `${ago < 5 ? '방금' : ago + '초 전'} 보냄 · 오차 ${myLL?.acc ?? '-'}m` : '';
+  const sl = on && sendLate(), sAgo = ackAt ? Math.round((Date.now() - ackAt) / 1000) : null;
+  $('#pkBox').classList.toggle('warn', !on || late || sl);
+  $('#pkState').textContent = !on ? '위치 공유가 꺼져 있어요' : sl ? '서버로 위치가 안 가요 — 인터넷 확인' : late ? '2분 넘게 새 위치가 없어요' : '위치 보내는 중';
+  $('#pkSub').textContent = on && ago != null ? `${ago < 5 ? '방금' : ago + '초 전'} 위치 받음 · 오차 ${myLL?.acc ?? '-'}m${sAgo != null ? ` · 서버 확인 ${sAgo < 5 ? '방금' : sAgo + '초 전'}` : ''}` : '';
   // 화면에 글씨 자국이 남지 않게 30초마다 자리를 옮긴다
   if (Math.floor(Date.now() / 1000) % 30 === 0) $('#pkBox').style.top = 18 + Math.random() * 56 + '%';
 }
@@ -480,6 +523,10 @@ $('#fabLayer').onclick = () => {
   if (isHost()) net.saveMeta(G.code, { layer });
   else { G.meta.layer = layer; onMeta(); } // 참가자는 내 화면에서만 바꾼다
 };
+// 3D 건물 켜고 끄기: 내 화면에서만, 기기에 기억한다 (처음엔 켬)
+const setBld = v => { W.setBuildings(v); $('#fabBld').classList.toggle('on', v); store.set('bld', v ? null : 'off'); };
+setBld(store.get('bld') !== 'off');
+$('#fabBld').onclick = () => setBld(!$('#fabBld').classList.contains('on'));
 W.on('tapPlayer', focusPlayer);
 W.on('tapMission', openMission);
 W.on('tapGround', ll => {
@@ -493,19 +540,17 @@ W.on('tapGround', ll => {
 let watchId = null, lastSent = null, wake = null, sim = false, gpsAt = 0;
 $('#gpsBtn').onclick = () => setMode('gps');
 $('#simBtn').onclick = () => setMode('sim');
-$('#offBtn').onclick = () => setMode('off');
 function setMode(mode) {
   if (watchId != null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
-  wake?.release?.().catch(() => {}); wake = null;
+  wake?.release?.().catch(() => {}); wake = null; wakeVid?.pause();
   sim = mode === 'sim';
   W.setGroundFirst(sim);
   $('#gpsBtn').hidden = mode === 'gps';
-  $('#simBtn').hidden = mode === 'sim';
-  $('#offBtn').hidden = mode === 'off';
+  $('#simBtn').hidden = mode === 'sim' || !isHost(); // 테스트 모드는 진행자만 (참가자가 잘못 눌러 현장에 없는 것처럼 되지 않게)
   if (!DEMO && !FAKE) store.set('posMode', mode);
   if (mode === 'off') {
     // 끄면 내 좌표를 지워 다른 사람 지도에서도 내 인형이 사라진다
-    myLL = null; lastSent = null;
+    myLL = null; lastSent = null; ackAt = pendAt = 0; ackErr = false; sendState();
     if (G.code) net.clearPos(G.code);
     gpsText('위치 공유가 꺼져 있어요');
     return;
@@ -514,27 +559,70 @@ function setMode(mode) {
     gpsText('테스트 모드: 현장에 있는 것처럼 — 지도를 누르면 내 인형이 그리로 걸어가요');
     // 아직 자리가 없으면 게임 지역 가운데에 세운다 (GPS로 받은 먼 좌표도 버린다). 그리고 현장에 선 내 모습으로 바로 데려간다
     simHome();
-    if (myLL) { W.follow(net.me(), true); W.flyTo(myLL, 140); setFab(); }
+    if (myLL) { W.follow(net.me()); W.flyTo(myLL, 140); setFab(); }
     return;
   }
   if (FAKE) { setMyPos(FAKE); return; }
   if (!navigator.geolocation) { gpsText('이 기기는 위치를 알 수 없어요.'); setMode('off'); return; }
   gpsText('위치를 찾는 중…');
   gpsAt = Date.now();
+  startWatch();
+  // 화면이 꺼지면 브라우저가 위치를 멈추므로 켜 둔다
+  keepAwake();
+}
+// 위치 받기를 (다시) 건다. 폰은 다른 앱에 다녀오거나 GPS를 다른 앱과 나눠 쓴 뒤 이 브라우저에 새 값을 안 주기도 한다
+// (다른 내비를 켰다 끄면 그제야 움직였다) — 그래서 돌아올 때와 오래 조용할 때 새로 건다
+let rawAt = 0; // 폰이 값을 준 마지막 때 (걸러서 버린 값도)
+function startWatch() {
+  if (watchId != null) navigator.geolocation.clearWatch(watchId);
+  rawAt = Date.now();
   watchId = navigator.geolocation.watchPosition(
-    p => { const f = cleanFix({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, v: p.coords.speed }); if (f) setMyPos(f); },
+    p => {
+      rawAt = Date.now();
+      // 자리부터 올린다 — 아래 방향 처리에서 무슨 일이 나도 위치는 멈추지 않게
+      const f = cleanFix({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, v: p.coords.speed }); if (f) setMyPos(f);
+      // 움직이는 중이면 GPS가 알려 주는 이동 방향을 진행 방향으로 (폰을 어느 쪽으로 들었든)
+      try { if (p.coords.speed > 0.8 && Number.isFinite(p.coords.heading)) W.setCourse?.(p.coords.heading); } catch {}
+    },
     e => {
       // 권한 거절만 다시 켜는 단추를 보인다. 시간 초과는 위치 찾기가 계속 돌고 있으니 기다리면 된다.
-      // 카카오톡·네이버 같은 앱 안 브라우저는 폰에서 허용해도 위치를 막기도 한다
-      if (e.code === 1) { gpsText(INAPP ? '이 앱 안에서는 위치를 쓸 수 없어요 — 오른쪽 위 메뉴에서 크롬·사파리로 열어 주세요' : '위치 권한이 꺼져 있어요. 브라우저 설정에서 이 사이트의 위치를 허용해 주세요.'); $('#gpsBtn').hidden = false; }
+      // 카카오톡·네이버 같은 앱 안 브라우저는 폰에서 허용해도 위치를 막기도 한다. 권한 거절은 다시 걸어도 소용없으니 멈춤 감시에서 뺀다
+      if (e.code === 1) { rawAt = Infinity; gpsText(INAPP ? '이 앱 안에서는 위치를 쓸 수 없어요 — 오른쪽 위 메뉴에서 크롬·사파리로 열어 주세요' : '위치 권한이 꺼져 있어요. 브라우저 설정에서 이 사이트의 위치를 허용해 주세요.'); $('#gpsBtn').hidden = false; }
       else if (!myLL) gpsText('위치를 아직 못 찾았어요 — 하늘이 보이는 곳에서 잠시 기다려 주세요');
     },
     { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }); // 묵은 값을 다시 받으면 평균이 속으니 늘 새로 잰 값만
-  // 화면이 꺼지면 브라우저가 위치를 멈추므로 켜 둔다
-  navigator.wakeLock?.request('screen').then(w => (wake = w)).catch(() => {});
 }
-// 다른 앱에 다녀오면 화면 켜 두기가 풀리므로 다시 건다
-document.addEventListener('visibilitychange', () => { if (!document.hidden && watchId != null) navigator.wakeLock?.request('screen').then(w => (wake = w)).catch(() => {}); });
+// 다른 앱에 다녀오면 화면 켜 두기가 풀리고 위치 받기도 멈춰 있을 수 있으므로 둘 다 다시 건다
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || watchId == null) return;
+  keepAwake();
+  startWatch();
+});
+/* 화면 켜 두기: 화면이 꺼지면 브라우저가 위치를 멈춘다. Wake Lock을 걸고, 시스템이 풀어 버리면(절전 등) 1초 뒤 다시 건다.
+   거절당하면(손길이 있어야 하는 브라우저) 다음에 화면을 만질 때 다시. Wake Lock이 없는 예전 브라우저는 소리 없는 작은 영상을
+   반복 재생해 꺼짐을 막는다 */
+let wakeVid = null;
+const awake = () => (wake && !wake.released) || (wakeVid && !wakeVid.paused);
+function keepAwake() {
+  if (document.hidden || awake()) return;
+  if (navigator.wakeLock) {
+    navigator.wakeLock.request('screen').then(w => {
+      wake = w;
+      w.addEventListener('release', () => { if (wake === w) wake = null; if (watchId != null && !document.hidden) setTimeout(keepAwake, 1000); });
+    }).catch(() => {});
+    return;
+  }
+  if (!wakeVid) {
+    wakeVid = Object.assign(document.createElement('video'), { src: 'assets/awake.mp4', muted: true, loop: true, playsInline: true });
+    wakeVid.setAttribute('playsinline', '');
+    wakeVid.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
+    document.body.appendChild(wakeVid);
+  }
+  wakeVid.play().catch(() => {});
+}
+document.addEventListener('pointerdown', () => { if (watchId != null) keepAwake(); }, { passive: true });
+// 화면을 보고 있는데 12초 넘게 폰이 아무 값도 안 주면 위치 받기가 멈춘 것으로 보고 새로 건다 (서 있어도 폰은 몇 초마다 준다)
+setInterval(() => { if (watchId != null && !document.hidden && Date.now() - rawAt > 12000) startWatch(); }, 4000);
 const gpsText = t => ($('#gpsText').textContent = t);
 // 게임 정보(meta)가 아직 안 왔으면 onMeta에서 다시 부른다
 function simHome() {
@@ -542,31 +630,86 @@ function simHome() {
   if (sim && c && (!myLL || dist(myLL, c) > (G.meta.radius || 600) * 1.5)) setMyPos({ lat: c.lat, lng: c.lng, acc: 3 });
 }
 const INAPP = /KAKAOTALK|NAVER|Instagram|FBAN|FBAV|Line\/|DaumApps/i.test(navigator.userAgent);
-// GPS 다듬기: 폰은 처음이나 실내에서 와이파이·기지국으로 잡은 큰 오차 값을 섞어 준다.
-// 좋은 값(30m 이내)을 받은 지 20초 안에 오차가 그 세 배 넘고 50m 넘는 값이 오면 버리고,
-// 최근 값을 정확도로 가중 평균해(1/오차²) 흔들림을 줄인다. 폰은 1초에 한 번쯤 새 값을 주므로
-// 서 있을 땐 20초(20개 남짓)를 모아 평균해 미션 지점에서 자리를 단단히 잡고, 걸으면 4초만 써서 몇 m 늦는 정도로 따라간다.
-// 걷는지는 폰이 준 속도(0.6m/s 넘게)나, 새 값이 지금 평균에서 오차의 두 배보다 멀리 벗어났는지로 본다
-let fixes = [], goodAt = 0, goodAcc = Infinity;
+// GPS 다듬기: 이상한 값을 먼저 거르고, 걸을 땐 최근 4초 값을 정확도로 가중 평균해(1/오차²) 흔들리지 않게 한다
+//  ① 오차가 튀는 값: 좋은 값(30m 이내)을 받은 지 20초 안에 오차가 그 세 배 넘고 50m 넘는 값, 1분 안에 좋은 값이 있었는데 150m 넘는 값
+//  ② 순간이동: 앞 값에서 (두 값의 오차를 빼고도) 시속 160km(45m/s)보다 빨라야 닿는 자리. 단 그런 값이 연달아 세 번 오고
+//     그 셋끼리는 말이 되는 속도로 이어지면(차로 달리는 중이어도) 정말 옮긴 것으로 받는다
+//     — 예전엔 셋이 30m 안에 모여야 받아서, 앱을 켤 때의 기지국 값에 걸린 채 차로 달리면 처음 자리에 계속 멈춰 있었다
+//  ③ 4초 묶음에서 혼자 튀는 값: 묶음 가운데(중앙값)에서 오차의 두 배(최소 8m)보다 먼 값은 평균에서 뺀다
+//  빠르게 움직이면(초속 3m 넘게, 차·버스) 평균 내지 않고 방금 값을 그대로 쓴다 — 평균하면 수십 m씩 늦는다
+let fixes = [], goodAt = 0, goodAcc = Infinity, odd = [];
+const median = a => { const b = [...a].sort((x, y) => x - y), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
+const tooFast = (a, b) => Math.max(0, dist(a, b) - (a.acc || 0) - (b.acc || 0)) / Math.max(0.5, Math.abs(b.t - a.t) / 1000) > 45;
 function cleanFix(p) {
-  const now = Date.now();
+  const now = Date.now(), f0 = { ...p, t: now };
   if (p.acc <= 30) { goodAt = now; goodAcc = p.acc; }
-  else if (now - goodAt < 20000 && p.acc > goodAcc * 3 && p.acc > 50) return null;
-  const avg = list => {
-    let w = 0, lat = 0, lng = 0;
-    list.forEach(f => { const k = 1 / (f.acc * f.acc); w += k; lat += f.lat * k; lng += f.lng * k; });
-    return { lat: lat / w, lng: lng / w, w };
-  };
-  const moving = p.v > 0.6 || (fixes.length > 0 && dist(avg(fixes), p) > Math.max(6, p.acc * 2));
-  fixes = fixes.filter(f => now - f.t < (moving ? 4000 : 20000));
-  fixes.push({ ...p, t: now });
-  const m = avg(fixes), best = Math.min(...fixes.map(f => f.acc));
+  else if ((now - goodAt < 20000 && p.acc > goodAcc * 3 && p.acc > 50) || (now - goodAt < 60000 && p.acc > 150)) return null;
+  const prev = fixes[fixes.length - 1];
+  if (prev && tooFast(prev, f0)) {
+    odd.push(f0);
+    if (odd.length > 3) odd.shift();
+    const chain = odd.length === 3 && !tooFast(odd[0], odd[1]) && !tooFast(odd[1], odd[2]);
+    if (!chain) return null;
+    fixes = odd; odd = []; // 세 번 이어서 같은 쪽 — 정말 옮겼다 (방금 값도 이 안에 있다)
+  } else {
+    odd = [];
+    fixes.push(f0);
+  }
+  fixes = fixes.filter(f => now - f.t < 4000);
+  const first = fixes[0], v = first && first !== fixes[fixes.length - 1] ? dist(first, f0) / Math.max(0.5, (now - first.t) / 1000) : 0;
+  if (p.v > 3 || v > 3) return { lat: p.lat, lng: p.lng, acc: Math.max(1, Math.round(p.acc)) };
+  const mLat = median(fixes.map(f => f.lat)), mLng = median(fixes.map(f => f.lng));
+  let keep = fixes.filter(f => dist({ lat: mLat, lng: mLng }, f) <= Math.max(8, f.acc * 2));
+  if (!keep.length) keep = [fixes[fixes.length - 1]];
+  let w = 0, lat = 0, lng = 0;
+  keep.forEach(f => { const k = 1 / (f.acc * f.acc); w += k; lat += f.lat * k; lng += f.lng * k; });
   // 연달아 잰 값의 오차는 서로 닮아서 개수만큼 줄지는 않는다 — 가장 좋은 값의 절반 아래로는 말하지 않는다
-  return { lat: m.lat, lng: m.lng, acc: Math.max(1, Math.round(Math.min(p.acc, Math.max(best / 2, 1 / Math.sqrt(m.w))))) };
+  const best = Math.min(...keep.map(f => f.acc));
+  return { lat: lat / w, lng: lng / w, acc: Math.max(1, Math.round(Math.max(best / 2, 1 / Math.sqrt(w)))) };
 }
 // 게임 지역에서 이만큼 넘게 떨어진 위치는 기기가 잘못 알려 준 것으로 본다 (PC 브라우저의 와이파이 위치가 베이징으로 잡힌 일이 있었다)
 const WILD = 100e3;
+// 서버 전송 확인: 올린 위치를 서버가 받았다고 답한 때(ackAt). 답을 못 받은 채 기다린 지 오래면(pendAt) 인터넷이 끊긴 것
+let ackAt = 0, pendAt = 0, ackErr = false;
+function sendPos(p) {
+  lastSent = { ...p, at: Date.now() };
+  pendAt ||= Date.now();
+  net.writePos(G.code, sim ? { ...p, sim: true } : p)
+    .then(() => { ackAt = Date.now(); pendAt = 0; ackErr = false; sendState(); })
+    .catch(() => { ackErr = true; sendState(); });
+}
+// 내 폰에서도 내 위치가 서버에 들어가는지 보이게: 제목 줄 오른쪽 끝 전파 표시. 받을 때마다 초록으로 한 번 퍼지고, 30초 넘게 답이 없거나 거절되면 빨갛게
+const SEND_LATE = 30e3;
+const sendLate = () => ackErr || (pendAt && Date.now() - pendAt > SEND_LATE);
+let pingAt = 0;
+function sendState() {
+  const el = $('#sendIc'), on = watchId != null || sim || FAKE;
+  el.hidden = !on || (!ackAt && !pendAt);
+  if (el.hidden) return;
+  const late = !!sendLate();
+  el.classList.toggle('late', late);
+  // 새로 받았으면 전파를 한 번 퍼뜨린다 (애니메이션을 처음부터 다시)
+  if (!late && ackAt > pingAt) { pingAt = ackAt; el.classList.remove('ping'); void el.offsetWidth; el.classList.add('ping'); }
+  const s = Math.round((Date.now() - ackAt) / 1000);
+  el.title = ackErr ? '서버가 위치를 받지 않아요 — 눌러서 다시 요청' : late ? '서버로 위치가 안 가요 — 눌러서 다시 요청'
+    : ackAt ? `서버 전송 ✓ ${s < 3 ? '방금' : s + '초 전'}` : '서버로 보내는 중…';
+}
+// 누르면: 빨간 때는 위치 받기를 새로 걸고 마지막 자리를 다시 올린다, 초록일 땐 언제 보냈는지 알려 준다
+$('#sendIc').onclick = () => {
+  if (sendLate() || !ackAt) {
+    if (watchId != null) startWatch();
+    ackErr = false; pendAt = 0;
+    if (myLL && G.code) sendPos(myLL);
+    sendState();
+    toast('위치를 다시 요청했어요', 'signal');
+  } else toast($('#sendIc').title, 'signal');
+};
+setInterval(sendState, 1000);
+// 가만히 서 있으면 폰이 새 값을 안 줄 수 있다 — 8초 넘게 조용하면 마지막 자리를 다시 올려 다른 사람 화면에서 흐려지지 않게
+setInterval(() => { if (G.code && myLL && watchId != null && lastSent && Date.now() - lastSent.at > 8000) sendPos(myLL); }, 2000);
+let fixAt = 0; // 마지막으로 새 위치를 받은 때
 function setMyPos(p) {
+  fixAt = Date.now();
   if (!sim && G.meta.center && dist(p, G.meta.center) > WILD) {
     gpsText(`기기가 알려 준 위치가 이상해요 (게임 지역에서 ${fmtDist(dist(p, G.meta.center))}) — 폰에서 '정확한 위치'를 켜거나 테스트 모드를 써 주세요`);
     return;
@@ -581,12 +724,11 @@ function setMyPos(p) {
     : p.acc > 300 && Date.now() - gpsAt < 15000 ? `위치를 더 정확히 잡는 중 · 오차 ${fmtDist(p.acc)}`
     : p.acc > 300 ? `위치가 대략적으로만 잡혀요 (오차 ${fmtDist(p.acc)}) — 폰 설정에서 이 사이트의 '정확한 위치'를 켜 주세요`
     : away > 0 ? `게임 지역에서 ${fmtDist(away)} 밖 · 오차 ${p.acc}m` : `위치 공유 중 · 오차 ${p.acc}m${p.acc > 40 ? ' (실내면 커요)' : ''}`);
-  // 3m 넘게 움직였거나 8초가 지났을 때만 올린다 (배터리·데이터 아끼기)
-  const moved = !lastSent || dist(lastSent, p) > 3 || Date.now() - lastSent.at > 8000;
-  // 테스트 모드 표시(sim): 누를 때마다 뛰어가는 자리라 차·버스 계산에서 뺀다
-  if (moved) { lastSent = { ...p, at: Date.now() }; net.writePos(G.code, sim ? { ...p, sim: true } : p); }
-  if (first) { startCompass(); W.follow(net.me(), true); W.flyTo(p, 140); setFab(); }
+  // 새 위치를 받을 때마다 바로 올린다 (폰은 1초에 한 번쯤 준다). 테스트 모드 표시(sim): 누를 때마다 뛰어가는 자리라 차·버스 계산에서 뺀다
+  sendPos(p);
+  if (first) { startCompass(); W.follow(net.me()); W.flyTo(p, 140); setFab(); }
   checkArrive();
+  checkTag();
   if (tab === 'missions') renderPanel();
 }
 
@@ -595,6 +737,40 @@ const near = m => myLL && (!m.r || dist(myLL, m) <= m.r + Math.min(myLL.acc || 0
 const busy = new Set();
 // 미션을 할 수 있는 사람: 개인전은 누구나, 팀전은 팀이 있어야
 const canPlay = () => solo() || !!myTeam();
+/* ---------- 술래잡기 ----------
+   진행자가 팀마다 술래를 한 명씩 정한다(mission.it = {팀: uid}). 반경(놀이 구역) 안에서 술래가 다른 팀 사람에게
+   잡기 거리(catchR) 안으로 먼저 다가가면 그 팀이 이긴다. 판정은 술래의 폰이 한다 — 규칙도 그 팀 술래만 '완료'를 쓸 수 있게 막는다 */
+const tagWinner = id => Object.keys(G.teams).find(t => G.done[t]?.[id]?.status === 'ok');
+const tagLive = ([id, m]) => m.type === 'tag' && m.open !== false && !tagWinner(id);
+const isIt = uid => isLive() && Object.entries(G.missions).some(e => tagLive(e) && Object.values(e[1].it || {}).includes(uid));
+function checkTag() {
+  if (!isLive() || !myLL || solo()) return;
+  const me = net.me(), t = myTeam(), now = Date.now();
+  Object.entries(G.missions).forEach(([id, m]) => {
+    if (!tagLive([id, m]) || m.it?.[t] !== me || busy.has(id)) return;
+    const inArea = ll => !m.r || dist(ll, m) <= m.r + 15; // GPS 오차를 15m까지 봐준다
+    if (!inArea(myLL)) return;
+    const caught = Object.entries(G.members).find(([u, mm]) => {
+      const p = G.pos[u];
+      return u !== me && mm.team && mm.team !== t && G.teams[mm.team] && p && now - (p.t || 0) < 30e3 && inArea(p) && dist(myLL, p) <= (m.catchR || 6);
+    });
+    if (!caught) return;
+    const [u, mm] = caught;
+    busy.add(id);
+    net.complete(G.code, t, id, { name: profile.name, pts: m.pts || 0, status: 'ok', caught: u })
+      .then(() => net.say(G.code, t, `${teamOf(t).name} 술래 ${profile.name} — ${teamOf(mm.team).name} ${mm.name} 잡았다! '${m.title}' 승리`))
+      .catch(() => {}).finally(() => busy.delete(id));
+  });
+}
+function tagInfo(id, m, live) {
+  const its = Object.entries(m.it || {}).map(([tid, u]) => `<span class="pill"><span class="dot" style="background:${esc(teamOf(tid).color)}"></span> ${esc(teamOf(tid).name)} ${esc(G.members[u]?.name || '?')}</span>`).join('');
+  const win = tagWinner(id), me = net.me(), t = myTeam();
+  const role = win ? `${ic('trophy')} <b>${esc(teamOf(win).name)}</b> 승리! (${esc(G.done[win][id].name)} 술래가 잡았어요)`
+    : !live ? (G.meta.status === 'ended' || timeUp() ? '게임이 끝났어요.' : '진행자가 게임을 시작하면 열려요.')
+    : m.it?.[t] === me ? `${ic('tag')} <b>내가 술래!</b> 반경 ${m.r}m 안에서 다른 팀 사람에게 ${m.catchR || 6}m 안으로 다가가면 잡아요.`
+    : `우리 팀 술래는 <b>${esc(G.members[m.it?.[t]]?.name || '없음')}</b> — 다른 팀 술래는 피하고, 우리 술래를 도와요!`;
+  return `<div class="teamrow">${its}</div><div class="box">${role}</div>`;
+}
 function checkArrive() {
   if (!isLive() || !canPlay() || !myLL) return;
   Object.entries(G.missions).forEach(([id, m]) => {
@@ -640,7 +816,8 @@ function openMission(id) {
     return `<span class="pill ${each ? (n ? 'ok' : '') : x?.status || ''}"><span class="dot" style="background:${esc(tm.color)}"></span> ${esc(tm.name)} ${each ? n + '명' : x?.status === 'ok' ? ic('check') : x ? ic('wait') : '—'}</span>`;
   }).join('');
   let act = '';
-  if (d?.status === 'ok') act = `<div class="box">${ic('check')} ${each ? `해냈어요 (${clock(d.t)})` : `우리 팀이 해냈어요 (${esc(d.name)}, ${clock(d.t)})`}</div>`;
+  if (m.type === 'tag') act = tagInfo(id, m, live);
+  else if (d?.status === 'ok') act = `<div class="box">${ic('check')} ${each ? `해냈어요 (${clock(d.t)})` : `우리 팀이 해냈어요 (${esc(d.name)}, ${clock(d.t)})`}</div>`;
   else if (d?.status === 'wait') act = `<div class="box">${ic('wait')} 진행자가 확인하고 있어요.</div>`;
   else if (!canPlay()) act = `<div class="box">팀에 들어가야 미션을 할 수 있어요.</div>`;
   else if (!live) act = `<div class="box">${G.meta.status === 'ended' || timeUp() ? '게임이 끝났어요.' : '진행자가 게임을 시작하면 열려요.'}</div>`;
@@ -923,7 +1100,10 @@ function missionForm(id, draftM) {
   const m = draftM || (id ? { ...G.missions[id] } : { type: 'arrive', r: 25, pts: 10, open: true, order: Object.keys(G.missions).length });
   openSheet(`<h3>${id ? '미션 고치기' : '새 미션'}</h3><form class="stack" id="mf">
     <input name="title" placeholder="미션 이름 (예: 경기전 홍살문)" value="${esc(m.title || '')}" required>
-    <label>종류<select name="type">${Object.entries(TYPES).map(([k, [, n]]) => `<option value="${k}" ${m.type === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+    <label>종류<select name="type">${Object.entries(TYPES).filter(([k]) => k !== 'tag' || !solo() || m.type === 'tag').map(([k, [, n]]) => `<option value="${k}" ${m.type === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+    <div class="tagset stack"><p class="fine">팀마다 술래를 한 명씩 정해요. 반경 안에서 술래가 다른 팀 사람에게 잡기 거리 안으로 먼저 다가가면 그 팀이 이겨요.</p>
+      ${Object.entries(G.teams).map(([tid, t]) => `<label><span><span class="dot" style="background:${esc(t.color)}"></span> ${esc(t.name)} 술래</span><select name="it_${tid}"><option value="">정하지 않음</option>${Object.entries(G.members).filter(([, mm]) => mm.team === tid).map(([u, mm]) => `<option value="${u}" ${m.it?.[tid] === u ? 'selected' : ''}>${esc(mm.name)}</option>`).join('')}</select></label>`).join('')}
+      <label>잡기 거리(m) — GPS 오차가 있어 너무 짧으면 안 잡혀요<input name="catchR" type="number" min="2" value="${m.catchR ?? 6}"></label></div>
     ${solo() ? '' : `<label class="check"><input type="checkbox" name="each" ${m.each ? 'checked' : ''}><span>개인 미션 — 팀원 각자 해서 점수를 팀에 보태요</span></label>`}
     <textarea name="desc" placeholder="설명 (무엇을 하면 되는지)">${esc(m.desc || '')}</textarea>
     <div class="qa stack"><input name="q" placeholder="문제" value="${esc(m.q || '')}"><input name="ans" placeholder="${m.ah ? '정답 (바꿀 때만 적기)' : '정답 — 띄어쓰기·대소문자는 무시해요'}"></div>
@@ -932,10 +1112,11 @@ function missionForm(id, draftM) {
     <div class="grid2"><button type="button" class="btn" id="pickMap">지도에서 고르기</button><button type="button" class="btn" id="pickMe">내 자리로</button></div>
     <button class="btn primary">저장</button><p class="msg" id="mfMsg"></p></form>`, el => {
     const f = el.querySelector('#mf');
-    const qa = () => (el.querySelector('.qa').hidden = f.type.value !== 'quiz');
+    const qa = () => { el.querySelector('.qa').hidden = f.type.value !== 'quiz'; el.querySelector('.tagset').hidden = f.type.value !== 'tag'; if (f.each) f.each.closest('label').hidden = f.type.value === 'tag'; };
     f.type.onchange = qa; qa();
     // 개인전에선 개인 미션 칸이 없으니 원래 값을 둔다
-    const read = () => ({ ...m, each: solo() ? m.each : !!f.each?.checked, title: f.title.value.trim(), type: f.type.value, desc: f.desc.value.trim(), q: f.q.value.trim(), r: +f.r.value || 0, pts: +f.pts.value || 0, _ans: f.ans.value });
+    const read = () => ({ ...m, each: solo() ? m.each : !!f.each?.checked, title: f.title.value.trim(), type: f.type.value, desc: f.desc.value.trim(), q: f.q.value.trim(), r: +f.r.value || 0, pts: +f.pts.value || 0, _ans: f.ans.value,
+      it: Object.fromEntries(Object.keys(G.teams).map(tid => [tid, f['it_' + tid]?.value]).filter(([, u]) => u)), catchR: Math.max(2, +f.catchR.value || 6) });
     el.querySelector('#pickMap').onclick = () => {
       const cur = read();
       $('#sheet').hidden = true; $('#placing').hidden = false;
@@ -949,6 +1130,8 @@ function missionForm(id, draftM) {
       if (v.type === 'quiz' && !v.ah && !v._ans.trim()) { el.querySelector('#mfMsg').textContent = '정답을 적어 주세요.'; return; }
       const ans = v._ans; delete v._ans; delete v.ans;
       if (v.type !== 'quiz') { delete v.q; delete v.ah; }
+      if (v.type === 'tag') { delete v.each; if (Object.keys(v.it).length < 2) { el.querySelector('#mfMsg').textContent = '술래를 두 팀 넘게 정해 주세요.'; return; } }
+      else { delete v.it; delete v.catchR; }
       if (!v.each) delete v.each;
       // 새 미션은 id를 먼저 받아야 정답 해시를 만들 수 있다
       const isNew = !id;
