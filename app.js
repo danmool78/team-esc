@@ -690,4 +690,6 @@ net.onUser(async u => {
   else toLobby();
   if (DEMO && !profile) { profile = { name: '데모', gender: 'm', avatar: 'disciple' }; await net.saveProfile(profile); toLobby(); }
 });
-if ('serviceWorker' in navigator && !DEMO) navigator.serviceWorker.register('sw.js').catch(() => {});
+// 서비스 워커가 받은 지도 타일을 기기에 보관한다. 저장 공간이 모자랄 때 브라우저가 지우지 않게 '오래 보관'을 청한다
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+navigator.storage?.persist?.().catch(() => {});
