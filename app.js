@@ -544,8 +544,19 @@ function setMode(mode) {
   if (!navigator.geolocation) { gpsText('이 기기는 위치를 알 수 없어요.'); setMode('off'); return; }
   gpsText('위치를 찾는 중…');
   gpsAt = Date.now();
+  startWatch();
+  // 화면이 꺼지면 브라우저가 위치를 멈추므로 켜 둔다
+  navigator.wakeLock?.request('screen').then(w => (wake = w)).catch(() => {});
+}
+// 위치 받기를 (다시) 건다. 폰은 다른 앱에 다녀오거나 GPS를 다른 앱과 나눠 쓴 뒤 이 브라우저에 새 값을 안 주기도 한다
+// (다른 내비를 켰다 끄면 그제야 움직였다) — 그래서 돌아올 때와 오래 조용할 때 새로 건다
+let rawAt = 0; // 폰이 값을 준 마지막 때 (걸러서 버린 값도)
+function startWatch() {
+  if (watchId != null) navigator.geolocation.clearWatch(watchId);
+  rawAt = Date.now();
   watchId = navigator.geolocation.watchPosition(
     p => {
+      rawAt = Date.now();
       // 자리부터 올린다 — 아래 방향 처리에서 무슨 일이 나도 위치는 멈추지 않게
       const f = cleanFix({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, v: p.coords.speed }); if (f) setMyPos(f);
       // 움직이는 중이면 GPS가 알려 주는 이동 방향을 진행 방향으로 (폰을 어느 쪽으로 들었든)
@@ -553,16 +564,20 @@ function setMode(mode) {
     },
     e => {
       // 권한 거절만 다시 켜는 단추를 보인다. 시간 초과는 위치 찾기가 계속 돌고 있으니 기다리면 된다.
-      // 카카오톡·네이버 같은 앱 안 브라우저는 폰에서 허용해도 위치를 막기도 한다
-      if (e.code === 1) { gpsText(INAPP ? '이 앱 안에서는 위치를 쓸 수 없어요 — 오른쪽 위 메뉴에서 크롬·사파리로 열어 주세요' : '위치 권한이 꺼져 있어요. 브라우저 설정에서 이 사이트의 위치를 허용해 주세요.'); $('#gpsBtn').hidden = false; }
+      // 카카오톡·네이버 같은 앱 안 브라우저는 폰에서 허용해도 위치를 막기도 한다. 권한 거절은 다시 걸어도 소용없으니 멈춤 감시에서 뺀다
+      if (e.code === 1) { rawAt = Infinity; gpsText(INAPP ? '이 앱 안에서는 위치를 쓸 수 없어요 — 오른쪽 위 메뉴에서 크롬·사파리로 열어 주세요' : '위치 권한이 꺼져 있어요. 브라우저 설정에서 이 사이트의 위치를 허용해 주세요.'); $('#gpsBtn').hidden = false; }
       else if (!myLL) gpsText('위치를 아직 못 찾았어요 — 하늘이 보이는 곳에서 잠시 기다려 주세요');
     },
     { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }); // 묵은 값을 다시 받으면 평균이 속으니 늘 새로 잰 값만
-  // 화면이 꺼지면 브라우저가 위치를 멈추므로 켜 둔다
-  navigator.wakeLock?.request('screen').then(w => (wake = w)).catch(() => {});
 }
-// 다른 앱에 다녀오면 화면 켜 두기가 풀리므로 다시 건다
-document.addEventListener('visibilitychange', () => { if (!document.hidden && watchId != null) navigator.wakeLock?.request('screen').then(w => (wake = w)).catch(() => {}); });
+// 다른 앱에 다녀오면 화면 켜 두기가 풀리고 위치 받기도 멈춰 있을 수 있으므로 둘 다 다시 건다
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || watchId == null) return;
+  navigator.wakeLock?.request('screen').then(w => (wake = w)).catch(() => {});
+  startWatch();
+});
+// 화면을 보고 있는데 12초 넘게 폰이 아무 값도 안 주면 위치 받기가 멈춘 것으로 보고 새로 건다 (서 있어도 폰은 몇 초마다 준다)
+setInterval(() => { if (watchId != null && !document.hidden && Date.now() - rawAt > 12000) startWatch(); }, 4000);
 const gpsText = t => ($('#gpsText').textContent = t);
 // 게임 정보(meta)가 아직 안 왔으면 onMeta에서 다시 부른다
 function simHome() {
