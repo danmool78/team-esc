@@ -498,7 +498,8 @@ function unfollow() {
 
 /* ---------- 손가락·마우스 ---------- */
 const ptrs = new Map();
-let gesture = null, downAt = null;
+// multi: 이번 손짓에 두 손가락이 닿은 적 있음 — 다 뗄 때까지 남은 한 손가락으론 옮기지 않는다 (벌려 당기다 따라가기가 풀리지 않게)
+let gesture = null, downAt = null, multi = false, drag0 = null;
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 if (renderer) {
   const el = renderer.domElement;
@@ -507,6 +508,7 @@ if (renderer) {
     el.setPointerCapture(e.pointerId);
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
     downAt = ptrs.size === 1 ? { x: e.clientX, y: e.clientY, t: performance.now() } : null;
+    if (ptrs.size === 1) { multi = false; drag0 = { x: e.clientX, y: e.clientY }; } else multi = true;
     gesture = null;
   });
   el.addEventListener('pointermove', e => {
@@ -516,7 +518,8 @@ if (renderer) {
     if (ptrs.size === 1) {
       if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 6) downAt = null;
       if (e.buttons & 2 || e.shiftKey) { if (!cam.headUp) goal.yaw -= dx * 0.006; goal.pitch += dy * 0.005; clampGoal(); }
-      else pan(dx, dy);
+      // 따라가는 중엔 손가락이 16px 넘게 끌려야 옮긴다 (두 번째 손가락이 조금 늦게 닿아도 풀리지 않게)
+      else if (!multi && !(cam.follow && Math.hypot(e.clientX - drag0.x, e.clientY - drag0.y) < 16)) pan(dx, dy);
       p.x = e.clientX; p.y = e.clientY;
       return;
     }
@@ -534,11 +537,12 @@ if (renderer) {
   });
   const up = e => {
     ptrs.delete(e.pointerId);
+    if (!ptrs.size) multi = false;
     if (downAt && performance.now() - downAt.t < 450) tap(e.clientX, e.clientY);
     downAt = null;
   };
   el.addEventListener('pointerup', up);
-  el.addEventListener('pointercancel', e => { ptrs.delete(e.pointerId); downAt = null; });
+  el.addEventListener('pointercancel', e => { ptrs.delete(e.pointerId); downAt = null; if (!ptrs.size) multi = false; });
   el.addEventListener('wheel', e => { e.preventDefault(); goal.dist *= Math.exp(e.deltaY * 0.0012); clampGoal(); }, { passive: false });
 }
 
