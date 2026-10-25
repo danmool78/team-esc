@@ -32,17 +32,20 @@ const pxLng = (x, z) => x / (256 * 2 ** z) * 360 - 180;
 const pxLat = (y, z) => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / (256 * 2 ** z)))) * 180 / Math.PI;
 
 /* ---------- 고도 타일: 받아서 미터 값 배열로 풀어 둔다 (여러 게임·지역이 함께 쓴다) ---------- */
-const demWait = new Map(), demData = new Map();
+// 오래 안 쓴 것부터 버려 최대 DEM_MAX장(한 장 256KB, 한 변 약 1km)만 둔다 — 차로 멀리 가도 메모리가 계속 늘지 않게
+const demWait = new Map(), demData = new Map(), DEM_MAX = 64;
 function dem(x, y) {
   const k = x + '/' + y;
-  if (!demWait.has(k)) demWait.set(k, loadImg(DEM(x, y)).then(im => {
+  if (demWait.has(k)) { const p = demWait.get(k); demWait.delete(k); demWait.set(k, p); return p; } // 방금 쓴 것으로 맨 뒤에
+  for (const old of demWait.keys()) { if (demWait.size < DEM_MAX) break; demWait.delete(old); demData.delete(old); }
+  demWait.set(k, loadImg(DEM(x, y)).then(im => {
     if (!im) return null;
     const c = document.createElement('canvas'); c.width = c.height = 256;
     const g = c.getContext('2d', { willReadFrequently: true });
     g.drawImage(im, 0, 0);
     const d = g.getImageData(0, 0, 256, 256).data, h = new Float32Array(256 * 256);
     for (let i = 0; i < h.length; i++) h[i] = d[i * 4] * 256 + d[i * 4 + 1] + d[i * 4 + 2] / 256 - 32768;
-    demData.set(k, h);
+    if (demWait.has(k)) demData.set(k, h); // 받는 사이 버려졌으면 담지 않는다
     return h;
   }));
   return demWait.get(k);
