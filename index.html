@@ -49,6 +49,12 @@
     setTimeout(function () { s.classList.add('out'); setTimeout(function () { s.remove(); }, 500); }, wait);
   };
   setTimeout(function () { window.hideSplash(true); }, 19000); // 비상구(20초)보다 먼저
+  // 시작 효과음: SSSOFT가 걷힐 때 바람이 휘익 불고 제목이 뜰 때 반짝 (2.3초, 작게).
+  // 폰 브라우저는 손대기 전의 소리를 막으므로, 막히면 조용히 넘어간다
+  setTimeout(function () {
+    if (!document.getElementById('splash')) return;
+    try { var a = new Audio('assets/whoosh.mp3'); a.volume = 0.45; var p = a.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {}
+  }, 1000);
 </script>
 
 <!-- 로그인 -->
