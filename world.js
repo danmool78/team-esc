@@ -7,6 +7,7 @@
 import { THREE, damp, glowTexture } from './stage/kit.js';
 import { Actor, TYPES } from './stage/people.js';
 import { buildTerrain } from './terrain.js';
+import { setBuildingsOn } from './buildings.js';
 import { iconImage } from './icons.js';
 
 const wrap = document.getElementById('world');
@@ -69,6 +70,8 @@ export async function loadArea(area) {
   return T;
 }
 export const frame = () => T && T.frame;
+// 지도 모드의 3D 건물 켜고 끄기
+export const setBuildings = setBuildingsOn;
 // 게임 반경: 땅 위에 깔린 금색 띠(폭 EDGE m). 지도는 반경과 상관없이 어디로든 옮겨 볼 수 있고, 이 띠만 게임 지역을 알려 준다.
 // 조각이 새로 생길 때마다 띠를 땅 높이에 다시 맞춘다
 const EDGE = 5, edgeMat = new THREE.MeshBasicMaterial({ color: 0xffd36a, transparent: true, opacity: 0.75, depthWrite: false, side: THREE.DoubleSide });

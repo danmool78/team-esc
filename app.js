@@ -221,6 +221,8 @@ function onMeta() {
   $('#hostTab').hidden = !isHost();
   if (tab === 'host' && !isHost()) { tab = 'missions'; renderTabs(); renderPanel(); } // 진행자에서 빠지면 진행 탭을 닫는다
   simHome();
+  // 3D 건물 단추는 지도 모드일 때만 (지도 단추 바로 밑)
+  $('#fabBld').hidden = G.meta.layer !== 'map';
   const center = G.meta.center;
   const key = [center?.lat, center?.lng, G.meta.radius, G.meta.layer].join();
   if (key !== G.areaKey && center) {
@@ -511,6 +513,10 @@ $('#fabLayer').onclick = () => {
   if (isHost()) net.saveMeta(G.code, { layer });
   else { G.meta.layer = layer; onMeta(); } // 참가자는 내 화면에서만 바꾼다
 };
+// 3D 건물 켜고 끄기: 내 화면에서만, 기기에 기억한다 (처음엔 켬)
+const setBld = v => { W.setBuildings(v); $('#fabBld').classList.toggle('on', v); store.set('bld', v ? null : 'off'); };
+setBld(store.get('bld') !== 'off');
+$('#fabBld').onclick = () => setBld(!$('#fabBld').classList.contains('on'));
 W.on('tapPlayer', focusPlayer);
 W.on('tapMission', openMission);
 W.on('tapGround', ll => {
