@@ -272,10 +272,10 @@ export function upsertMission(m) {
     const beam = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 20, 1, true), new THREE.MeshBasicMaterial({ map: beamTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
     beam.position.y = 0.5;
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.96, 1, 64), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
-    ring.rotation.x = -Math.PI / 2;
-    const disc = new THREE.Mesh(new THREE.CircleGeometry(1, 64), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.16, depthWrite: false }));
-    disc.rotation.x = -Math.PI / 2;
+    // 반경 고리·원판은 땅 높이를 따라 굽혀 깐다(drapeMission) — 평평한 판은 비탈에서 땅에 묻혀 사라졌다
+    const ring = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+    const disc = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }));
+    ring.renderOrder = disc.renderOrder = 2;
     const hit = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 8), new THREE.MeshBasicMaterial({ visible: false }));
     hit.position.y = 0.5; hit.userData.mid = m.id;
     const pillar = new THREE.Group();
@@ -312,9 +312,41 @@ function placeMission(o) {
   const [x, z] = T.frame.toXZ(o.lat, o.lng);
   const y = T.heightAt(x, z);
   o.g.position.set(x, y, z);
-  const r = Math.max(o.r || 0, 4);
-  o.ring.scale.setScalar(r); o.disc.scale.setScalar(r);
-  o.ring.position.y = o.disc.position.y = 1.2;
+  drapeMission(o);
+}
+// 반경 고리(띠)와 원판을 땅 위 0.8m에 땅 모양대로 깐다. 좌표는 표지 묶음(땅 높이 y에 놓인 g) 기준.
+// 지형 조각이 새로 생기면(T.version) 다시 깐다
+function drapeMission(o) {
+  o.drapeVer = T.version; o.drapeAt = performance.now();
+  const r = Math.max(o.r || 0, 4), S = 72, R = 6, bw = Math.max(1.2, r * 0.04);
+  const { x: gx, y: gy, z: gz } = o.g.position;
+  const at = (x, z) => [x, T.heightAt(gx + x, gz + z) - gy + 0.8, z];
+  const ringPos = [], ringIdx = [];
+  for (let a = 0; a <= S; a++) {
+    const s = Math.sin(a / S * Math.PI * 2), c = Math.cos(a / S * Math.PI * 2);
+    ringPos.push(...at(s * (r - bw), c * (r - bw)), ...at(s * r, c * r));
+    if (a < S) ringIdx.push(a * 2, a * 2 + 1, a * 2 + 2, a * 2 + 1, a * 2 + 3, a * 2 + 2);
+  }
+  // 원판: 가운데 한 점 + 동심원 R겹
+  const discPos = [...at(0, 0)], discIdx = [];
+  for (let k = 1; k <= R; k++) for (let a = 0; a < S; a++) {
+    const rr = r * k / R, t = a / S * Math.PI * 2;
+    discPos.push(...at(Math.sin(t) * rr, Math.cos(t) * rr));
+  }
+  const v = (k, a) => (k === 0 ? 0 : 1 + (k - 1) * S + (a % S));
+  for (let a = 0; a < S; a++) {
+    discIdx.push(0, v(1, a), v(1, a + 1));
+    for (let k = 1; k < R; k++) discIdx.push(v(k, a), v(k + 1, a), v(k + 1, a + 1), v(k, a), v(k + 1, a + 1), v(k, a + 1));
+  }
+  const set = (mesh, pos, idx) => {
+    mesh.geometry.dispose();
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    mesh.geometry = g;
+  };
+  set(o.ring, ringPos, ringIdx);
+  set(o.disc, discPos, discIdx);
 }
 export function removeMission(id) {
   const o = missions.get(id);
@@ -738,6 +770,7 @@ function frameLoop(now) {
     m.glow.scale.setScalar(r * 7);
     m.glow.position.y = 2;
     m.g.position.y = T.heightAt(m.g.position.x, m.g.position.z); // 조각이 늦게 생기면 그 높이로
+    if (m.drapeVer !== T.version && now - m.drapeAt > 500) drapeMission(m);
     m.glow.material.opacity = (m.dim ? 0.35 : 0.8) + Math.sin(t * 2.5) * 0.15;
     const s = cam.dist * 0.018 * m.tag.userData.h;
     m.tag.scale.set(s * m.tag.userData.aspect, s, 1);
