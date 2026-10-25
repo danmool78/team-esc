@@ -77,13 +77,17 @@ $('#resetBtn').onclick = async () => {
 };
 
 /* ---------- 별칭·인형 ---------- */
-let draft = { gender: 'm', avatar: pick(OUTFITS.m) };
-// 고르는 화면의 인형도 지도와 같은 알록달록 옷으로: 겉옷은 지금 내 팀 색(팀이 아직 없으면 나만의 밝은 색 — 미색은 칙칙해 보였다), 망토는 나만의 색
-const myLook = () => (G.code && G.members[net.me()]?.team || (G.code && solo()) ? colorOf(net.me()) : personColor(net.me() || 'me'));
-const myThumb = t => W.avatarThumb(t, myLook(), net.me() || '');
+// 옷 색은 각자 고른다 (팀은 이름표·발밑 고리 색으로 구분하니 옷은 자유). 망토는 사람마다 밝은 색, 띠는 금색
+const ROBES = ['#f4efe4', '#3d7be0', '#e0503d', '#3dae6a', '#ffcf3a', '#8e5bd6', '#e8862e', '#3fbfd9', '#e06aa8', '#7fae3a', '#2b2d3a'];
+let draft = { gender: 'm', avatar: pick(OUTFITS.m), robe: pick(ROBES) };
+// 옷 색: 고른 색, 아직 안 골랐으면(예전 가입자) 사람마다 정해진 밝은 색
+const robeOf = uid => G.members[uid]?.robe || personColor(uid);
+const myThumb = (t, robe) => W.avatarThumb(t, robe || profile?.robe || personColor(net.me() || 'me'), net.me() || '');
+$('#robes').innerHTML = ROBES.map(c => `<button type="button" data-c="${c}" style="background:${c}" aria-label="옷 색"></button>`).join('');
+$('#robes').onclick = e => { const c = e.target.closest('button')?.dataset.c; if (c) { draft.robe = c; drawDraft(); } };
 function drawDraft() {
-  $('#avatarImg').src = myThumb(draft.avatar);
-  $('#lookNote').textContent = G.code && (solo() || G.members[net.me()]?.team) ? '' : '겉옷은 팀이 정해지면 팀 색으로 바뀌어요';
+  $('#avatarImg').src = myThumb(draft.avatar, draft.robe);
+  document.querySelectorAll('#robes button').forEach(b => b.classList.toggle('on', b.dataset.c === draft.robe));
   document.querySelectorAll('#genderSeg button').forEach(b => b.classList.toggle('on', b.dataset.g === draft.gender));
 }
 document.querySelectorAll('#genderSeg button').forEach(b => (b.onclick = () => { draft.gender = b.dataset.g; draft.avatar = pick(OUTFITS[draft.gender]); drawDraft(); }));
@@ -93,7 +97,7 @@ $('#reroll').onclick = () => {
   drawDraft();
 };
 function editProfile() {
-  draft = profile ? { gender: profile.gender || 'm', avatar: profile.avatar } : { gender: 'm', avatar: pick(OUTFITS.m) };
+  draft = profile ? { gender: profile.gender || 'm', avatar: profile.avatar, robe: profile.robe || personColor(net.me()) } : { gender: 'm', avatar: pick(OUTFITS.m), robe: pick(ROBES) };
   $('#profName').value = profile?.name || (user.name || '').slice(0, 12);
   drawDraft();
   show('profile');
@@ -101,7 +105,7 @@ function editProfile() {
 $('#profSave').onclick = async () => {
   const name = $('#profName').value.trim();
   if (name.length < 2) { $('#profName').focus(); $('#profName').placeholder = '별칭을 2자 이상 적어 주세요'; return; }
-  profile = { name, gender: draft.gender, avatar: draft.avatar };
+  profile = { name, gender: draft.gender, avatar: draft.avatar, robe: draft.robe };
   await net.saveProfile(profile);
   // 이미 들어가 있던 게임의 이름표·인형도 바꾼다
   if (G.code) net.joinGame(G.code, profile);
@@ -287,7 +291,7 @@ function syncPlayers() {
     const stale = !m.online || now - (p.t || 0) > STALE;
     // 술래잡기 중인 술래는 이름표 아래에 '술래'
     const it = isIt(uid);
-    W.upsertPlayer({ uid, name: m.name, avatar: m.avatar, color: colorOf(uid), team: m.team, me: uid === net.me(), sub: [it ? '술래' : '', stale ? ago(p.t) : ''].filter(Boolean).join(' · ') });
+    W.upsertPlayer({ uid, name: m.name, avatar: m.avatar, robe: robeOf(uid), color: colorOf(uid), team: m.team, me: uid === net.me(), sub: [it ? '술래' : '', stale ? ago(p.t) : ''].filter(Boolean).join(' · ') });
     W.movePlayer(uid, p, stale);
   } catch (e) { console.error(e); } });
 }
@@ -379,8 +383,8 @@ function peopleList() {
   }).join('');
 }
 const thumbs = {};
-// 사람 목록의 작은 인형: 3D와 같은 옷 색 (팀 색 겉옷, 사람마다 망토 색)
-const thumb = (t, uid) => { const c = uid ? colorOf(uid) : '', k = `${t}|${c}|${uid || ''}`; return (thumbs[k] ||= W.avatarThumb(t || 'man', c, uid)); };
+// 사람 목록의 작은 인형: 3D와 같은 옷 (각자 고른 겉옷 색, 사람마다 망토 색)
+const thumb = (t, uid) => { const c = uid ? robeOf(uid) : '', k = `${t}|${c}|${uid || ''}`; return (thumbs[k] ||= W.avatarThumb(t || 'man', c, uid)); };
 
 /* ---------- 찾기: 별칭이나 팀 이름 → 그 미니미에게로 ---------- */
 const findEl = $('#find'), findsEl = $('#finds');

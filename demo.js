@@ -21,11 +21,11 @@ export const saveProfile = async p => { S.users[ME] = p; };
 
 export async function createGame(meta, teams, me) {
   const code = 'DEMO' + (Object.keys(S.games).length + 1);
-  S.games[code] = { meta: { ...meta, host: ME, status: 'ready', created: now() }, teams, members: { [ME]: { name: me.name, avatar: me.avatar, team: '', online: true } }, pos: {}, missions: {}, done: {}, pdone: {}, feed: [], photos: {} };
+  S.games[code] = { meta: { ...meta, host: ME, status: 'ready', created: now() }, teams, members: { [ME]: { name: me.name, avatar: me.avatar, robe: me.robe, team: '', online: true } }, pos: {}, missions: {}, done: {}, pdone: {}, feed: [], photos: {} };
   return code;
 }
 export const gameMeta = async code => S.games[code]?.meta || (code === 'DEMO' ? (seed(), S.games.DEMO.meta) : null);
-export async function joinGame(code, me) { const g = S.games[code]; g.members[ME] = { ...g.members[ME], name: me.name, avatar: me.avatar, online: true, team: g.members[ME]?.team || 't1' }; fire(code); }
+export async function joinGame(code, me) { const g = S.games[code]; g.members[ME] = { ...g.members[ME], name: me.name, avatar: me.avatar, robe: me.robe, online: true, team: g.members[ME]?.team || 't1' }; fire(code); }
 export const setTeam = async (code, who, tid) => { S.games[code].members[who].team = tid; fire(code); };
 export const presence = () => {};
 

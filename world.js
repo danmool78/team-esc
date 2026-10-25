@@ -128,7 +128,7 @@ function relabel(holder, key, ...args) {
 
 /* ---------- 알록달록 옷 ----------
    그 길의 옷차림(TYPES)은 밤색·흙색이라 게임 화면에선 칙칙하다. 모양은 그대로 두고 색만 바꾼 옷을 따로 등록해 입힌다
-   (stage/는 고치지 않는다): 겉옷은 팀 색(조금 밝게), 망토·두건은 사람마다 밝은 색 하나, 띠·테두리는 금색 */
+   (stage/는 고치지 않는다): 겉옷은 각자 고른 색(조금 밝게), 망토·두건은 사람마다 밝은 색 하나, 띠·테두리는 금색 */
 const ACCENTS = ['#ffd34e', '#ff9fc4', '#8fd8ff', '#9be38a', '#ffb36b', '#c9a8ff', '#ffffff'];
 const mix = (a, b, k) => '#' + [1, 3, 5].map(i => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - k) + parseInt(b.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0')).join('');
 function outfit(type, color, seed = '') {
@@ -145,10 +145,10 @@ function outfit(type, color, seed = '') {
 }
 
 /* ---------- 참가자 ---------- */
-// p: { uid, name, avatar, color, me }
+// p: { uid, name, avatar, robe(옷 색), color(팀 색), me }
 export function upsertPlayer(info) {
   let p = players.get(info.uid);
-  const look = outfit(info.avatar, info.color, info.uid);
+  const look = outfit(info.avatar, info.robe || info.color, info.uid); // 겉옷은 각자 고른 색, 팀은 이름표·고리 색으로
   if (!p || p.look !== look) {
     if (p) scene.remove(p.g);
     const g = new THREE.Group();

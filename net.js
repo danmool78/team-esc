@@ -59,7 +59,7 @@ export async function createGame(meta, teams, me) {
     const code = Array.from({ length: 5 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
     if ((await get(G(code, 'meta'))).exists()) continue;
     await set(G(code, 'meta'), { ...meta, host: uid(), status: 'ready', created: serverTimestamp() });
-    await set(G(code, 'members/' + uid()), { name: me.name, avatar: me.avatar, team: '', joined: serverTimestamp() });
+    await set(G(code, 'members/' + uid()), { name: me.name, avatar: me.avatar, robe: me.robe || null, team: '', joined: serverTimestamp() });
     await set(G(code, 'teams'), teams);
     return code;
   }
@@ -69,7 +69,7 @@ export const gameMeta = async code => (await get(G(code, 'meta'))).val();
 export async function joinGame(code, me) {
   const r = G(code, 'members/' + uid());
   const cur = (await get(r)).val();
-  await set(r, { name: me.name, avatar: me.avatar, team: cur?.team || '', joined: cur?.joined || serverTimestamp() });
+  await set(r, { name: me.name, avatar: me.avatar, robe: me.robe || null, team: cur?.team || '', joined: cur?.joined || serverTimestamp() });
 }
 export const setTeam = (code, who, tid) => set(G(code, `members/${who}/team`), tid);
 // 접속 표시: 연결이 끊기면 서버가 알아서 false로 바꾼다

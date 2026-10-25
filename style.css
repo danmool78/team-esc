@@ -46,6 +46,9 @@ textarea{min-height:64px;resize:vertical}
 .or::before,.or::after{content:'';flex:1;height:1px;background:var(--line)}
 
 .avatarbox{display:flex;flex-direction:column;align-items:center;gap:6px;margin:6px 0 12px}
+.robes{display:flex;flex-wrap:wrap;justify-content:center;gap:7px;max-width:200px}
+.robes button{width:26px;height:26px;border-radius:50%;border:2px solid rgba(255,255,255,.25);cursor:pointer;padding:0}
+.robes button.on{border-color:#ffd34e;box-shadow:0 0 0 3px rgba(255,211,78,.35);transform:scale(1.12)}
 .avatarbox img{width:120px;height:150px;background:radial-gradient(circle at 50% 60%,#3a3026,#1d1813 70%);border-radius:18px}
 .seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:3px;margin-bottom:10px}
 .seg button{flex:1;border:0;background:none;padding:9px;border-radius:9px;cursor:pointer;color:var(--muted)}
