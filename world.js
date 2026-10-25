@@ -360,6 +360,8 @@ export function removeMission(id) {
 // 차·버스와 탄 사람의 크기 — 가까이선 실제 크기(VEH: 인형 한 명 키 2.5m 남짓, 차 길이 4m 남짓)로 지도와 함께 줄어들고,
 // 멀리 빼서 점처럼 사라질 만큼 작아지면 그때부터는 화면에서 알아볼 만한 크기를 지킨다 (걷는 인형보다는 작게)
 const VEH = 2.5, VEH_MIN = 0.022;
+// 차에 탄 사람: 차보다 조금 작게(차 크기의 0.7배) 좌석 높이에 세워 앞유리·차체와 겹치지 않게
+const CAR_RIDER = 0.7, CAR_SEAT = 0.4;
 let veh = VEH;
 const CAR_ON = 7, CAR_OFF = 4, BUS_MIN = 4, BUS_R = 25, BUS_DV = 1.5, BUS_AFTER = 20000;
 // 재질은 색마다 한 번만 만든다 (차·버스가 여럿이어도 같은 색은 함께 쓴다)
@@ -745,17 +747,17 @@ function frameLoop(now) {
         if (p.spd > 0.5) p.carAng = damp(p.carAng || 0, near(-Math.atan2(p.vx, -p.vz), p.carAng || 0), 6, dt); // 서 있을 땐 방향 그대로
         // 인형 묶음은 차 안에 서도록 0.3만큼 올렸으니, 차는 그만큼 내리고 비탈에 맞춰 기울인다
         const y = settle(p.carG, p.cur.x, p.cur.y, p.carAng || 0, 0.8 * veh, 0.45 * veh);
-        p.carG.position.y = y - T.heightAt(p.cur.x, p.cur.y) - 0.3 * veh;
+        p.carG.position.y = y - T.heightAt(p.cur.x, p.cur.y) - CAR_SEAT * veh;
       }
     }
     const a = p.actor;
     a.pos.set(0, 0); a.goal.set(0, 0);
     a.faceT = p.seat ? p.seat.face : p.face;
     a.set(moving && !p.seat && !p.car ? 'walk' : 'idle');
-    a.big = p.seat ? veh * p.seat.k : p.car ? veh : big; // 탄 사람은 차·버스와 같은 크기 (버스에 많이 타면 더 작게)
+    a.big = p.seat ? veh * p.seat.k : p.car ? veh * CAR_RIDER : big; // 탄 사람은 차·버스에 맞춘 크기 (차는 조금 작게, 버스에 많이 타면 더 작게)
     a.update(t, dt);
     if (p.seat) p.g.position.set(p.seat.x, p.seat.y, p.seat.z);
-    else p.g.position.set(p.cur.x, T.heightAt(p.cur.x, p.cur.y) + (p.car ? 0.3 * veh : 0), p.cur.y);
+    else p.g.position.set(p.cur.x, T.heightAt(p.cur.x, p.cur.y) + (p.car ? CAR_SEAT * veh : 0), p.cur.y);
     const s = cam.dist * 0.019 * p.tag.userData.h;
     p.tag.scale.set(s * p.tag.userData.aspect, s, 1);
     p.tag.position.y = a.big * 1.05 + s * 0.7;
