@@ -414,24 +414,27 @@ function focusTeam(tid) {
 }
 
 /* ---------- 지도 단추 ---------- */
-// 내 위치 단추: 따라가기(금테) → 진행 방향 고정(파란 화살) → 다시 따라가기
-let fabMode = '';
+// 내 위치 단추: 꺼짐(회색 과녁) → 따라가기(파란 과녁) → 진행 방향 고정(파란 화살) → 꺼짐. 아이콘이 단계마다 바뀐다
+let fabMode = null;
 const setFab = () => {
   const mode = W.following() !== net.me() ? '' : W.headingUp() ? 'nav' : 'on';
   $('#fabMe').classList.toggle('on', mode === 'on');
   $('#fabMe').classList.toggle('nav', mode === 'nav');
-  if (mode !== fabMode) { fabMode = mode; $('#fabMe').innerHTML = ic(mode === 'nav' ? 'nav' : 'locate'); }
+  if (mode !== fabMode) { fabMode = mode; $('#fabMe').innerHTML = ic(mode === 'nav' ? 'nav' : mode === 'on' ? 'locate' : 'locateOff'); }
 };
-// 첫 번째: 나를 가운데 두고 따라간다 (지도 방향은 그대로).
-// 두 번째: 진행 방향 고정 — 나는 가운데, 가는 방향이 늘 위, 배율은 지금 그대로. 지도가 내 걸음에 맞춰 돌고 움직인다
+// 첫 번째: 내 자리로 다시 날아가(화면 갱신) 따라간다. 지도 방향은 그대로.
+// 두 번째: 진행 방향 고정 — 나는 가운데, 가는 방향이 늘 위, 배율은 지금 그대로. 지도가 내 걸음에 맞춰 돌고 움직인다.
+// 세 번째: 따라가기를 푼다
 $('#fabMe').onclick = () => {
   if (!G.pos[net.me()]) { toast(watchId != null ? '내 위치를 찾는 중이에요. 잠시만요.' : '먼저 위치 공유를 켜 주세요.'); return; }
   startCompass();
-  if (W.following() === net.me() && !W.headingUp()) { W.follow(net.me(), true); toast('진행 방향 고정 — 내가 가는 방향이 늘 위로 와요', 'nav'); }
-  else if (W.following() === net.me()) { W.follow(net.me(), false); toast('내 위치 따라가기', 'locate'); }
-  else { W.follow(net.me(), false); W.flyTo(G.pos[net.me()], 140); }
+  const mode = W.following() !== net.me() ? '' : W.headingUp() ? 'nav' : 'on';
+  if (mode === '') { W.follow(net.me(), false); W.flyTo(G.pos[net.me()], 140); }
+  else if (mode === 'on') { W.follow(net.me(), true); toast('진행 방향 고정 — 내가 가는 방향이 늘 위로 와요', 'nav'); }
+  else { W.follow(null); toast('따라가기를 껐어요', 'locateOff'); }
   setFab();
 };
+setFab();
 W.on('unfollow', setFab);
 // 폰 나침반: 안드로이드는 deviceorientationabsolute(alpha는 반시계), 아이폰은 webkitCompassHeading(누른 뒤 허락을 받아야 한다).
 // 나침반이 없는 기기(PC)는 걸어간 방향으로 돌린다
