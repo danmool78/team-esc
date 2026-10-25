@@ -3,7 +3,8 @@
    지도: 실제 GPS 좌표를 몇 초마다 올리고, 모두의 좌표를 받아 미니미 인형이 그 자리까지 걸어가게 한다.
    점수판: 팀마다 해낸 미션 수와 점수를 위에 늘 보이고, 바뀌는 순간 반짝인다 */
 import { JEONJU, dist, fmtDist } from './geo.js';
-import * as W from './world.js';
+// 3D 장면은 판 번호를 붙여 불러온다 — 폰이 예전 world.js를 들고 있으면 새 app.js가 부르는 함수가 없어 위치가 멈췄다
+import * as W from './world.js?v=__BUILD__';
 import { ic, iconImage, iconURL } from './icons.js';
 
 // 판 번호: 배포 때 GitHub Actions가 index.html과 같이 커밋 번호로 바꾼다. 홈 화면 앱이 예전 index.html을 들고 있으면
@@ -20,7 +21,7 @@ const FAKE = (() => { const v = new URLSearchParams(location.search).get('fakegp
 // 화면 크기 고정: 아이폰 사파리는 확대 금지(user-scalable=no)를 무시하므로 두 손가락 확대를 직접 막는다 (3D 지도 위의 두 손가락은 지도가 쓴다)
 ['gesturestart', 'gesturechange'].forEach(k => document.addEventListener(k, e => e.preventDefault()));
 document.addEventListener('touchmove', e => { if (e.touches.length > 1 && !e.target.closest('#world')) e.preventDefault(); }, { passive: false });
-const net = await import(DEMO ? './demo.js' : './net.js');
+const net = await import((DEMO ? './demo.js' : './net.js') + '?v=' + BUILD);
 const $ = s => document.querySelector(s);
 // 이모티콘 대신 귀여운 SVG 아이콘: data-ic가 붙은 단추 앞에 넣고, 찾기 칸에는 돋보기를 깐다
 document.querySelectorAll('[data-ic]').forEach(el => el.insertAdjacentHTML('afterbegin', ic(el.dataset.ic)));
@@ -275,7 +276,8 @@ function renderScores() {
 function syncPlayers() {
   if (!W.frame()) return;
   const now = Date.now();
-  Object.entries(G.members).forEach(([uid, m]) => {
+  // 한 사람에서 탈이 나도 나머지 사람은 계속 옮긴다
+  Object.entries(G.members).forEach(([uid, m]) => { try {
     const p = G.pos[uid];
     if (!p) { W.removePlayer(uid); return; }
     const stale = !m.online || now - (p.t || 0) > STALE;
@@ -283,7 +285,7 @@ function syncPlayers() {
     const it = isIt(uid);
     W.upsertPlayer({ uid, name: m.name, avatar: m.avatar, color: colorOf(uid), team: m.team, me: uid === net.me(), sub: [it ? '술래' : '', stale ? ago(p.t) : ''].filter(Boolean).join(' · ') });
     W.movePlayer(uid, p, stale);
-  });
+  } catch (e) { console.error(e); } });
 }
 function syncMissions() {
   if (!W.frame()) return;
@@ -544,9 +546,10 @@ function setMode(mode) {
   gpsAt = Date.now();
   watchId = navigator.geolocation.watchPosition(
     p => {
-      // 움직이는 중이면 GPS가 알려 주는 이동 방향을 진행 방향으로 (폰을 어느 쪽으로 들었든)
-      if (p.coords.speed > 0.8 && Number.isFinite(p.coords.heading)) W.setCourse(p.coords.heading);
+      // 자리부터 올린다 — 아래 방향 처리에서 무슨 일이 나도 위치는 멈추지 않게
       const f = cleanFix({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, v: p.coords.speed }); if (f) setMyPos(f);
+      // 움직이는 중이면 GPS가 알려 주는 이동 방향을 진행 방향으로 (폰을 어느 쪽으로 들었든)
+      try { if (p.coords.speed > 0.8 && Number.isFinite(p.coords.heading)) W.setCourse?.(p.coords.heading); } catch {}
     },
     e => {
       // 권한 거절만 다시 켜는 단추를 보인다. 시간 초과는 위치 찾기가 계속 돌고 있으니 기다리면 된다.
