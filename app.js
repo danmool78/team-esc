@@ -350,7 +350,7 @@ function focusTeam(tid) {
 /* ---------- 지도 단추 ---------- */
 const setFab = () => $('#fabMe').classList.toggle('on', W.following() === net.me());
 // 내 위치: 나를 가운데 두고 진행 방향이 위로 오게 지도가 돈다
-$('#fabMe').onclick = () => { if (G.pos[net.me()]) { startCompass(); W.follow(net.me(), true); W.flyTo(G.pos[net.me()], 140); } else toast('먼저 위치 공유를 켜 주세요.'); setFab(); };
+$('#fabMe').onclick = () => { if (G.pos[net.me()]) { startCompass(); W.follow(net.me(), true); W.flyTo(G.pos[net.me()], 140); } else toast(watchId != null ? '내 위치를 찾는 중이에요. 잠시만요.' : '먼저 위치 공유를 켜 주세요.'); setFab(); };
 W.on('unfollow', setFab);
 // 폰 나침반: 안드로이드는 deviceorientationabsolute(alpha는 반시계), 아이폰은 webkitCompassHeading(누른 뒤 허락을 받아야 한다).
 // 나침반이 없는 기기(PC)는 걸어간 방향으로 돌린다
@@ -382,7 +382,7 @@ W.on('tapGround', ll => {
 /* ---------- 내 위치: 끔 · GPS · 지도로 테스트 ---------- */
 // 지도로 테스트: 게임 지역 밖(예: 대전에서 전주 게임)에서 시험할 때 GPS 대신 지도를 눌러 내 자리를 정한다.
 // 다음에 들어올 때도 같은 방식으로 이어지게 기기에 기억한다
-let watchId = null, lastSent = null, wake = null, sim = false;
+let watchId = null, lastSent = null, wake = null, sim = false, gpsAt = 0;
 $('#gpsBtn').onclick = () => setMode('gps');
 $('#simBtn').onclick = () => setMode('sim');
 $('#offBtn').onclick = () => setMode('off');
@@ -411,9 +411,15 @@ function setMode(mode) {
   if (FAKE) { setMyPos(FAKE); return; }
   if (!navigator.geolocation) { gpsText('이 기기는 위치를 알 수 없어요.'); setMode('off'); return; }
   gpsText('위치를 찾는 중…');
+  gpsAt = Date.now();
   watchId = navigator.geolocation.watchPosition(
     p => { const f = cleanFix({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy }); if (f) setMyPos(f); },
-    e => { gpsText(e.code === 1 ? '위치 권한이 꺼져 있어요. 브라우저 설정에서 허용해 주세요.' : '위치를 찾지 못했어요.'); $('#gpsBtn').hidden = false; },
+    e => {
+      // 권한 거절만 다시 켜는 단추를 보인다. 시간 초과는 위치 찾기가 계속 돌고 있으니 기다리면 된다.
+      // 카카오톡·네이버 같은 앱 안 브라우저는 폰에서 허용해도 위치를 막기도 한다
+      if (e.code === 1) { gpsText(INAPP ? '이 앱 안에서는 위치를 쓸 수 없어요 — 오른쪽 위 메뉴에서 크롬·사파리로 열어 주세요' : '위치 권한이 꺼져 있어요. 브라우저 설정에서 이 사이트의 위치를 허용해 주세요.'); $('#gpsBtn').hidden = false; }
+      else if (!myLL) gpsText('위치를 아직 못 찾았어요 — 하늘이 보이는 곳에서 잠시 기다려 주세요');
+    },
     { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
   // 화면이 꺼지면 브라우저가 위치를 멈추므로 켜 둔다
   navigator.wakeLock?.request('screen').then(w => (wake = w)).catch(() => {});
@@ -425,6 +431,21 @@ const gpsText = t => ($('#gpsText').textContent = t);
 function simHome() {
   const c = G.meta.center;
   if (sim && c && (!myLL || dist(myLL, c) > (G.meta.radius || 600) * 1.5)) setMyPos({ lat: c.lat, lng: c.lng, acc: 3 });
+}
+const INAPP = /KAKAOTALK|NAVER|Instagram|FBAN|FBAV|Line\/|DaumApps/i.test(navigator.userAgent);
+// GPS 다듬기: 폰은 처음이나 실내에서 와이파이·기지국으로 잡은 큰 오차 값을 섞어 준다.
+// 좋은 값(30m 이내)을 받은 지 20초 안에 오차가 그 세 배 넘고 50m 넘는 값이 오면 버리고,
+// 최근 4초의 값을 정확도로 가중 평균해(1/오차²) 흔들림을 줄인다. 걷는 사람 기준 몇 m 늦는 정도
+let fixes = [], goodAt = 0, goodAcc = Infinity;
+function cleanFix(p) {
+  const now = Date.now();
+  if (p.acc <= 30) { goodAt = now; goodAcc = p.acc; }
+  else if (now - goodAt < 20000 && p.acc > goodAcc * 3 && p.acc > 50) return null;
+  fixes = fixes.filter(f => now - f.t < 4000);
+  fixes.push({ ...p, t: now });
+  let w = 0, lat = 0, lng = 0;
+  fixes.forEach(f => { const k = 1 / (f.acc * f.acc); w += k; lat += f.lat * k; lng += f.lng * k; });
+  return { lat: lat / w, lng: lng / w, acc: Math.max(1, Math.round(Math.min(p.acc, 1 / Math.sqrt(w)))) };
 }
 // 게임 지역에서 이만큼 넘게 떨어진 위치는 기기가 잘못 알려 준 것으로 본다 (PC 브라우저의 와이파이 위치가 베이징으로 잡힌 일이 있었다)
 const WILD = 100e3;
@@ -438,7 +459,9 @@ function setMyPos(p) {
   const first = !lastSent;
   const away = !sim && G.meta.center ? dist(p, G.meta.center) - (G.meta.radius || 600) : 0;
   gpsText(sim ? '테스트: 지도를 누르면 내 인형이 그리로 걸어가요'
-    // 수백 m 오차는 대개 '대략적 위치'만 허용된 것 (안드로이드 12+, iOS '정확한 위치' 끔)
+    // 수백 m 오차는 대개 '대략적 위치'만 허용된 것 (안드로이드 12+, iOS '정확한 위치' 끔).
+    // 다만 켠 직후엔 정확한 위치도 기지국 값부터 오므로 15초는 기다려 본다
+    : p.acc > 300 && Date.now() - gpsAt < 15000 ? `위치를 더 정확히 잡는 중 · 오차 ${fmtDist(p.acc)}`
     : p.acc > 300 ? `위치가 대략적으로만 잡혀요 (오차 ${fmtDist(p.acc)}) — 폰 설정에서 이 사이트의 '정확한 위치'를 켜 주세요`
     : away > 0 ? `게임 지역에서 ${fmtDist(away)} 밖 · 오차 ${p.acc}m` : `위치 공유 중 · 오차 ${p.acc}m${p.acc > 40 ? ' (실내면 커요)' : ''}`);
   // 3m 넘게 움직였거나 8초가 지났을 때만 올린다 (배터리·데이터 아끼기)
