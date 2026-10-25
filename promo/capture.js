@@ -38,6 +38,21 @@ fs.mkdirSync(OUT, { recursive: true });
     await seq(p, 'task', 1);
     await p.evaluate(() => document.querySelector('#taskBtn')?.click());
     await seq(p, 'taskdone', 12, 80);
+    // 진행자 화면: 확인 기다리는 현장 미션 → 판정 → 인정 → 점수가 오른다
+    await p.tap('.tabs button[data-tab=host]'); await p.waitForTimeout(600);
+    await seq(p, 'judgelist', 1);
+    await p.evaluate(() => document.querySelector('[data-judge]').click()); await p.waitForTimeout(600);
+    await seq(p, 'judge', 1);
+    await p.evaluate(() => document.querySelector('#jOk').click());
+    await seq(p, 'approved', 16, 80);
+    return b.close();
+  }
+  // ONLY=beacons: 넓게 내려다본 지도에 미션 빛기둥들
+  if (process.env.ONLY === 'beacons') {
+    p = await page();
+    await p.tap('#grip');
+    await p.tap('#fabAll'); await p.waitForTimeout(2500);
+    await seq(p, 'beacons', 24, 120);
     return b.close();
   }
   // ONLY=bus 처럼 주면 버스부터만 다시 찍는다
@@ -55,9 +70,21 @@ fs.mkdirSync(OUT, { recursive: true });
   await p.evaluate(() => document.querySelector('#simGo')?.click());
   await seq(p, 'mdone', 30, 80);
   await p.context().close();
+  if (process.env.ONLY === 'map') return b.close();
   }
 
   // 3) 단체 버스 (45명) — 사람이 많아 한 장에 몇 초씩 걸리니, 가짜 참가자를 세워 두고 1초씩만 움직여 찍는다
+  // ONLY=basic: 버스·자동차 없이 지도·미션·남은 시간·결과만
+  if (process.env.ONLY === 'basic') {
+    p = await page();
+    await p.evaluate(async () => (await import('/demo.js')).saveMeta('DEMO', { endAt: Date.now() + 299000 })); await p.waitForTimeout(2500);
+    await seq(p, 'timer', 1);
+    await p.tap('.tabs button[data-tab=host]');
+    await p.evaluate(() => { document.querySelector('#hEnd').click(); document.querySelector('#hEnd')?.click(); });
+    await p.waitForTimeout(1300);
+    await seq(p, 'result', 24, 60);
+    return b.close();
+  }
   p = await page('&crowd');
   await p.tap('#grip'); await go(p, '은혜'); await p.waitForTimeout(34000);
   await p.mouse.move(200, 300); await p.mouse.wheel(0, 250); await p.waitForTimeout(2000);

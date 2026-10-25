@@ -114,40 +114,39 @@ const scenes = [
     ${mini(0, 40, 1420, T.b, '청팀', t, 0)}${mini(1, 290, 1500, T.r, '홍팀', t, .3)}${mini(2, 560, 1440, T.g, '녹팀', t, .6)}${mini(4, 810, 1520, T.b, '청팀', t, .9)}
     ${cap('전주 한옥마을이', 330, t, 0.05, 118)}${cap('<em>게임판</em>이 된다!', 490, t, BEAT * 4, 150, '#ffd34e')}
     ${sub('폰 들고 팀별로 걷는 미션 레이스', 700, t, BEAT * 6)}`,
-  // 2. 팀을 나누고 폰 하나씩
-  (t, u) => `<div class="layer bg" style="--a:#4cc3f0;--b:#9b6bff"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
-    ${[['청팀', T.b, 0], ['홍팀', T.r, 1], ['녹팀', T.g, 2]].map(([n, c, i]) => { const k = pop(u, i * BEAT * 1.2, .4); return phone('', 40 + i * 290 - 300 * (1 - k), 640 + Math.abs(i - 1) * 90, 0.6, (i - 1) * 8, `<div class="teamcard" style="--c:${c}"><img src="${AV[i] || ''}"><b>${n}</b><span class="pill">팀 고르기 완료!</span></div>`); }).join('')}
-    ${cap('팀을 나누고', 250, t, SCENE + 0.02)}${cap('폰 <em>하나씩</em> 들고!', 400, t, SCENE + BEAT * 4, 120, '#fff59a')}`,
-  // 3. 실시간 3D 지도
+  // 2. 지도 위 빛기둥 = 미션 장소
+  (t, u) => `<div class="layer bg" style="--a:#9b6bff;--b:#4cc3f0"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
+    ${[160, 540, 900].map((x, i) => `<div style="position:absolute;left:${x}px;top:0;width:70px;height:1920px;margin-left:-35px;opacity:${.35 + .25 * pulse(t + i * BEAT / 3)};background:linear-gradient(180deg,rgba(255,236,170,0),rgba(255,226,140,.9) 70%,#fff6dc)"></div>`).join('')}
+    ${phone(frame('beacons', u / SCENE), 240, 600 + (1 - pop(u, 0, .45)) * 900, 1, -2)}
+    ${sticker('pin', 80, 1300, 1.3 + .2 * pulse(t), -10)}${sticker('flag', 860, 820, 1.2 + .2 * pulse(t + BEAT / 2), 10)}
+    ${cap('지도 위 <em>빛기둥</em>이', 220, t, SCENE + .02, 118, '#ffd34e')}${cap('바로 미션 장소!', 370, t, SCENE + BEAT * 3, 124)}`,
+  // 3. 지도 보며 팀이 함께 출발
   (t, u) => `<div class="layer bg" style="--a:#5fd38a;--b:#4cc3f0"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
-    ${phone(frame('map', u / SCENE), 240, 560 + (1 - pop(u, 0, .45)) * 900, 1, -3)}
-    ${sticker('locate', 80, 760, 1 + 0.15 * pulse(t), -10)}${sticker('map', 860, 1180, 1 + 0.15 * pulse(t + BEAT / 2), 12)}
-    ${cap('친구들 위치가', 210, t, SCENE * 2 + .02, 110)}${cap('<em>3D 지도</em>에 실시간!', 350, t, SCENE * 2 + BEAT * 3, 116, '#ffd34e')}`,
-  // 4. 미션 지점 도착
+    ${phone(frame('map', u / SCENE), 240, 600, 1, 3)}
+    ${sticker('locate', 80, 760, 1 + 0.15 * pulse(t), -10)}${sticker('map', 860, 1220, 1 + 0.15 * pulse(t + BEAT / 2), 12)}
+    ${cap('지도 보며', 220, t, SCENE * 2 + .02, 112)}${cap('우리 팀 <em>함께 출발!</em>', 360, t, SCENE * 2 + BEAT * 3, 120, '#ffd34e')}`,
+  // 4. 멀리 있는 미션은 차 타고
+  (t, u) => `<div class="layer bg" style="--a:#4cc3f0;--b:#3d7be0"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
+    ${phone(frame('drv', u / SCENE), 240, 600, 1, -3)}
+    ${cap('멀리 있는 미션은', 220, t, SCENE * 3 + .02, 110)}${cap('차 타고 <em>부릉~!</em>', 360, t, SCENE * 3 + BEAT * 3, 128, '#fff59a')}`,
+  // 5. 도착하면 현장 미션
   (t, u) => `<div class="layer bg" style="--a:#ffd34e;--b:#ff9f6b"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
-    ${phone(u < BEAT * 3 ? frame('msheet', 0) : frame('mdone', (u - BEAT * 3) / (SCENE - BEAT * 3)), 240, 600, 1, 3)}
-    ${['pin', 'quiz', 'camera', 'flag'].map((n, i) => { const k = pop(u, BEAT * (1 + i * 1.5), .3); return k > 0 ? sticker(n, [70, 860, 60, 870][i], [700, 820, 1300, 1420][i], k * (1.25 + .12 * pulse(t)), [-12, 10, 8, -8][i]) : ''; }).join('')}
-    ${cap('미션 지점 도착!', 230, t, SCENE * 3 + .02, 124)}${sub('도착 · 퀴즈 · 사진 · 현장 미션', 400, t, SCENE * 3 + BEAT * 2)}`,
-  // 5. 점수가 쑥
+    ${phone(u < BEAT * 5 ? frame('task', 0) : frame('taskdone', (u - BEAT * 5) / (BEAT * 3)), 240, 600, 1, 3)}
+    ${sticker('flag', 60, 1280, 1.5 + .25 * pulse(t), -10)}
+    ${cap('도착하면', 200, t, SCENE * 4 + .02, 112)}${cap('<em>현장 미션!</em>', 340, t, SCENE * 4 + BEAT * 2, 150, '#ff6b6b')}
+    ${sub('팀이 함께 해내고 → 해냈어요!', 1820, t, SCENE * 4 + BEAT * 4)}`,
+  // 6. 진행자가 확인하면 점수 쏙
   (t, u) => `<div class="layer bg" style="--a:#ff6b9a;--b:#9b6bff"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
-    <div style="position:absolute;left:40px;top:640px;width:1000px;height:330px;border-radius:40px;overflow:hidden;box-shadow:0 30px 60px rgba(0,0,0,.4);transform:scale(${1 + .03 * pulse(t)})">
-      <img src="${frame('mdone', 1)}" style="width:1000px;margin-top:-30px"></div>
-    <div class="burst" style="left:640px;top:${980 - pop(u, BEAT * 2, .4) * 120}px;transform:scale(${pop(u, BEAT * 2, .4)}) rotate(-8deg)">+10</div>
-    ${confetti(t, SCENE * 4 + BEAT * 2)}
-    ${cap('점수가', 240, t, SCENE * 4 + .02, 120)}${cap('<em>바로바로</em> 쑥!', 390, t, SCENE * 4 + BEAT * 2, 140, '#fff59a')}
-    ${sub('상대 팀 점수도 위에 늘 보여요', 1500, t, SCENE * 4 + BEAT * 4)}`,
-  // 6. 오픈버스
-  (t, u) => `<div class="layer bg" style="--a:#ffc93c;--b:#ff6b6b"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
-    ${phone(frame('bus', u / SCENE), 240, 600, 1, -2)}
-    ${sticker('bus', 60 + Math.sin(t * 3) * 20, 1350, 1.5, -6)}
-    ${cap('다 같이 움직이면', 220, t, SCENE * 5 + .02, 110)}${cap('<em>오픈버스</em> 탑승!', 360, t, SCENE * 5 + BEAT * 3, 132, '#4cc3f0')}`,
-  // 7. 차 타고 미션 장소로 → 도착하면 현장 미션
-  (t, u) => { const drive = u < BEAT * 4, v = u - BEAT * 4;
-    return `<div class="layer bg" style="--a:#4cc3f0;--b:#5fd38a"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
-    ${phone(drive ? frame('drv', u / (BEAT * 4)) : v < BEAT * 2.6 ? frame('task', 0) : frame('taskdone', (v - BEAT * 2.6) / (BEAT * 1.4)), 240, 600, 1, drive ? 3 : -3)}
-    ${drive ? cap('차 타고 <em>미션 장소</em>로', 230, t, SCENE * 6 + .02, 112, '#ffd34e') + cap('부릉~!', 380, t, SCENE * 6 + BEAT * 2, 130, '#fff59a')
-            : cap('도착하면 <em>현장 미션</em>!', 260, t, SCENE * 6 + BEAT * 4, 116, '#ffd34e') + sub('해내면 진행자가 확인 → 점수 쏙', 1820, t, SCENE * 6 + BEAT * 5)}
-    ${drive ? '' : sticker('flag', 840, 1250, 1.4 + .2 * pulse(t), 10)}`; },
+    ${phone(u < BEAT * 2 ? frame('judgelist', 0) : u < BEAT * 4.5 ? frame('judge', 0) : frame('approved', (u - BEAT * 4.5) / (BEAT * 3.5)), 240, 600, 1, -2)}
+    ${sticker('crown', 70, 760, 1.3 + .2 * pulse(t), -10)}
+    <div class="burst" style="left:620px;top:${1180 - pop(u, BEAT * 4.5, .4) * 120}px;transform:scale(${pop(u, BEAT * 4.5, .4)}) rotate(-8deg)">+20</div>
+    ${confetti(t, SCENE * 5 + BEAT * 4.5)}
+    ${cap('진행자가 확인하면', 220, t, SCENE * 5 + .02, 108)}${cap('점수 <em>쏙!</em>', 360, t, SCENE * 5 + BEAT * 4.5, 150, '#fff59a')}`,
+  // 7. 도착 · 퀴즈 · 사진 미션도
+  (t, u) => `<div class="layer bg" style="--a:#5fd38a;--b:#ffd34e"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
+    ${phone(u < BEAT * 3 ? frame('msheet', 0) : frame('mdone', (u - BEAT * 3) / (SCENE - BEAT * 3)), 240, 600, 1, 3)}
+    ${['pin', 'quiz', 'camera'].map((n, i) => { const k = pop(u, BEAT * (1 + i * 1.6), .3); return k > 0 ? sticker(n, [70, 860, 70][i], [760, 900, 1320][i], k * (1.3 + .12 * pulse(t)), [-12, 10, 8][i]) : ''; }).join('')}
+    ${cap('도착 · 퀴즈 · 사진', 220, t, SCENE * 6 + .02, 112)}${cap('<em>미션 가득!</em>', 360, t, SCENE * 6 + BEAT * 3, 140, '#ffd34e')}`,
   // 8. 남은 시간 째깍 → 누가 1등
   (t, u) => { const tick = u < BEAT * 3;
     return `<div class="layer bg" style="--a:#ffd34e;--b:#ffa24c"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
