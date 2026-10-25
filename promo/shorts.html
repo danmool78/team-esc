@@ -194,7 +194,7 @@ window.render = t => {
   const i = Math.floor(t / SCENE);
   stage.innerHTML = t >= END ? ending(t) : scenes[i](t, t - i * SCENE);
   // 장면이 바뀌는 순간 흰 번쩍임
-  const f = Math.min(t % SCENE, Math.abs(t - END));
+  const f = t < END ? t % SCENE : t - END; // 장면이 바뀔 때만 (마무리 동안은 다시 번쩍이지 않게)
   if (f < 0.12 && t > 0.05) stage.insertAdjacentHTML('beforeend', `<div class="layer" style="background:#fff;opacity:${1 - f / 0.12}"></div>`);
   return Promise.all([...stage.querySelectorAll('img')].map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
 };
