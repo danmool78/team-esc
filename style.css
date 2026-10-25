@@ -5,7 +5,8 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;overflow:hidden}
+/* 화면 크기 고정: 끌어도 화면 전체가 튕기거나 밀리지 않고, 두 번 눌러 확대되지 않게 */
+html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none;touch-action:manipulation}
 body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
 button,input,select,textarea{font:inherit;color:inherit}
 [hidden]{display:none!important}
@@ -20,7 +21,8 @@ a{color:var(--gold2)}
 .between{justify-content:space-between}
 .stack{display:flex;flex-direction:column;gap:9px}
 label{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--muted)}
-input,select,textarea{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:11px 13px;width:100%;outline:none}
+/* 글씨가 16px보다 작으면 아이폰이 입력칸을 누를 때 화면을 확대해 버린다 */
+input,select,textarea{font-size:16px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:11px 13px;width:100%;outline:none}
 input:focus,select:focus,textarea:focus{border-color:var(--gold)}
 textarea{min-height:64px;resize:vertical}
 
