@@ -33,7 +33,8 @@ fs.mkdirSync(OUT, { recursive: true });
     }
     // 도착 → 현장 미션 창 → 확인 요청
     await p.evaluate(() => document.querySelector('.item[data-m="m5"]').click()); await p.waitForTimeout(600);
-    await p.evaluate(() => document.querySelector('#simGo')?.click()); await p.waitForTimeout(1500);
+    await p.evaluate(() => document.querySelector('#simGo')?.click()); await p.waitForTimeout(3000);
+    await p.evaluate(() => document.querySelector('#simGo')?.remove()); // 테스트용 단추는 영상에서 뺀다
     await seq(p, 'task', 1);
     await p.evaluate(() => document.querySelector('#taskBtn')?.click());
     await seq(p, 'taskdone', 12, 80);
@@ -49,6 +50,7 @@ fs.mkdirSync(OUT, { recursive: true });
   // 2) 미션: 경기전 홍살문으로 가서 완료 → 알림·점수판
   await p.tap('#grip');
   await p.evaluate(() => document.querySelector('.item[data-m="m0"]').click()); await p.waitForTimeout(800);
+  await p.evaluate(() => { const g = document.querySelector('#simGo'); if (g) g.style.visibility = 'hidden'; });
   await seq(p, 'msheet', 1);
   await p.evaluate(() => document.querySelector('#simGo')?.click());
   await seq(p, 'mdone', 30, 80);

@@ -6,7 +6,7 @@ const { chromium } = require('playwright'); const fs = require('fs'), path = req
   await p.goto('http://localhost:8765/?demo'); await p.waitForTimeout(5000);
   await p.tap?.('.tabs button[data-tab=people]').catch(() => {}); await p.click('.tabs button[data-tab=people]'); await p.waitForTimeout(1500);
   // 큰 그림이 필요해서 앱의 인형 그리기를 직접 크게 부른다
-  const srcs = await p.evaluate(async () => { const W = await import('/world.js'); return ['man', 'woman', 'shepherd', 'woman2', 'peter', 'martha'].map(t => W.avatarThumb(t)); });
+  const srcs = await p.evaluate(async () => { const W = await import('/world.js'); const C = ['#3d7be0', '#e0503d', '#3dae6a']; return ['man', 'woman', 'shepherd', 'woman2', 'peter', 'martha'].map((t, i) => W.avatarThumb(t, C[i % 3], 'p' + i)); }); // 앱과 같은 팀 색 옷
   srcs.forEach((s, i) => fs.writeFileSync(path.join(__dirname, 'cap', `av-${i}.png`), Buffer.from(s.split(',')[1], 'base64')));
   console.log('avatars', srcs.length); await b.close();
 })();
