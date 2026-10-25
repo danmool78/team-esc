@@ -223,7 +223,8 @@ function sampleSpeed(p, t, snap) {
   const dt = (t - p.sp.t) / 1000;
   if (dt < 0.5) return;
   const vx = (p.to.x - p.sp.x) / dt, vz = (p.to.y - p.sp.z) / dt;
-  if (Math.hypot(vx, vz) * dt > 400) { p.sp = { x: p.to.x, z: p.to.y, t }; return; } // 순간 이동
+  // 순간 이동: 400m 넘게 튀거나, 시속 160km(45m/s)보다 빠르면 (테스트 모드로 미션 자리에 옮기기 등) 탄 것으로 치지 않는다
+  if (Math.hypot(vx, vz) * dt > 400 || Math.hypot(vx, vz) > 45) { p.sp = { x: p.to.x, z: p.to.y, t }; return; }
   p.vx = p.vx * 0.5 + vx * 0.5; p.vz = p.vz * 0.5 + vz * 0.5;
   p.spd = Math.hypot(p.vx, p.vz);
   p.sp = { x: p.to.x, z: p.to.y, t };
