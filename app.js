@@ -6,6 +6,8 @@ import { JEONJU, dist, fmtDist } from './geo.js';
 import * as W from './world.js';
 
 const DEMO = new URLSearchParams(location.search).has('demo');
+// 시험용 가짜 GPS: ?fakegps=36.3504,127.3845 — 그 좌표를 GPS가 준 것처럼 쓴다 (클라우드 컴퓨터·데스크톱에서 확인할 때)
+const FAKE = (() => { const v = new URLSearchParams(location.search).get('fakegps')?.split(',').map(Number); return v?.length === 2 && v.every(isFinite) ? { lat: v[0], lng: v[1], acc: 5 } : null; })();
 const net = await import(DEMO ? './demo.js' : './net.js');
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -129,7 +131,7 @@ async function enter(code) {
   await net.joinGame(code, profile);
   net.presence(code);
   store.set('lastGame', code);
-  history.replaceState(null, '', `?${DEMO ? 'demo&' : ''}g=${code}`);
+  history.replaceState(null, '', `?${DEMO ? 'demo&' : ''}${FAKE ? `fakegps=${FAKE.lat},${FAKE.lng}&` : ''}g=${code}`);
   G.code = code;
   G.feed = [];
   show('game');
@@ -151,9 +153,8 @@ async function enter(code) {
     },
   });
   W.follow(net.me());
-  // 지난번 방식(GPS·테스트)을 이어 간다. 데모는 늘 테스트
-  const mode = DEMO ? 'sim' : store.get('posMode');
-  if (mode) setMode(mode);
+  // 지난번 방식을 이어 가고, 처음이면 GPS를 바로 켠다 (끄기를 골랐던 사람만 꺼진 채로). 데모는 늘 테스트
+  setMode(FAKE ? 'gps' : DEMO ? 'sim' : store.get('posMode') || 'gps');
 }
 
 function onMeta() {
@@ -161,10 +162,11 @@ function onMeta() {
   $('#gStatus').textContent = `${STATUS[G.meta.status] || ''} · 코드 ${G.code}`;
   $('#hostTab').hidden = !isHost();
   simHome();
-  const key = [G.meta.center?.lat, G.meta.center?.lng, G.meta.radius, G.meta.layer].join();
-  if (key !== G.areaKey && G.meta.center) {
+  const center = localArea || G.meta.center;
+  const key = [center?.lat, center?.lng, G.meta.radius, G.meta.layer].join();
+  if (key !== G.areaKey && center) {
     G.areaKey = key;
-    W.loadArea({ center: G.meta.center, radius: G.meta.radius || 600, layer: G.meta.layer || 'sat' }).then(t => {
+    W.loadArea({ center, radius: G.meta.radius || 600, layer: G.meta.layer || 'sat' }).then(t => {
       $('#credit').textContent = [t.credit, t.demOk ? '고도 © Mapzen/AWS Terrain Tiles' : ''].filter(Boolean).join(' · ');
       syncPlayers(); syncMissions();
     });
@@ -372,7 +374,8 @@ function setMode(mode) {
   $('#gpsBtn').hidden = mode === 'gps';
   $('#simBtn').hidden = mode === 'sim';
   $('#offBtn').hidden = mode === 'off';
-  if (!DEMO) store.set('posMode', mode === 'off' ? null : mode);
+  if (!DEMO && !FAKE) store.set('posMode', mode);
+  if (localArea && mode !== 'gps') { localArea = null; onMeta(); }
   if (mode === 'off') {
     // 끄면 내 좌표를 지워 다른 사람 지도에서도 내 인형이 사라진다
     myLL = null; lastSent = null;
@@ -386,6 +389,7 @@ function setMode(mode) {
     simHome();
     return;
   }
+  if (FAKE) { setMyPos(FAKE); return; }
   if (!navigator.geolocation) { gpsText('이 기기는 위치를 알 수 없어요.'); setMode('off'); return; }
   gpsText('위치를 찾는 중…');
   watchId = navigator.geolocation.watchPosition(
@@ -403,12 +407,27 @@ function simHome() {
   const c = G.meta.center;
   if (sim && c && (!myLL || dist(myLL, c) > (G.meta.radius || 600) * 1.5)) setMyPos({ lat: c.lat, lng: c.lng, acc: 3 });
 }
+// 내 주변 지도: GPS로 받은 내 자리가 게임 지역 밖이면(예: 대전에서 전주 게임) 내 자리를 가운데로 지형을 새로 만들어
+// 내 화면에서만 보여 준다. 반경의 절반 넘게 걸어 나가면 다시 만들고, 게임 지역에 들어오면 원래 지도로 돌아간다
+let localArea = null;
+function followArea(p) {
+  const c = G.meta.center, R = G.meta.radius || 600;
+  if (!c) return;
+  const out = dist(p, c) > R * 1.2;
+  if (out && (!localArea || dist(p, localArea) > R * 0.5)) {
+    const first = !localArea;
+    localArea = { lat: p.lat, lng: p.lng };
+    onMeta();
+    if (first) toast('게임 지역 밖이라 지금 계신 곳의 지도를 보여 드려요');
+  } else if (!out && localArea) { localArea = null; onMeta(); }
+}
 function setMyPos(p) {
   myLL = p;
+  if (!sim) followArea(p);
   const first = !lastSent;
   const away = !sim && G.meta.center ? dist(p, G.meta.center) - (G.meta.radius || 600) : 0;
   gpsText(sim ? '테스트: 지도를 누르면 내 인형이 그리로 걸어가요'
-    : away > 0 ? `게임 지역에서 ${fmtDist(away)} 떨어져 있어요 — 🧪 지도로 테스트를 써 보세요` : `위치 공유 중 · 오차 ${p.acc}m`);
+    : away > 0 ? `내 주변 지도 · 게임 지역에서 ${fmtDist(away)} · 오차 ${p.acc}m` : `위치 공유 중 · 오차 ${p.acc}m`);
   // 3m 넘게 움직였거나 8초가 지났을 때만 올린다 (배터리·데이터 아끼기)
   const moved = !lastSent || dist(lastSent, p) > 3 || Date.now() - lastSent.at > 8000;
   if (moved) { lastSent = { ...p, at: Date.now() }; net.writePos(G.code, p); }
@@ -533,6 +552,7 @@ function hostPanel() {
       <button class="btn small" id="hAdd">＋ 미션 더하기</button>
       <button class="btn small" id="hTeams">팀 정하기</button>
       <button class="btn small" id="hNotice">📣 알림 보내기</button>
+      <button class="btn small" id="hArea">🗺 지역 바꾸기</button>
     </div>
     <div class="group-h">확인을 기다리는 미션 ${waits.length}</div>
     ${waits.length ? waits.map(({ tid, mid, d }) => `<div class="item" data-judge="${tid}|${mid}"><div class="ic wait">${TYPES[G.missions[mid]?.type]?.[0] || '⏳'}</div>
@@ -544,6 +564,7 @@ function bindHost(el) {
   el.querySelector('#hEnd')?.addEventListener('click', async e => { if (!confirmIn(e.target)) return; await net.setStatus(G.code, 'ended'); net.say(G.code, '', '📣 게임이 끝났어요. 수고하셨어요!'); });
   el.querySelector('#hAdd')?.addEventListener('click', () => missionForm());
   el.querySelector('#hTeams')?.addEventListener('click', teamEditor);
+  el.querySelector('#hArea')?.addEventListener('click', areaEditor);
   el.querySelector('#hNotice')?.addEventListener('click', () => openSheet(`<h3>모두에게 알림</h3><form class="stack" id="nf"><input id="nt" placeholder="예: 10분 뒤 광장에 모여요" required><button class="btn primary">보내기</button></form>`,
     s => (s.querySelector('#nf').onsubmit = async e => { e.preventDefault(); await net.say(G.code, '', '📣 ' + s.querySelector('#nt').value.trim()); closeSheet(); })));
   el.querySelectorAll('[data-judge]').forEach(n => (n.onclick = () => judgeSheet(...n.dataset.judge.split('|'))));
@@ -556,6 +577,41 @@ async function judgeSheet(tid, mid) {
     el.querySelector('#jOk').onclick = async () => { await net.judge(G.code, tid, mid, true); net.say(G.code, tid, `${teamOf(tid).name} — '${m.title}' 완료!`); closeSheet(); };
     el.querySelector('#jNo').onclick = async () => { await net.judge(G.code, tid, mid, false); await net.delPhoto(G.code, tid, mid); net.say(G.code, tid, `${teamOf(tid).name} — '${m.title}' 다시 해 주세요`); closeSheet(); };
     if (m.type === 'photo') { const url = await net.getPhoto(G.code, tid, mid); el.querySelector('#ph').innerHTML = url ? `<img class="photo" src="${url}" alt="">` : '<p class="fine">사진이 없어요.</p>'; }
+  });
+}
+// 게임 지역: 중심과 반경을 바꾸면 모두의 화면에서 지형을 새로 만든다 (예: 대전에서 시험하다가 행사 날 전주로)
+function areaEditor() {
+  const c = G.meta.center || JEONJU, r = G.meta.radius || 600;
+  const far = Object.values(G.missions).filter(m => dist(m, c) > r).length;
+  openSheet(`<h3>게임 지역 바꾸기</h3><p class="fine">지금: ${c.lat.toFixed(4)}, ${c.lng.toFixed(4)} · 반경 ${fmtDist(r)}</p>
+    <form class="stack" id="af">
+      <label>중심<select id="aC"><option value="here">지금 내 위치 (GPS)</option><option value="jeonju">전주 한옥마을</option><option value="custom">직접 입력 (위도, 경도)</option><option value="keep">그대로 두고 반경만</option></select></label>
+      <input id="aLL" placeholder="36.3504, 127.3845" hidden>
+      <label>반경<select id="aR">${[300, 600, 1000, 1500, 2500].map(v => `<option value="${v}" ${v === r ? 'selected' : ''}>${fmtDist(v)}</option>`).join('')}</select></label>
+      <p class="fine">이미 만든 미션은 자리를 옮기지 않아요. 새 지역 밖에 남은 미션은 진행 탭에서 지우거나 고쳐 주세요.${far ? ` (지금도 지역 밖 미션 ${far}개)` : ''}</p>
+      <button class="btn primary">바꾸기</button><p class="msg" id="aMsg"></p></form>`, el => {
+    const sel = el.querySelector('#aC');
+    sel.onchange = () => (el.querySelector('#aLL').hidden = sel.value !== 'custom');
+    el.querySelector('#af').onsubmit = async e => {
+      e.preventDefault();
+      const msg = el.querySelector('#aMsg');
+      try {
+        let center = c;
+        if (sel.value === 'here') { msg.textContent = '위치를 찾는 중…'; center = await here(); }
+        if (sel.value === 'jeonju') center = JEONJU;
+        if (sel.value === 'custom') {
+          const [lat, lng] = el.querySelector('#aLL').value.split(',').map(Number);
+          if (!isFinite(lat) || !isFinite(lng)) throw new Error('위도, 경도를 "36.3504, 127.3845"처럼 적어 주세요.');
+          center = { lat, lng };
+        }
+        await net.saveMeta(G.code, { center, radius: +el.querySelector('#aR').value });
+        net.say(G.code, '', '📣 게임 지역이 바뀌었어요');
+        closeSheet();
+        // 테스트 중이면 내 인형도 새 지역 가운데로
+        if (sim) setMyPos({ lat: center.lat, lng: center.lng, acc: 3 });
+        W.resetView();
+      } catch (er) { msg.className = 'msg err'; msg.textContent = er.code === 1 ? '위치 권한이 꺼져 있어요.' : er.message || '바꾸지 못했어요.'; }
+    };
   });
 }
 function teamEditor() {
