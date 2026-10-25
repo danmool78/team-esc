@@ -56,6 +56,9 @@ export const getPhoto = async (code, tid, mid) => S.games[code].photos[tid + '_'
 export const delPhoto = async (code, tid, mid) => { delete S.games[code].photos[tid + '_' + mid]; };
 export const say = async (code, team, text) => feed(code, team, text);
 export const me = () => ME;
+// 홍보 영상 촬영용: 가짜 참가자들을 잠깐 세운다 (무거운 장면을 1초씩 찍으려고 — promo/capture.js)
+let paused = false;
+export const pause = v => (paused = !!v);
 
 /* ---------- 미리 차려 둔 게임 'DEMO': 한옥마을 둘레의 미션과 가짜 참가자 ---------- */
 const BOTS = [
@@ -103,7 +106,7 @@ function seed() {
   const goals = {};
   setInterval(() => {
     const g = S.games.DEMO;
-    if (g.meta.status !== 'live') return;
+    if (g.meta.status !== 'live' || paused) return;
     moveExtras();
     BOTS.forEach(([id, name, , team]) => {
       const p = g.pos[id];

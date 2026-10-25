@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>비전 퀘스트 — 쇼츠</title>
+<!-- 홍보 쇼츠(1080×1920) 한 장면씩 그리는 페이지. render(t)가 t초의 화면을 만든다 — promo/render.js가 30fps로 찍어 영상으로 엮는다 -->
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Jua&family=Noto+Sans+KR:wght@500;700;900&display=block" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;width:1080px;height:1920px;overflow:hidden;background:#15110d;font-family:'Noto Sans KR',sans-serif}
+  #stage{position:relative;width:1080px;height:1920px;overflow:hidden}
+  .layer{position:absolute;inset:0}
+  .bg{background:linear-gradient(160deg,var(--a),var(--b))}
+  .stripes{opacity:.13;background:repeating-linear-gradient(-30deg,#fff 0 40px,transparent 40px 110px)}
+  .cap{position:absolute;left:0;right:0;text-align:center;font-family:'Black Han Sans',sans-serif;color:#fff;line-height:1.08;
+       paint-order:stroke fill;-webkit-text-stroke:16px #2b1a0e;text-shadow:0 12px 0 rgba(43,26,14,.55);letter-spacing:-1px}
+  .cap em{font-style:normal;color:var(--hl,#ffd34e)}
+  .sub{position:absolute;left:0;right:0;text-align:center;font-family:'Jua',sans-serif;font-size:52px;color:#2b1a0e;}
+  .sub span{background:#fff;border-radius:999px;padding:10px 34px;box-shadow:0 8px 0 rgba(43,26,14,.35)}
+  .phone{position:absolute;width:600px;height:1200px;border-radius:78px;background:#1b1714;padding:20px;box-shadow:0 40px 80px rgba(0,0,0,.45),inset 0 0 0 4px #3b332c}
+  .phone .scr{width:100%;height:100%;border-radius:60px;overflow:hidden;background:#000;position:relative}
+  .phone img{width:100%;height:100%;object-fit:cover;display:block}
+  .phone .notch{position:absolute;top:34px;left:50%;width:150px;height:36px;margin-left:-75px;border-radius:20px;background:#1b1714;z-index:2}
+  .sticker{position:absolute;width:150px;height:150px;filter:drop-shadow(0 10px 0 rgba(43,26,14,.35))}
+  .sticker svg{width:100%;height:100%}
+  .mini{position:absolute;width:230px}
+  .mini img{width:100%;display:block}
+  .mini .ring{position:absolute;left:30px;right:30px;bottom:-10px;height:46px;border-radius:50%;border:12px solid var(--c)}
+  .mini .tag{position:absolute;top:24px;left:50%;transform:translateX(-50%);background:var(--c);color:#fff;font:700 30px 'Noto Sans KR';padding:4px 18px;border-radius:999px;white-space:nowrap}
+  .mini .ph{position:absolute;right:22px;top:132px;width:46px;height:80px;border-radius:10px;background:linear-gradient(160deg,#7fe3a8,#4cc3f0 60%,#ffd34e);border:5px solid #222;transform:rotate(14deg);box-shadow:0 0 0 4px rgba(255,255,255,.4)}
+  .teamcard{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px;background:linear-gradient(180deg,#201912,#120e0a)}
+  .teamcard b{font-family:'Black Han Sans';font-size:96px;color:var(--c)}
+  .teamcard .pill{font:700 34px 'Noto Sans KR';color:#fff;background:var(--c);padding:14px 40px;border-radius:999px}
+  .teamcard img{width:260px}
+  .confetti i{position:absolute;width:26px;height:40px;border-radius:6px}
+  .burst{position:absolute;font-family:'Black Han Sans';font-size:200px;color:#ffd34e;paint-order:stroke fill;-webkit-text-stroke:18px #2b1a0e}
+  #end{background:radial-gradient(circle at 50% 42%,#4a3418,#15110d 70%)}
+  .rays{position:absolute;left:50%;top:42%;width:2600px;height:2600px;margin:-1300px 0 0 -1300px;
+        background:repeating-conic-gradient(from 0deg,rgba(255,211,78,.16) 0 9deg,transparent 9deg 22deg)}
+  .logo{position:absolute;left:50%;top:560px;width:380px;height:380px;margin-left:-190px;border-radius:84px;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+  .title{position:absolute;left:0;right:0;top:1000px;text-align:center;font-family:'Black Han Sans';font-size:200px;color:#ffd34e;
+         paint-order:stroke fill;-webkit-text-stroke:20px #2b1a0e;text-shadow:0 18px 0 #b5431f}
+  .soon{position:absolute;left:0;right:0;top:1290px;text-align:center;font-family:'Black Han Sans';font-size:110px;color:#fff;letter-spacing:8px;
+        paint-order:stroke fill;-webkit-text-stroke:12px #2b1a0e}
+  .where{position:absolute;left:0;right:0;top:1440px;text-align:center;font-family:'Jua';font-size:50px;color:#f0d79a}
+  .credit{position:absolute;left:0;right:0;bottom:46px;text-align:center;font-size:24px;color:rgba(255,255,255,.55)}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script type="module">
+import { ic } from '../icons.js';
+
+// 음악 박자 (Pixel Peeker Polka - faster ≈ 143.6 BPM): 장면은 2마디(8박)마다 바뀐다
+const BEAT = 60 / 143.55, SCENE = BEAT * 8, END = SCENE * 8; // 8장면 뒤 마무리 (두둥!)
+const TOTAL = 31;
+const ease = { out: x => 1 - Math.pow(1 - x, 3), back: x => { const c = 1.9; x = Math.min(1, Math.max(0, x)); return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); }, inout: x => (x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2) };
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const pop = (t, t0, d = 0.28) => ease.back(clamp((t - t0) / d)); // 0 → 1 (튀어나오듯)
+const pulse = t => Math.pow(1 - ((t / BEAT) % 1), 4); // 박자마다 1 → 0
+
+// 촬영한 앱 화면들
+const CAP = window.CAP || {};
+const img = new Map();
+const frame = (name, k) => { const n = CAP[name] || 1; const i = Math.min(n - 1, Math.max(0, Math.floor(k * n))); return `cap/${name}-${String(i).padStart(3, '0')}.jpg`; };
+const AV = window.AVATARS || [];
+
+const stage = document.getElementById('stage');
+const el = (html) => { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstChild; };
+
+// 전주 그림 배경: 하늘, 산, 한옥 지붕들, 경기전 홍살문, 은행나무 (직접 그린 그림)
+const jeonju = (shift = 0) => `<svg class="layer" viewBox="0 0 1080 1920" preserveAspectRatio="xMidYMid slice">
+  <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6fd0ff"/><stop offset=".6" stop-color="#bff0ff"/><stop offset="1" stop-color="#fff3d6"/></linearGradient></defs>
+  <rect width="1080" height="1920" fill="url(#sky)"/>
+  <g fill="#fff" opacity=".9" transform="translate(${-shift * 0.3} 0)"><ellipse cx="200" cy="260" rx="120" ry="44"/><ellipse cx="290" cy="240" rx="90" ry="50"/><ellipse cx="820" cy="380" rx="140" ry="46"/><ellipse cx="900" cy="350" rx="80" ry="44"/></g>
+  <path d="M0 1050 Q200 860 420 980 T860 930 T1080 1000 V1920 H0z" fill="#8fcf7a"/>
+  <path d="M0 1120 Q260 980 520 1080 T1080 1060 V1920 H0z" fill="#6db35e"/>
+  <g transform="translate(${-shift * 0.6} 0)">
+    ${[0, 1, 2, 3, 4].map(i => { const x = -80 + i * 300, y = 1130 + (i % 2) * 40; return `
+      <rect x="${x + 40}" y="${y + 40}" width="220" height="120" fill="#f3e6c8" stroke="#5a3d2b" stroke-width="6"/>
+      <rect x="${x + 120}" y="${y + 80}" width="60" height="80" fill="#8a5a36"/>
+      <path d="M${x - 20} ${y + 44} Q${x + 30} ${y + 30} ${x + 50} ${y - 10} L${x + 250} ${y - 10} Q${x + 270} ${y + 30} ${x + 320} ${y + 44} Q${x + 150} ${y + 20} ${x - 20} ${y + 44}z" fill="#3d3f4a" stroke="#22232a" stroke-width="6"/>
+      <path d="M${x + 50} ${y - 10} Q${x + 150} ${y - 50} ${x + 250} ${y - 10}z" fill="#4c4f5c"/>`; }).join('')}
+  </g>
+  <!-- 경기전 홍살문 -->
+  <g transform="translate(${640 - shift * 0.9} 1180)">
+    <rect x="0" y="0" width="22" height="300" fill="#d8402f" stroke="#5a1d14" stroke-width="5"/><rect x="258" y="0" width="22" height="300" fill="#d8402f" stroke="#5a1d14" stroke-width="5"/>
+    <rect x="-20" y="10" width="320" height="22" fill="#d8402f" stroke="#5a1d14" stroke-width="5"/>
+    ${Array.from({ length: 12 }, (_, i) => `<path d="M${20 + i * 21} 32 V-40" stroke="#d8402f" stroke-width="8"/>`).join('')}
+    <path d="M60 -40 h160 l-20 -30 h-120z" fill="#d8402f" stroke="#5a1d14" stroke-width="5"/>
+  </g>
+  <!-- 은행나무 -->
+  <g transform="translate(${100 - shift * 1.1} 1330)"><rect x="40" y="80" width="30" height="140" fill="#7a4a2a"/><circle cx="55" cy="40" r="110" fill="#ffd34e" stroke="#c99a14" stroke-width="8"/></g>
+  <g transform="translate(${930 - shift * 1.1} 1380)"><rect x="40" y="80" width="30" height="120" fill="#7a4a2a"/><circle cx="55" cy="50" r="90" fill="#ffc531" stroke="#c99a14" stroke-width="8"/></g>
+  <rect y="1560" width="1080" height="360" fill="#e9d2a6"/><path d="M0 1560h1080" stroke="#c9a874" stroke-width="10"/>
+</svg>`;
+
+const sticker = (name, x, y, s, rot) => `<div class="sticker" style="left:${x}px;top:${y}px;transform:scale(${s}) rotate(${rot}deg)">${ic(name)}</div>`;
+const phone = (src, x, y, s = 1, rot = 0, extra = '') => `<div class="phone" style="left:${x}px;top:${y}px;transform:scale(${s}) rotate(${rot}deg);transform-origin:50% 50%"><div class="scr"><div class="notch"></div>${src ? `<img src="${src}">` : ''}${extra}</div></div>`;
+const cap = (html, top, t, t0, size = 120, hl) => { const k = pop(t, t0); return k <= 0 ? '' : `<div class="cap" style="top:${top}px;font-size:${size}px;transform:scale(${(0.3 + 0.7 * k) * (1 + 0.025 * pulse(t))});opacity:${clamp(k * 3)};${hl ? `--hl:${hl}` : ''}">${html}</div>`; };
+const sub = (text, top, t, t0) => { const k = pop(t, t0, 0.35); return k <= 0 ? '' : `<div class="sub" style="top:${top}px;opacity:${clamp(k * 2)};transform:translateY(${(1 - k) * 60}px)"><span>${text}</span></div>`; };
+const confetti = (t, t0, n = 40) => {
+  if (t < t0) return '';
+  const cs = ['#ff6b9a', '#ffd34e', '#4cc3f0', '#5fd38a', '#9b6bff', '#ffa24c'];
+  return `<div class="layer confetti">${Array.from({ length: n }, (_, i) => { const x = (i * 131) % 1080, sp = 700 + (i % 7) * 120, y = -80 + (t - t0) * sp - (i % 5) * 140; return y > 1980 ? '' : `<i style="left:${x}px;top:${y}px;background:${cs[i % 6]};transform:rotate(${(t - t0) * 400 + i * 40}deg)"></i>`; }).join('')}</div>`;
+};
+const mini = (i, x, y, color, name, t, hop = 0) => { const a = AV[i % AV.length]; const bob = Math.abs(Math.sin((t / BEAT + hop) * Math.PI)) * 26; return a ? `<div class="mini" style="left:${x}px;top:${y - bob}px;--c:${color}"><div class="tag">${name}</div><img src="${a}"><div class="ph"></div><div class="ring"></div></div>` : ''; };
+const T = { b: '#3d7be0', r: '#e0503d', g: '#3dae6a' };
+
+// 장면들: (t: 영상 시각, u: 장면 안 시각 0..SCENE)
+const scenes = [
+  // 1. 전주가 게임판으로
+  (t, u) => `${jeonju(u * 40)}
+    ${mini(0, 40, 1420, T.b, '청팀', t, 0)}${mini(1, 290, 1500, T.r, '홍팀', t, .3)}${mini(2, 560, 1440, T.g, '녹팀', t, .6)}${mini(4, 810, 1520, T.b, '청팀', t, .9)}
+    ${cap('전주 한옥마을이', 330, t, 0.05, 118)}${cap('<em>게임판</em>이 된다!', 490, t, BEAT * 4, 150, '#ffd34e')}
+    ${sub('폰 들고 팀별로 걷는 미션 레이스', 700, t, BEAT * 6)}`,
+  // 2. 팀을 나누고 폰 하나씩
+  (t, u) => `<div class="layer bg" style="--a:#4cc3f0;--b:#9b6bff"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
+    ${[['청팀', T.b, 0], ['홍팀', T.r, 1], ['녹팀', T.g, 2]].map(([n, c, i]) => { const k = pop(u, i * BEAT * 1.2, .4); return phone('', 40 + i * 290 - 300 * (1 - k), 640 + Math.abs(i - 1) * 90, 0.6, (i - 1) * 8, `<div class="teamcard" style="--c:${c}"><img src="${AV[i] || ''}"><b>${n}</b><span class="pill">팀 고르기 완료!</span></div>`); }).join('')}
+    ${cap('팀을 나누고', 250, t, SCENE + 0.02)}${cap('폰 <em>하나씩</em> 들고!', 400, t, SCENE + BEAT * 4, 120, '#fff59a')}`,
+  // 3. 실시간 3D 지도
+  (t, u) => `<div class="layer bg" style="--a:#5fd38a;--b:#4cc3f0"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
+    ${phone(frame('map', u / SCENE), 240, 560 + (1 - pop(u, 0, .45)) * 900, 1, -3)}
+    ${sticker('locate', 80, 760, 1 + 0.15 * pulse(t), -10)}${sticker('map', 860, 1180, 1 + 0.15 * pulse(t + BEAT / 2), 12)}
+    ${cap('친구들 위치가', 210, t, SCENE * 2 + .02, 110)}${cap('<em>3D 지도</em>에 실시간!', 350, t, SCENE * 2 + BEAT * 3, 116, '#ffd34e')}`,
+  // 4. 미션 지점 도착
+  (t, u) => `<div class="layer bg" style="--a:#ffd34e;--b:#ff9f6b"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
+    ${phone(u < BEAT * 3 ? frame('msheet', 0) : frame('mdone', (u - BEAT * 3) / (SCENE - BEAT * 3)), 240, 600, 1, 3)}
+    ${['pin', 'quiz', 'camera', 'flag'].map((n, i) => { const k = pop(u, BEAT * (1 + i * 1.5), .3); return k > 0 ? sticker(n, [70, 860, 60, 870][i], [700, 820, 1300, 1420][i], k * (1.25 + .12 * pulse(t)), [-12, 10, 8, -8][i]) : ''; }).join('')}
+    ${cap('미션 지점 도착!', 230, t, SCENE * 3 + .02, 124)}${sub('도착 · 퀴즈 · 사진 · 현장 미션', 400, t, SCENE * 3 + BEAT * 2)}`,
+  // 5. 점수가 쑥
+  (t, u) => `<div class="layer bg" style="--a:#ff6b9a;--b:#9b6bff"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
+    <div style="position:absolute;left:40px;top:640px;width:1000px;height:330px;border-radius:40px;overflow:hidden;box-shadow:0 30px 60px rgba(0,0,0,.4);transform:scale(${1 + .03 * pulse(t)})">
+      <img src="${frame('mdone', 1)}" style="width:1000px;margin-top:-30px"></div>
+    <div class="burst" style="left:640px;top:${980 - pop(u, BEAT * 2, .4) * 120}px;transform:scale(${pop(u, BEAT * 2, .4)}) rotate(-8deg)">+10</div>
+    ${confetti(t, SCENE * 4 + BEAT * 2)}
+    ${cap('점수가', 240, t, SCENE * 4 + .02, 120)}${cap('<em>바로바로</em> 쑥!', 390, t, SCENE * 4 + BEAT * 2, 140, '#fff59a')}
+    ${sub('상대 팀 점수도 위에 늘 보여요', 1500, t, SCENE * 4 + BEAT * 4)}`,
+  // 6. 오픈버스
+  (t, u) => `<div class="layer bg" style="--a:#ffc93c;--b:#ff6b6b"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
+    ${phone(frame('bus', u / SCENE), 240, 600, 1, -2)}
+    ${sticker('bus', 60 + Math.sin(t * 3) * 20, 1350, 1.5, -6)}
+    ${cap('다 같이 움직이면', 220, t, SCENE * 5 + .02, 110)}${cap('<em>오픈버스</em> 탑승!', 360, t, SCENE * 5 + BEAT * 3, 132, '#4cc3f0')}`,
+  // 7. 자동차 · 남은 시간
+  (t, u) => `<div class="layer bg" style="--a:#4cc3f0;--b:#5fd38a"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
+    ${phone(u < BEAT * 4 ? frame('car', u / (BEAT * 4)) : frame('timer', 0), 240, 600, 1, u < BEAT * 4 ? 3 : -3)}
+    ${u < BEAT * 4 ? cap('빠르면 <em>자동차</em> 부릉!', 280, t, SCENE * 6 + .02, 112, '#ffd34e') : cap('남은 시간 <em>째깍째깍</em>', 280, t, SCENE * 6 + BEAT * 4, 112, '#ff6b6b')}
+    ${u >= BEAT * 4 ? sticker('clock', 830, 1300, 1.4 + .2 * pulse(t), 10) : ''}`,
+  // 8. 누가 1등
+  (t, u) => `<div class="layer bg" style="--a:#ffd34e;--b:#ffa24c"></div><div class="layer stripes" style="transform:translateX(${-u * 60}px)"></div>
+    ${phone(frame('result', u / SCENE), 240, 600, 1, 2)}
+    ${sticker('trophy', 70, 760, 1.4 + .2 * pulse(t), -10)}${sticker('medal1', 860, 1250, 1.2 + .2 * pulse(t + BEAT / 2), 10)}
+    ${confetti(t, SCENE * 7 + BEAT * 2, 30)}
+    ${cap('누가 <em>1등</em>?!', 280, t, SCENE * 7 + .02, 150, '#ff6b6b')}`,
+];
+// 마무리: 두둥! (END, END+0.55) → 로고·제목 → COMING SOON
+const ending = t => {
+  const u = t - END, k1 = pop(u, 0, .35), k2 = pop(u, .55, .35), k3 = pop(u, 1.5, .5);
+  const shake = u > .55 && u < .9 ? Math.sin(u * 90) * 14 * (0.9 - u) / .35 : 0;
+  return `<div class="layer" id="end" style="transform:translate(${shake}px,${shake * .6}px)"><div class="rays" style="transform:rotate(${u * 12}deg) scale(${k1})"></div>
+    ${k1 > 0 ? `<img class="logo" src="../assets/icon-512.png" style="transform:scale(${k1})">` : ''}
+    ${k2 > 0 ? `<div class="title" style="transform:scale(${2.2 - 1.2 * k2});opacity:${clamp(k2 * 2)}">비전 퀘스트</div>` : ''}
+    ${k3 > 0 ? `<div class="soon" style="opacity:${k3};transform:translateY(${(1 - k3) * 40}px)">COMING SOON</div><div class="where" style="opacity:${k3}">전주에서 팀별로 걷는 미션 게임</div>` : ''}
+    ${[['두', 0, 130, -12], ['둥!', .55, 560, 10]].map(([w, at, x, r]) => { const k = pop(u, at, .2), fade = clamp(1.6 - u); return k > 0 && fade > 0 ? `<div class="burst" style="left:${x}px;top:230px;font-size:230px;color:#fff;transform:scale(${k}) rotate(${r}deg);opacity:${fade}">${w}</div>` : ''; }).join('')}
+    <div class="credit">Music: "Pixel Peeker Polka - faster" Kevin MacLeod (incompetech.com) · CC BY 4.0</div></div>`;
+};
+
+window.render = t => {
+  const i = Math.floor(t / SCENE);
+  stage.innerHTML = t >= END ? ending(t) : scenes[i](t, t - i * SCENE);
+  // 장면이 바뀌는 순간 흰 번쩍임
+  const f = Math.min(t % SCENE, Math.abs(t - END));
+  if (f < 0.12 && t > 0.05) stage.insertAdjacentHTML('beforeend', `<div class="layer" style="background:#fff;opacity:${1 - f / 0.12}"></div>`);
+  return Promise.all([...stage.querySelectorAll('img')].map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
+};
+window.TOTAL = TOTAL; window.END = END;
+window.ready = document.fonts.ready;
+</script>
+</body>
+</html>
