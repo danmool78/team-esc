@@ -163,7 +163,7 @@ summary{cursor:pointer;color:var(--gold2);font-size:14px;margin-bottom:10px}
 /* 아래 창을 접으면 지도 출처 글씨도 함께 내려간다 (--dock은 창 안에서만 바뀌므로) */
 .screen:has(.dock.min) .credit{bottom:122px}
 @media (min-width:900px){ .screen:has(.dock.min) .credit{bottom:4px} }
-.check{display:flex;align-items:center;gap:10px;font-size:14px;cursor:pointer}
+.check{display:flex;flex-direction:row;align-items:center;gap:10px;font-size:14px;cursor:pointer}
 .check input{width:20px;height:20px;padding:0;flex:0 0 auto;accent-color:var(--gold)}
 /* 귀여운 SVG 아이콘 (icons.js) — 글자 크기를 따라간다 */
 .ico{width:1.3em;height:1.3em;vertical-align:-.3em;flex:0 0 auto;display:inline-block}

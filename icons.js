@@ -47,6 +47,8 @@ const ICONS = {
   locateOff: `<circle cx="12" cy="12" r="7" fill="#4a4038" stroke="#bfb3a3" stroke-width="1.8"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" stroke="#bfb3a3" stroke-width="2"/><circle cx="12" cy="12" r="2.2" fill="none" stroke="#bfb3a3" stroke-width="1.6"/>`,
   // 진행 방향 고정: 파란 동그라미에 흰 화살촉
   nav: `<circle cx="12" cy="12" r="9" fill="#3b8bff"/><path d="M12 6.2l4.2 10.4L12 14.3l-4.2 2.3z" fill="#fff" stroke="#fff" stroke-width="1.2"/>${shine(8, 7.8, 1)}`,
+  // 술래잡기: 빨간 동그라미에 잡으려는 손
+  tag: `<circle cx="12" cy="12" r="9.5" fill="#ff6b6b"/><path d="M8.2 15.6V10a1 1 0 0 1 2 0v3.2V7.6a1 1 0 0 1 2 0v5.4V7a1 1 0 0 1 2 0v6V8.6a1 1 0 0 1 2 0v6.2a4.4 4.4 0 0 1-4.4 4.4h-.6a4 4 0 0 1-3.3-1.8l-2-3a1 1 0 0 1 1.6-1.2z" fill="#fff" stroke="#3b2a1a" stroke-width="1.1"/>`,
   // 더하기: 민트 동그라미에 흰 십자
   plus: `<circle cx="12" cy="12" r="9" fill="#3fd6a8"/><path d="M12 7.5v9M7.5 12h9" stroke="#fff" stroke-width="2.6"/>${shine(8.2, 7.8, 1.1)}`,
   // 팀: 세 팀 색 머리와 어깨
