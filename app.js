@@ -413,14 +413,14 @@ function setMode(mode) {
   gpsText('위치를 찾는 중…');
   gpsAt = Date.now();
   watchId = navigator.geolocation.watchPosition(
-    p => { const f = cleanFix({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy }); if (f) setMyPos(f); },
+    p => { const f = cleanFix({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, v: p.coords.speed }); if (f) setMyPos(f); },
     e => {
       // 권한 거절만 다시 켜는 단추를 보인다. 시간 초과는 위치 찾기가 계속 돌고 있으니 기다리면 된다.
       // 카카오톡·네이버 같은 앱 안 브라우저는 폰에서 허용해도 위치를 막기도 한다
       if (e.code === 1) { gpsText(INAPP ? '이 앱 안에서는 위치를 쓸 수 없어요 — 오른쪽 위 메뉴에서 크롬·사파리로 열어 주세요' : '위치 권한이 꺼져 있어요. 브라우저 설정에서 이 사이트의 위치를 허용해 주세요.'); $('#gpsBtn').hidden = false; }
       else if (!myLL) gpsText('위치를 아직 못 찾았어요 — 하늘이 보이는 곳에서 잠시 기다려 주세요');
     },
-    { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }); // 묵은 값을 다시 받으면 평균이 속으니 늘 새로 잰 값만
   // 화면이 꺼지면 브라우저가 위치를 멈추므로 켜 둔다
   navigator.wakeLock?.request('screen').then(w => (wake = w)).catch(() => {});
 }
@@ -435,17 +435,25 @@ function simHome() {
 const INAPP = /KAKAOTALK|NAVER|Instagram|FBAN|FBAV|Line\/|DaumApps/i.test(navigator.userAgent);
 // GPS 다듬기: 폰은 처음이나 실내에서 와이파이·기지국으로 잡은 큰 오차 값을 섞어 준다.
 // 좋은 값(30m 이내)을 받은 지 20초 안에 오차가 그 세 배 넘고 50m 넘는 값이 오면 버리고,
-// 최근 4초의 값을 정확도로 가중 평균해(1/오차²) 흔들림을 줄인다. 걷는 사람 기준 몇 m 늦는 정도
+// 최근 값을 정확도로 가중 평균해(1/오차²) 흔들림을 줄인다. 폰은 1초에 한 번쯤 새 값을 주므로
+// 서 있을 땐 20초(20개 남짓)를 모아 평균해 미션 지점에서 자리를 단단히 잡고, 걸으면 4초만 써서 몇 m 늦는 정도로 따라간다.
+// 걷는지는 폰이 준 속도(0.6m/s 넘게)나, 새 값이 지금 평균에서 오차의 두 배보다 멀리 벗어났는지로 본다
 let fixes = [], goodAt = 0, goodAcc = Infinity;
 function cleanFix(p) {
   const now = Date.now();
   if (p.acc <= 30) { goodAt = now; goodAcc = p.acc; }
   else if (now - goodAt < 20000 && p.acc > goodAcc * 3 && p.acc > 50) return null;
-  fixes = fixes.filter(f => now - f.t < 4000);
+  const avg = list => {
+    let w = 0, lat = 0, lng = 0;
+    list.forEach(f => { const k = 1 / (f.acc * f.acc); w += k; lat += f.lat * k; lng += f.lng * k; });
+    return { lat: lat / w, lng: lng / w, w };
+  };
+  const moving = p.v > 0.6 || (fixes.length > 0 && dist(avg(fixes), p) > Math.max(6, p.acc * 2));
+  fixes = fixes.filter(f => now - f.t < (moving ? 4000 : 20000));
   fixes.push({ ...p, t: now });
-  let w = 0, lat = 0, lng = 0;
-  fixes.forEach(f => { const k = 1 / (f.acc * f.acc); w += k; lat += f.lat * k; lng += f.lng * k; });
-  return { lat: lat / w, lng: lng / w, acc: Math.max(1, Math.round(Math.min(p.acc, 1 / Math.sqrt(w)))) };
+  const m = avg(fixes), best = Math.min(...fixes.map(f => f.acc));
+  // 연달아 잰 값의 오차는 서로 닮아서 개수만큼 줄지는 않는다 — 가장 좋은 값의 절반 아래로는 말하지 않는다
+  return { lat: m.lat, lng: m.lng, acc: Math.max(1, Math.round(Math.min(p.acc, Math.max(best / 2, 1 / Math.sqrt(m.w))))) };
 }
 // 게임 지역에서 이만큼 넘게 떨어진 위치는 기기가 잘못 알려 준 것으로 본다 (PC 브라우저의 와이파이 위치가 베이징으로 잡힌 일이 있었다)
 const WILD = 100e3;
