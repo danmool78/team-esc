@@ -2,7 +2,8 @@
 import subprocess, numpy as np, wave, sys, os
 D = os.path.dirname(os.path.abspath(__file__))
 SR, BEAT = 44100, 60 / 143.55
-END, TOTAL = BEAT * 64, 31.0
+END = BEAT * 72  # 9장면 (2마디씩)
+TOTAL = round(END + 4.3, 2)
 raw = subprocess.run(['ffmpeg', '-v', 'error', '-i', f'{D}/audio/bgm.mp3', '-t', str(TOTAL + 2), '-ac', '2', '-ar', str(SR), '-f', 's16le', '-'], capture_output=True, check=True).stdout
 m = np.frombuffer(raw, dtype=np.int16).astype(np.float32).reshape(-1, 2) / 32768
 n = int(TOTAL * SR)

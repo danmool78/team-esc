@@ -47,6 +47,48 @@ fs.mkdirSync(OUT, { recursive: true });
     await seq(p, 'approved', 16, 80);
     return b.close();
   }
+  // ONLY=types: 퀴즈·사진 미션을 하는 화면 (미션 종류 장면용)
+  if (process.env.ONLY === 'types') {
+    p = await page();
+    const near = async m => {
+      await p.evaluate(m => document.querySelector(`.item[data-m="${m}"]`).click(), m); await p.waitForTimeout(600);
+      await p.evaluate(() => document.querySelector('#simGo')?.click()); await p.waitForTimeout(3000);
+      await p.evaluate(() => document.querySelector('#simGo')?.remove()); // 테스트용 단추는 영상에서 뺀다
+    };
+    // 퀴즈: 문제 → 정답 치기 → 정답이에요!
+    await near('m2');
+    await seq(p, 'quiz', 1);
+    await p.tap('#qAns');
+    const ans = '이성계';
+    for (let i = 0; i < ans.length; i++) { await p.evaluate(v => { document.querySelector('#qAns').value = v; }, ans.slice(0, i + 1)); await seq(p, 'quiztype' + i, 1); }
+    await p.evaluate(() => document.querySelector('#qForm button').click());
+    await seq(p, 'quizok', 10, 80);
+    // 사진: 사진 미션 창 → 사진 올리기 → 진행자 확인 기다림
+    await near('m3');
+    await seq(p, 'photo', 1);
+    await p.setInputFiles('#photoIn', path.join(__dirname, '..', 'assets', 'icon-512.png'));
+    await seq(p, 'photook', 10, 80);
+    // 현장 미션: 걸어서 도착 → 해냈어요 → 진행자가 인정
+    await near('m5');
+    await seq(p, 'task', 1);
+    await p.evaluate(() => document.querySelector('#taskBtn').click());
+    await seq(p, 'taskdone', 12, 80);
+    await p.evaluate(() => { document.querySelector('#sheet').hidden = true; document.querySelector('.tabs button[data-tab=host]').click(); }); await p.waitForTimeout(600);
+    await seq(p, 'judgelist', 1);
+    await p.evaluate(() => [...document.querySelectorAll('[data-judge]')].find(n => n.textContent.includes('청연루'))?.click()); await p.waitForTimeout(600);
+    await seq(p, 'judge', 1);
+    await p.evaluate(() => document.querySelector('#jOk').click());
+    await seq(p, 'approved', 16, 80);
+    // 점수가 쌓인 뒤: 끝나기 5분 전 → 게임 끝 → 결과
+    await p.evaluate(async () => (await import('/demo.js')).saveMeta('DEMO', { endAt: Date.now() + 299000 })); await p.waitForTimeout(2500);
+    await p.evaluate(() => document.querySelector('.tabs button[data-tab=missions]').click()); await p.tap('#grip'); await p.waitForTimeout(500);
+    await seq(p, 'timer', 1);
+    await p.evaluate(() => document.querySelector('.tabs button[data-tab=host]').click()); await p.waitForTimeout(400);
+    await p.evaluate(() => { document.querySelector('#hEnd').click(); document.querySelector('#hEnd')?.click(); });
+    await p.waitForTimeout(1300);
+    await seq(p, 'result', 24, 60);
+    return b.close();
+  }
   // ONLY=beacons: 넓게 내려다본 지도에 미션 빛기둥들
   if (process.env.ONLY === 'beacons') {
     p = await page();
