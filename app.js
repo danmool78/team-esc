@@ -122,7 +122,10 @@ $('#createForm').onsubmit = async e => {
 /* ---------- 게임 ---------- */
 const G = { code: null, meta: {}, teams: {}, members: {}, pos: {}, missions: {}, done: {}, feed: [], off: null, areaKey: '' };
 const myTeam = () => G.members[net.me()]?.team || '';
-const isHost = () => G.meta.host === net.me();
+// 진행자: 게임을 만든 사람(host)과, 그가 회원 중에서 더한 사람들(hosts)
+const isOwner = () => G.meta.host === net.me();
+const isHostUid = uid => uid === G.meta.host || G.meta.hosts?.[uid] === true;
+const isHost = () => isHostUid(net.me());
 const teamOf = tid => G.teams[tid] || { name: '팀 없음', color: '#8a8070' };
 let myLL = null, tab = 'missions', unseen = 0;
 
@@ -167,6 +170,7 @@ function onMeta() {
   $('#gName').textContent = G.meta.name || '';
   $('#gStatus').textContent = `${STATUS[G.meta.status] || ''} · 코드 ${G.code}`;
   $('#hostTab').hidden = !isHost();
+  if (tab === 'host' && !isHost()) { tab = 'missions'; renderTabs(); renderPanel(); } // 진행자에서 빠지면 진행 탭을 닫는다
   simHome();
   const center = G.meta.center;
   const key = [center?.lat, center?.lng, G.meta.radius, G.meta.layer].join();
@@ -302,7 +306,7 @@ function peopleList() {
       groups[t].map(([uid, m]) => {
         const p = G.pos[uid], live = m.online && p && Date.now() - (p.t || 0) < STALE;
         return `<div class="item" data-u="${uid}"><img class="mini" src="${thumb(m.avatar)}" alt="">
-          <div class="tx"><b>${esc(m.name)}${uid === net.me() ? ' (나)' : ''}${uid === G.meta.host ? ' · 진행자' : ''}</b>
+          <div class="tx"><b>${esc(m.name)}${uid === net.me() ? ' (나)' : ''}${isHostUid(uid) ? ' · 진행자' : ''}</b>
           <small><span class="dot ${live ? 'on-dot' : 'off-dot'}"></span> ${p ? (live ? '위치 공유 중' : ago(p.t) + ' 위치') : '위치 없음'}</small></div>
           <div class="rt">${myLL && p && uid !== net.me() ? fmtDist(dist(myLL, p)) : ''}</div></div>`;
       }).join('');
@@ -643,6 +647,7 @@ function hostPanel() {
       <button class="btn small" id="hTeams">팀 정하기</button>
       <button class="btn small" id="hNotice">📣 알림 보내기</button>
       <button class="btn small" id="hArea">🗺 지역 바꾸기</button>
+      ${isOwner() ? '<button class="btn small" id="hHosts">🧑‍✈️ 진행자 더하기</button>' : ''}
     </div>
     <div class="group-h">확인을 기다리는 미션 ${waits.length}</div>
     ${waits.length ? waits.map(({ tid, mid, d }) => `<div class="item" data-judge="${tid}|${mid}"><div class="ic wait">${TYPES[G.missions[mid]?.type]?.[0] || '⏳'}</div>
@@ -655,6 +660,7 @@ function bindHost(el) {
   el.querySelector('#hAdd')?.addEventListener('click', () => missionForm());
   el.querySelector('#hTeams')?.addEventListener('click', teamEditor);
   el.querySelector('#hArea')?.addEventListener('click', areaEditor);
+  el.querySelector('#hHosts')?.addEventListener('click', hostEditor);
   el.querySelector('#hNotice')?.addEventListener('click', () => openSheet(`<h3>모두에게 알림</h3><form class="stack" id="nf"><input id="nt" placeholder="예: 10분 뒤 광장에 모여요" required><button class="btn primary">보내기</button></form>`,
     s => (s.querySelector('#nf').onsubmit = async e => { e.preventDefault(); await net.say(G.code, '', '📣 ' + s.querySelector('#nt').value.trim()); closeSheet(); })));
   el.querySelectorAll('[data-judge]').forEach(n => (n.onclick = () => judgeSheet(...n.dataset.judge.split('|'))));
@@ -702,6 +708,23 @@ function areaEditor() {
         W.resetView();
       } catch (er) { msg.className = 'msg err'; msg.textContent = er.code === 1 ? '위치 권한이 꺼져 있어요.' : er.message || '바꾸지 못했어요.'; }
     };
+  });
+}
+// 진행자 더하기: 게임을 만든 진행자가 회원 중에서 고른다. 더해진 진행자는 미션·팀·판정·알림을 똑같이 하되, 진행자를 더하거나 빼지는 못한다
+function hostEditor() {
+  const draw = () => Object.entries(G.members).filter(([u]) => u !== G.meta.host).sort(([a, x], [b, y]) => isHostUid(b) - isHostUid(a) || x.name.localeCompare(y.name))
+    .map(([uid, m]) => `<div class="item"><img class="mini" src="${thumb(m.avatar)}" alt=""><div class="tx"><b>${esc(m.name)}</b><small>${esc(teamOf(m.team).name)}${isHostUid(uid) ? ' · 진행자' : ''}</small></div>
+      <button class="btn small ${isHostUid(uid) ? '' : 'primary'}" data-host="${uid}">${isHostUid(uid) ? '빼기' : '진행자로'}</button></div>`).join('') || '<p class="empty">아직 들어온 회원이 없어요.</p>';
+  openSheet(`<h3>진행자 더하기</h3><p class="fine">회원 중에서 골라 함께 진행해요. 더해진 진행자는 미션·팀·판정·알림을 똑같이 할 수 있어요.</p><div id="hl">${draw()}</div>`, el => {
+    const bind = () => el.querySelectorAll('[data-host]').forEach(b => (b.onclick = async () => {
+      const uid = b.dataset.host, on = !isHostUid(uid);
+      try {
+        await net.setCohost(G.code, uid, on);
+        net.say(G.code, '', `📣 ${G.members[uid]?.name} 님이 진행자${on ? '가 됐어요' : '에서 빠졌어요'}`);
+        el.querySelector('#hl').innerHTML = draw(); bind();
+      } catch { toast('바꾸지 못했어요.'); }
+    }));
+    bind();
   });
 }
 function teamEditor() {
