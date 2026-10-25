@@ -337,7 +337,11 @@ label.btn{flex-direction:row;justify-content:center;align-items:center;gap:4px}
 .sp-tag{position:relative;font-size:15px;color:#f0d79a;margin-top:6px;animation:up .5s 2.45s both}
 /* 맨 처음: 검은 바탕에 하얀 SSSOFT가 살며시 떴다 지고(1.1초), 검은 막이 걷히며 시작 화면이 나온다 */
 .splash>.intro.intro{position:absolute;inset:0;z-index:5;background:#000;display:grid;place-items:center;animation:introOut .35s 1.1s ease-in forwards;pointer-events:none}
-.intro span{color:#fff;font-family:var(--sans);font-weight:600;font-size:22px;letter-spacing:.42em;padding-left:.42em;opacity:0;animation:introTxt 1.1s ease-in-out forwards}
+.intro-in{display:flex;flex-direction:column;align-items:center;opacity:0;animation:introTxt 1.1s ease-in-out forwards}
+.intro b{color:#fff;font:200 34px/1 Montserrat,var(--sans);letter-spacing:.6em;padding-left:.6em}
+.intro i{display:block;height:1px;width:0;margin:14px 0 10px;background:linear-gradient(90deg,transparent,#f0c76a,transparent);animation:introLine .8s .15s ease-out forwards}
+.intro small{color:#b9b9b9;font:300 11px/1 Montserrat,var(--sans);letter-spacing:.38em;padding-left:.38em}
+@keyframes introLine{to{width:180px}}
 @keyframes introTxt{30%,65%{opacity:1}100%{opacity:0}}
 @keyframes introOut{to{opacity:0;visibility:hidden}}
 /* 시작 화면·대문 배경: 미션 고리처럼 동그랗게 퍼지는 금빛 파문과 반짝이는 별 (퍼지는 햇살 무늬는 욱일기를 떠올리게 해서 쓰지 않는다) */
