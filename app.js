@@ -39,7 +39,7 @@ const TEAM_PRESET = [['청팀', '#3d7be0'], ['홍팀', '#e0503d'], ['녹팀', '#
 // 개인전: 사람마다 색 (uid로 늘 같은 색)
 const PERSON_COLORS = ['#3d7be0', '#e0503d', '#3dae6a', '#d9a520', '#8e5bd6', '#e8862e', '#3fbfd9', '#e06aa8', '#7fae3a', '#c0763f', '#5a6fd6', '#d6455f'];
 const personColor = uid => PERSON_COLORS[[...uid].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % PERSON_COLORS.length];
-const TYPES = { arrive: ['pin', '도착'], quiz: ['quiz', '퀴즈'], photo: ['camera', '사진'], task: ['flag', '현장 미션'], tag: ['tag', '술래잡기'] };
+const TYPES = { arrive: ['pin', '도착'], quiz: ['quiz', '퀴즈'], photo: ['camera', '사진'], task: ['flag', '현장 미션'], sing: ['mic', '노래'], tag: ['tag', '술래잡기'] };
 const tic = type => ic(TYPES[type]?.[0] || 'pin');
 // 알림(팀 없는 소식)은 확성기 아이콘으로 — 예전 소식 앞의 이모티콘은 떼어 낸다
 const plain = t => String(t || '').replace(/^📣\s*/u, '');
@@ -830,10 +830,11 @@ function openMission(id) {
   else if (d?.status === 'wait') act = `<div class="box">${ic('wait')} 진행자가 확인하고 있어요.</div>`;
   else if (!canPlay()) act = `<div class="box">팀에 들어가야 미션을 할 수 있어요.</div>`;
   else if (!live) act = `<div class="box">${G.meta.status === 'ended' || timeUp() ? '게임이 끝났어요.' : '진행자가 게임을 시작하면 열려요.'}</div>`;
-  else if (!near(m)) act = `<div class="box">${myLL ? `${fmtDist(dist(myLL, m))} 남았어요. ` : '위치 공유를 켜 주세요. '}반경 ${m.r}m 안으로 가면 ${m.type === 'arrive' ? '저절로 완료돼요' : '열려요'}.</div>`;
-  else if (m.type === 'quiz') act = `<div class="box">${esc(m.q)}</div><form class="row" id="qForm"><input id="qAns" placeholder="정답" autocomplete="off"><button class="btn primary">제출</button></form><p class="msg" id="qMsg"></p>`;
-  else if (m.type === 'photo') act = `<label class="btn wide primary" style="text-align:center">${ic('camera')} 사진 찍어 올리기<input type="file" accept="image/*" capture="environment" id="photoIn" hidden></label><p class="msg" id="qMsg"></p>`;
-  else if (m.type === 'task') act = `<button class="btn wide primary" id="taskBtn">${ic('flag')} 해냈어요 — 진행자에게 확인 요청</button>`;
+  else if (!near(m)) act = retryNote(m) + `<div class="box">${myLL ? `${fmtDist(dist(myLL, m))} 남았어요. ` : '위치 공유를 켜 주세요. '}반경 ${m.r}m 안으로 가면 ${m.type === 'arrive' ? '저절로 완료돼요' : '열려요'}.</div>`;
+  else if (m.type === 'quiz') act = retryNote(m) + `<div class="box">${esc(m.q)}</div><form class="row" id="qForm"><input id="qAns" placeholder="정답" autocomplete="off"><button class="btn primary">제출</button></form><p class="msg" id="qMsg"></p>`;
+  else if (m.type === 'photo') act = retryNote(m) + `<label class="btn wide primary" style="text-align:center">${ic('camera')} 사진 찍어 올리기<input type="file" accept="image/*" capture="environment" id="photoIn" hidden></label><p class="msg" id="qMsg"></p>`;
+  else if (m.type === 'task') act = retryNote(m) + `<button class="btn wide primary" id="taskBtn">${ic('flag')} 해냈어요 — 진행자에게 확인 요청</button>`;
+  else if (m.type === 'sing') act = retryNote(m) + `<div class="rec" id="rec"></div><p class="msg" id="qMsg"></p>`;
   else act = `<div class="box">도착! 곧 완료돼요.</div>`;
   // 테스트 모드: 미션 자리로 바로 옮겨 가 본다
   if (sim && !d) act += `<button class="btn wide" id="simGo">${ic('flask')} 여기로 이동 (테스트)</button>`;
@@ -857,6 +858,7 @@ function openMission(id) {
     });
     el.querySelector('#simGo')?.addEventListener('click', () => { closeSheet(); setMyPos({ lat: m.lat, lng: m.lng, acc: 3 }); setTimeout(() => openMission(id), 300); });
     el.querySelector('#taskBtn')?.addEventListener('click', async () => { await finish(id, m, 'wait'); closeSheet(); toast('확인을 요청했어요.'); });
+    if (el.querySelector('#rec')) singRecorder(el, id, m);
     el.querySelector('#mEdit')?.addEventListener('click', () => missionForm(id));
     el.querySelector('#mToggle')?.addEventListener('click', async () => { await net.saveMission(G.code, id, { ...m, open: m.open === false }); closeSheet(); });
     el.querySelector('#mDel')?.addEventListener('click', async () => { if (confirmIn(el.querySelector('#mDel'))) { await net.delMission(G.code, id); closeSheet(); } });
@@ -869,6 +871,53 @@ function confirmIn(btn) {
   return false;
 }
 // 사진은 긴 변 900px JPEG로 줄여 데이터베이스에 바로 넣는다 (Storage 없이)
+// 진행자가 다시 하라고 한 이유: 우리 팀(개인 미션은 나)에게 온 이 미션의 마지막 '다시 해 주세요' 소식
+function retryNote(m) {
+  const t = myTeam(), f = G.feed.find(f => (solo() || f.team === t) && f.text.includes(`'${m.title}' 다시 해 주세요`) && (!isEach(m) || solo() || f.text.includes(profile.name)));
+  const why = f?.text.split('다시 해 주세요')[1]?.replace(/^\s*[—:-]\s*/, '').trim();
+  return f ? `<div class="box warn">${ic('megaphone')} 진행자: 다시 해 주세요${why ? ` — <b>${esc(why)}</b>` : ''}</div>` : '';
+}
+/* ---------- 노래 미션: 현장에서 한 소절 녹음 → 들어 보고 보내기 → 진행자가 듣고 인정 ----------
+   녹음은 사진과 같은 자리(photos)에 data URL로 둔다. 길이는 최대 20초, 32kbps로 작게(규칙의 크기 한도 안) */
+const REC_MAX = 20;
+function singRecorder(el, id, m) {
+  const box = el.querySelector('#rec'), msg = el.querySelector('#qMsg');
+  let rec = null, chunks = [], timer = null, url = null, blob = null;
+  const idle = () => { box.innerHTML = `<button class="btn wide primary" id="recGo">${ic('mic')} 녹음 시작 — 노래 한 소절 (최대 ${REC_MAX}초)</button>`; box.querySelector('#recGo').onclick = start; };
+  async function start() {
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { msg.className = 'msg err'; msg.textContent = '이 브라우저는 녹음을 할 수 없어요. 크롬이나 사파리로 열어 주세요.'; return; }
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch { msg.className = 'msg err'; msg.textContent = '마이크 권한이 꺼져 있어요. 브라우저 설정에서 마이크를 허용해 주세요.'; return; }
+    const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'].find(t => MediaRecorder.isTypeSupported?.(t)) || '';
+    rec = new MediaRecorder(stream, { ...(type ? { mimeType: type } : {}), audioBitsPerSecond: 32000 });
+    chunks = [];
+    rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+    rec.onstop = () => { stream.getTracks().forEach(t => t.stop()); clearInterval(timer); blob = new Blob(chunks, { type: rec.mimeType || type }); url = URL.createObjectURL(blob); review(); };
+    rec.start();
+    const t0 = Date.now();
+    box.innerHTML = `<div class="recbar"><span class="recdot"></span> 녹음 중 <b id="recT">0</b>초 / ${REC_MAX}초</div><button class="btn wide danger" id="recStop">■ 그만 — 다 불렀어요</button>`;
+    box.querySelector('#recStop').onclick = () => rec.state !== 'inactive' && rec.stop();
+    timer = setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); const n = box.querySelector('#recT'); if (n) n.textContent = s; if (s >= REC_MAX && rec.state !== 'inactive') rec.stop(); }, 250);
+    msg.textContent = '';
+  }
+  function review() {
+    box.innerHTML = `<audio controls src="${url}" class="recplay"></audio>
+      <div class="grid2"><button class="btn" id="recAgain">${ic('mic')} 다시 녹음</button><button class="btn primary" id="recSend">보내기 — 진행자 확인</button></div>`;
+    box.querySelector('#recAgain').onclick = () => { URL.revokeObjectURL(url); idle(); start(); };
+    box.querySelector('#recSend').onclick = async () => {
+      msg.className = 'msg'; msg.textContent = '보내는 중…';
+      const data = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(blob); });
+      if (data.length > 390000) { msg.className = 'msg err'; msg.textContent = '너무 길어요. 조금 짧게 다시 녹음해 주세요.'; return; }
+      try {
+        await net.savePhoto(G.code, photoKey(m), id, data);
+        await finish(id, m, 'wait');
+        closeSheet(); toast('노래를 보냈어요. 진행자가 듣고 인정하면 점수가 올라가요.', 'mic');
+      } catch (er) { msg.className = 'msg err'; msg.textContent = '보내지 못했어요 (' + (er.code || er.message) + ')'; }
+    };
+  }
+  idle();
+}
 async function shrink(file) {
   const bmp = await createImageBitmap(file);
   const k = Math.min(1, 900 / Math.max(bmp.width, bmp.height));
@@ -945,11 +994,13 @@ async function judgeSheet(kind, who, mid) {
   const judge = ok => (kind === 'u' ? net.judgeMine(G.code, who, mid, ok) : net.judge(G.code, who, mid, ok));
   const label = solo() ? d?.name : `${teamOf(tid).name}${kind === 'u' ? ' ' + d?.name : ''}`;
   openSheet(`<p class="eyebrow">확인 요청 · ${esc(solo() ? '개인' : teamOf(tid).name)}</p><h3>${esc(m.title)}</h3><p class="fine">${esc(d?.name)} · ${clock(d?.t)}</p>
-    <div id="ph">${m.type === 'photo' ? '<p class="fine">사진을 불러오는 중…</p>' : ''}</div>
+    <div id="ph">${m.type === 'photo' ? '<p class="fine">사진을 불러오는 중…</p>' : m.type === 'sing' ? '<p class="fine">노래를 불러오는 중…</p>' : ''}</div>
+    <label class="fine">다시 하게 할 때 이유 (모두에게 알려요)<input id="jWhy" maxlength="60" placeholder="${m.type === 'sing' ? '예: 더 크게 부르세요' : '예: 팀원 모두 나오게 찍어 주세요'}"></label>
     <div class="grid2"><button class="btn danger" id="jNo">다시 하게 하기</button><button class="btn primary" id="jOk">인정 (+${m.pts || 0}점)</button></div>`, async el => {
     el.querySelector('#jOk').onclick = async () => { await judge(true); net.say(G.code, tid || '', `${label} — '${m.title}' 완료!`); closeSheet(); };
-    el.querySelector('#jNo').onclick = async () => { await judge(false); await net.delPhoto(G.code, key, mid); net.say(G.code, tid || '', `${label} — '${m.title}' 다시 해 주세요`); closeSheet(); };
+    el.querySelector('#jNo').onclick = async () => { const why = el.querySelector('#jWhy').value.trim(); await judge(false); await net.delPhoto(G.code, key, mid); net.say(G.code, tid || '', `${label} — '${m.title}' 다시 해 주세요${why ? ' — ' + why : ''}`); closeSheet(); };
     if (m.type === 'photo') { const url = await net.getPhoto(G.code, key, mid); el.querySelector('#ph').innerHTML = url ? `<img class="photo" src="${url}" alt="">` : '<p class="fine">사진이 없어요.</p>'; }
+    if (m.type === 'sing') { const url = await net.getPhoto(G.code, key, mid); el.querySelector('#ph').innerHTML = url ? `<audio controls src="${url}" class="recplay"></audio>` : '<p class="fine">녹음이 없어요.</p>'; }
   });
 }
 /* ---------- 결과: 게임이 끝나면 모두에게 등수를 바로 보여 준다 ---------- */
