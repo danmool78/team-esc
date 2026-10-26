@@ -41,6 +41,7 @@ const feed = (code, team, text) => { const f = { id: 'f' + now() + Math.random()
 
 export const writePos = async (code, p) => { S.games[code].pos[ME] = { ...p, t: now() }; fire(code); };
 export const clearPos = async code => { delete S.games[code].pos[ME]; fire(code); };
+export const deleteGame = async code => { subs.delete(code); delete S.games[code]; };
 export const setCohost = async (code, who, on) => { const m = S.games[code].meta; m.hosts ||= {}; if (on) m.hosts[who] = true; else delete m.hosts[who]; fire(code); };
 export const setStatus = async (code, s) => { S.games[code].meta.status = s; fire(code); };
 export const saveMeta = async (code, p) => { Object.assign(S.games[code].meta, p); fire(code); };
@@ -106,7 +107,7 @@ function seed() {
   const goals = {};
   setInterval(() => {
     const g = S.games.DEMO;
-    if (g.meta.status !== 'live') return;
+    if (!g || g.meta.status !== 'live') return; // 지운 뒤엔 쉰다 (다시 들어오면 새로 차린다)
     moveExtras();
     BOTS.forEach(([id, name, , team]) => {
       const p = g.pos[id];

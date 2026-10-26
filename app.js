@@ -119,6 +119,15 @@ $('#profSave').onclick = async () => {
 };
 
 /* ---------- 게임 고르기 ---------- */
+// 게임에서 나와 로비로 (게임이 지워졌을 때)
+function leaveGame(msg) {
+  G.off?.(); G.off = null; G.code = null; G.meta = {};
+  store.set('lastGame', null);
+  history.replaceState(null, '', location.pathname + (DEMO ? '?demo' : ''));
+  W.stop();
+  if (msg) toast(msg);
+  if (DEMO) show('lobby'); else toLobby(); // 데모는 로비에서 바로 다시 들어가 버리지 않게
+}
 function toLobby() {
   $('#lobbyAvatar').src = myThumb(profile.avatar);
   $('#lobbyName').textContent = profile.name;
@@ -197,7 +206,7 @@ async function enter(code) {
   W.start();
   G.off?.();
   G.off = net.watch(code, {
-    meta: v => { G.meta = v; onMeta(); },
+    meta: v => { if (!v.host && G.meta.host) { leaveGame('진행자가 게임을 지웠어요.'); return; } G.meta = v; onMeta(); }, // 게임이 지워지면 로비로
     teams: v => { G.teams = v; refresh(); },
     members: v => { G.members = v; refresh(); },
     pos: v => { G.pos = v; syncPlayers(); checkTag(); if (tab === 'people') renderPanel(); },
@@ -897,6 +906,7 @@ function hostPanel() {
       <button class="btn small" id="hArea">${ic('map')} 지역 바꾸기</button>
       ${isOwner() ? `<button class="btn small" id="hHosts">${ic('crown')} 진행자 더하기</button>` : ''}
     </div>
+    ${isOwner() && st === 'ended' ? `<button class="btn wide danger" id="hDel">게임 지우기 — 위치·미션 기록·사진·소식을 서버에서 모두 지워요</button>` : ''}
     <div class="group-h">확인을 기다리는 미션 ${waits.length}</div>
     ${waits.length ? waits.map(({ kind, who, tid, mid, d }) => `<div class="item" data-judge="${kind}|${who}|${mid}"><div class="ic wait">${tic(G.missions[mid]?.type)}</div>
       <div class="tx"><b>${esc(G.missions[mid]?.title || mid)}${kind === 'u' && !solo() ? ' (개인)' : ''}</b><small><span class="dot" style="background:${esc(kind === 'u' && solo() ? personColor(who) : teamOf(tid).color)}"></span> ${solo() ? '' : esc(teamOf(tid).name) + ' · '}${esc(d.name)} · ${clock(d.t)}</small></div><div class="rt">보기 ›</div></div>`).join('') : '<p class="empty">없어요.</p>'}`;
@@ -910,6 +920,19 @@ function bindHost(el) {
   el.querySelector('#hTeams')?.addEventListener('click', teamEditor);
   el.querySelector('#hArea')?.addEventListener('click', areaEditor);
   el.querySelector('#hEndAt')?.addEventListener('click', endEditor);
+  // 끝난 게임 지우기 (만든 진행자만): 진행 탭은 자주 새로 그려져 '한 번 더 누르기'가 풀리므로 따로 창을 띄워 묻는다.
+  // 구독부터 끊고 지운 뒤 로비로
+  el.querySelector('#hDel')?.addEventListener('click', () => openSheet(`<p class="eyebrow">게임 지우기</p><h3>'${esc(G.meta.name || G.code)}' 게임을 지울까요?</h3>
+    <p class="fine">참가자 위치, 미션 기록, 사진, 소식이 서버에서 모두 지워지고 되돌릴 수 없어요. 결과가 필요하면 먼저 캡처해 두세요.</p>
+    <div class="row"><button class="btn wide danger" id="delYes">지우기</button><button class="btn wide" id="delNo">그만두기</button></div><p class="msg" id="delMsg"></p>`, s => {
+    s.querySelector('#delNo').onclick = closeSheet;
+    s.querySelector('#delYes').onclick = async () => {
+      const code = G.code;
+      G.off?.(); G.off = null;
+      try { await net.deleteGame(code); $('#sheet').hidden = true; leaveGame('게임을 지웠어요.'); }
+      catch (er) { s.querySelector('#delMsg').className = 'msg err'; s.querySelector('#delMsg').textContent = '지우지 못했어요 (' + (er.code || er.message) + ')'; }
+    };
+  }));
   el.querySelector('#hHosts')?.addEventListener('click', hostEditor);
   el.querySelector('#hNotice')?.addEventListener('click', () => openSheet(`<h3>모두에게 알림</h3><form class="stack" id="nf"><input id="nt" placeholder="예: 10분 뒤 광장에 모여요" required><button class="btn primary">보내기</button></form>`,
     s => (s.querySelector('#nf').onsubmit = async e => { e.preventDefault(); await net.say(G.code, '', s.querySelector('#nt').value.trim()); closeSheet(); })));
