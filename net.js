@@ -94,6 +94,11 @@ export function watch(code, h) {
 /* ---------- 쓰기 ---------- */
 export const writePos = (code, p) => set(G(code, 'pos/' + uid()), { ...p, t: serverTimestamp() });
 export const clearPos = code => remove(G(code, 'pos/' + uid()));
+// 게임 지우기: 게임을 만든 진행자만 (규칙이 게임 전체를 지울 때만 허락한다). 내 접속 표시가 끊길 때 되살아나지 않게 먼저 거둔다
+export async function deleteGame(code) {
+  await onDisconnect(G(code, `members/${uid()}/online`)).cancel().catch(() => {});
+  await remove(G(code));
+}
 // 진행자 더하기·빼기: 게임을 만든 진행자만 (규칙이 막는다)
 export const setCohost = (code, who, on) => set(G(code, `meta/hosts/${who}`), on ? true : null);
 export const setStatus = (code, status) => set(G(code, 'meta/status'), status);
