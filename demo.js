@@ -83,7 +83,7 @@ function seed() {
   // 음성: 현장에서 녹음해 보내면 진행자가 듣고 인정 (예: 노래 한 소절, 경기전 앞마당)
   missions.mvoice = { title: '경기전 앞마당 노래 한 소절', type: 'voice', lat: 35.8149, lng: 127.1499, r: 25, pts: 20, order: 7, open: true, desc: '팀 응원가를 크게 한 소절!' };
   // 술래잡기: 한옥마을 가운데 400m 안에서, 팀마다 술래 (청팀은 나)
-  missions.mtag = { title: '술래잡기: 한옥마을 한바퀴', type: 'tag', lat: JEONJU.lat, lng: JEONJU.lng, r: 400, pts: 30, order: 99, open: true, desc: '데모 술래잡기', it: { t1: ME, t2: 'b4', t3: 'b7' }, catchR: 6 };
+  missions.mtag = { title: '술래잡기: 한옥마을 한바퀴', type: 'tag', lat: JEONJU.lat, lng: JEONJU.lng, r: 400, pts: 30, order: 99, open: true, desc: '데모 술래잡기', it: { t1: ME, t2: 'b4', t3: 'b7' } };
   const members = { [ME]: { name: '데모', avatar: 'disciple', team: 't1', online: true } };
   const pos = { [ME]: { ...at(0, 0), acc: 5, t: now() } };
   BOTS.forEach(([id, name, avatar, team], i) => { members[id] = { name, avatar, team, online: true }; pos[id] = { ...at(Math.sin(i) * 200, Math.cos(i) * 200), acc: 6, t: now() }; });

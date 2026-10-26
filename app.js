@@ -209,7 +209,7 @@ async function enter(code) {
     meta: v => { if (!v.host && G.meta.host) { leaveGame('진행자가 게임을 지웠어요.'); return; } G.meta = v; onMeta(); }, // 게임이 지워지면 로비로
     teams: v => { G.teams = v; refresh(); },
     members: v => { G.members = v; refresh(); },
-    pos: v => { G.pos = v; syncPlayers(); checkTag(); if (tab === 'people') renderPanel(); },
+    pos: v => { G.pos = v; syncPlayers(); if (tab === 'people') renderPanel(); },
     missions: v => { G.missions = v; refresh(); checkArrive(); },
     done: v => { G.done = v; refresh(); },
     pdone: v => { G.pdone = v; refresh(); },
@@ -737,7 +737,6 @@ function setMyPos(p) {
   sendPos(p);
   if (first) { startCompass(); W.follow(net.me()); W.flyTo(p, 140); setFab(); }
   checkArrive();
-  checkTag();
   if (tab === 'missions') renderPanel();
 }
 
@@ -746,39 +745,29 @@ const near = m => myLL && (!m.r || dist(myLL, m) <= m.r + Math.min(myLL.acc || 0
 const busy = new Set();
 // 미션을 할 수 있는 사람: 개인전은 누구나, 팀전은 팀이 있어야
 const canPlay = () => solo() || !!myTeam();
-/* ---------- 술래잡기 ----------
-   진행자가 팀마다 술래를 한 명씩 정한다(mission.it = {팀: uid}). 반경(놀이 구역) 안에서 술래가 다른 팀 사람에게
-   잡기 거리(catchR) 안으로 먼저 다가가면 그 팀이 이긴다. 판정은 술래의 폰이 한다 — 규칙도 그 팀 술래만 '완료'를 쓸 수 있게 막는다 */
+/* ---------- 술래잡기 (술래 사진 찍기) ----------
+   진행자가 팀마다 술래를 한 명씩 정한다(mission.it = {팀: uid}). 술래는 지도에 '술래'로 보인다.
+   다른 팀 술래를 찾아 놀이 구역(반경) 안에서 사진을 찍어 올리면(누구를 찍었는지 caught) 진행자가 확인하고,
+   먼저 인정받은 팀이 이긴다 — GPS 거리로 자동 판정하던 것은 오차가 커서 사진으로 바꿨다 */
 const tagWinner = id => Object.keys(G.teams).find(t => G.done[t]?.[id]?.status === 'ok');
 const tagLive = ([id, m]) => m.type === 'tag' && m.open !== false && !tagWinner(id);
 const isIt = uid => isLive() && Object.entries(G.missions).some(e => tagLive(e) && Object.values(e[1].it || {}).includes(uid));
-function checkTag() {
-  if (!isLive() || !myLL || solo()) return;
-  const me = net.me(), t = myTeam(), now = Date.now();
-  Object.entries(G.missions).forEach(([id, m]) => {
-    if (!tagLive([id, m]) || m.it?.[t] !== me || busy.has(id)) return;
-    const inArea = ll => !m.r || dist(ll, m) <= m.r + 15; // GPS 오차를 15m까지 봐준다
-    if (!inArea(myLL)) return;
-    const caught = Object.entries(G.members).find(([u, mm]) => {
-      const p = G.pos[u];
-      return u !== me && mm.team && mm.team !== t && G.teams[mm.team] && p && now - (p.t || 0) < 30e3 && inArea(p) && dist(myLL, p) <= (m.catchR || 6);
-    });
-    if (!caught) return;
-    const [u, mm] = caught;
-    busy.add(id);
-    net.complete(G.code, t, id, { name: profile.name, pts: m.pts || 0, status: 'ok', caught: u })
-      .then(() => net.say(G.code, t, `${teamOf(t).name} 술래 ${profile.name} — ${teamOf(mm.team).name} ${mm.name} 잡았다! '${m.title}' 승리`))
-      .catch(() => {}).finally(() => busy.delete(id));
-  });
-}
+const itName = (m, tid) => G.members[m.it?.[tid]]?.name || '?';
 function tagInfo(id, m, live) {
   const its = Object.entries(m.it || {}).map(([tid, u]) => `<span class="pill"><span class="dot" style="background:${esc(teamOf(tid).color)}"></span> ${esc(teamOf(tid).name)} ${esc(G.members[u]?.name || '?')}</span>`).join('');
-  const win = tagWinner(id), me = net.me(), t = myTeam();
-  const role = win ? `${ic('trophy')} <b>${esc(teamOf(win).name)}</b> 승리! (${esc(G.done[win][id].name)} 술래가 잡았어요)`
-    : !live ? (G.meta.status === 'ended' || timeUp() ? '게임이 끝났어요.' : '진행자가 게임을 시작하면 열려요.')
-    : m.it?.[t] === me ? `${ic('tag')} <b>내가 술래!</b> 반경 ${m.r}m 안에서 다른 팀 사람에게 ${m.catchR || 6}m 안으로 다가가면 잡아요.`
-    : `우리 팀 술래는 <b>${esc(G.members[m.it?.[t]]?.name || '없음')}</b> — 다른 팀 술래는 피하고, 우리 술래를 도와요!`;
-  return `<div class="teamrow">${its}</div><div class="box">${role}</div>`;
+  const win = tagWinner(id), me = net.me(), t = myTeam(), d = G.done[t]?.[id];
+  const targets = Object.keys(m.it || {}).filter(tid => tid !== t && G.teams[tid]);
+  let role;
+  if (win) { const w = G.done[win][id], ct = G.members[w.caught]?.team; role = `${ic('trophy')} <b>${esc(teamOf(win).name)}</b> 승리! (${esc(w.name)} — ${esc(ct ? teamOf(ct).name + ' 술래 ' : '')}${esc(G.members[w.caught]?.name || '')} 사진)`; }
+  else if (!live) role = G.meta.status === 'ended' || timeUp() ? '게임이 끝났어요.' : '진행자가 게임을 시작하면 열려요.';
+  else if (m.it?.[t] === me) role = `${ic('tag')} <b>내가 술래!</b> 다른 팀에게 사진 찍히지 않게 피해 다녀요. 찍혀서 진행자가 인정하면 그 팀이 이겨요.`;
+  else if (d?.status === 'wait') role = `${ic('wait')} 우리 팀이 올린 술래 사진을 진행자가 확인하고 있어요.`;
+  else if (!near(m)) role = `놀이 구역(반경 ${m.r}m) 안으로 들어가면 술래 사진을 올릴 수 있어요. 우리 팀 술래 <b>${esc(itName(m, t))}</b>는 지켜 주세요!`;
+  else role = `다른 팀 술래를 찾아 <b>사진</b>을 찍어 올려요. 진행자가 확인하면 승리! (우리 팀 술래 <b>${esc(itName(m, t))}</b>는 지켜 주세요)`;
+  const up = live && !win && m.it?.[t] !== me && !d && near(m) && targets.length && canPlay()
+    ? `<label>누구를 찍었나요?<select id="tagWho">${targets.map(tid => `<option value="${esc(m.it[tid])}">${esc(teamOf(tid).name)} 술래 ${esc(itName(m, tid))}</option>`).join('')}</select></label>
+       <label class="btn wide primary" style="text-align:center">${ic('camera')} 술래 사진 찍어 올리기<input type="file" accept="image/*" capture="environment" id="tagPhoto" hidden></label><p class="msg" id="qMsg"></p>` : '';
+  return `<div class="teamrow">${its}</div>${retryNote(m)}<div class="box">${role}</div>${up}`;
 }
 function checkArrive() {
   if (!isLive() || !canPlay() || !myLL) return;
@@ -859,6 +848,17 @@ function openMission(id) {
     el.querySelector('#simGo')?.addEventListener('click', () => { closeSheet(); setMyPos({ lat: m.lat, lng: m.lng, acc: 3 }); setTimeout(() => openMission(id), 300); });
     el.querySelector('#taskBtn')?.addEventListener('click', async () => { await finish(id, m, 'wait'); closeSheet(); toast('확인을 요청했어요.'); });
     if (el.querySelector('#rec')) voiceRecorder(el, id, m);
+    el.querySelector('#tagPhoto')?.addEventListener('change', async e => {
+      const f = e.target.files[0], who = el.querySelector('#tagWho').value, t = myTeam();
+      if (!f || !who) return;
+      el.querySelector('#qMsg').textContent = '올리는 중…';
+      try {
+        await net.savePhoto(G.code, t, id, await shrink(f));
+        await net.complete(G.code, t, id, { name: profile.name, pts: m.pts || 0, status: 'wait', caught: who });
+        await net.say(G.code, t, `${teamOf(t).name} ${profile.name} — ${teamOf(G.members[who]?.team).name} 술래 ${G.members[who]?.name} 사진! '${m.title}' 확인 요청`);
+        closeSheet(); toast('술래 사진을 올렸어요. 진행자가 확인하면 승리!', 'tag');
+      } catch (er) { el.querySelector('#qMsg').className = 'msg err'; el.querySelector('#qMsg').textContent = '올리지 못했어요 (' + (er.code || er.message) + ')'; }
+    });
     el.querySelector('#mEdit')?.addEventListener('click', () => missionForm(id));
     el.querySelector('#mToggle')?.addEventListener('click', async () => { await net.saveMission(G.code, id, { ...m, open: m.open === false }); closeSheet(); });
     el.querySelector('#mDel')?.addEventListener('click', async () => { if (confirmIn(el.querySelector('#mDel'))) { await net.delMission(G.code, id); closeSheet(); } });
@@ -994,12 +994,18 @@ async function judgeSheet(kind, who, mid) {
   const judge = ok => (kind === 'u' ? net.judgeMine(G.code, who, mid, ok) : net.judge(G.code, who, mid, ok));
   const label = solo() ? d?.name : `${teamOf(tid).name}${kind === 'u' ? ' ' + d?.name : ''}`;
   openSheet(`<p class="eyebrow">확인 요청 · ${esc(solo() ? '개인' : teamOf(tid).name)}</p><h3>${esc(m.title)}</h3><p class="fine">${esc(d?.name)} · ${clock(d?.t)}</p>
-    <div id="ph">${m.type === 'photo' ? '<p class="fine">사진을 불러오는 중…</p>' : m.type === 'voice' ? '<p class="fine">녹음을 불러오는 중…</p>' : ''}</div>
-    <label class="fine">다시 하게 할 때 이유 (모두에게 알려요)<input id="jWhy" maxlength="60" placeholder="${m.type === 'voice' ? '예: 더 크게 불러 주세요' : '예: 팀원 모두 나오게 찍어 주세요'}"></label>
+    ${m.type === 'tag' && d?.caught ? `<div class="box">${ic('tag')} ${esc(teamOf(G.members[d.caught]?.team).name)} 술래 <b>${esc(G.members[d.caught]?.name || '?')}</b>를 찍었대요</div>` : ''}
+    <div id="ph">${m.type === 'photo' || m.type === 'tag' ? '<p class="fine">사진을 불러오는 중…</p>' : m.type === 'voice' ? '<p class="fine">녹음을 불러오는 중…</p>' : ''}</div>
+    <label class="fine">다시 하게 할 때 이유 (모두에게 알려요)<input id="jWhy" maxlength="60" placeholder="${m.type === 'voice' ? '예: 더 크게 불러 주세요' : m.type === 'tag' ? '예: 술래 얼굴이 안 보여요' : '예: 팀원 모두 나오게 찍어 주세요'}"></label>
     <div class="grid2"><button class="btn danger" id="jNo">다시 하게 하기</button><button class="btn primary" id="jOk">인정 (+${m.pts || 0}점)</button></div>`, async el => {
-    el.querySelector('#jOk').onclick = async () => { await judge(true); net.say(G.code, tid || '', `${label} — '${m.title}' 완료!`); closeSheet(); };
+    el.querySelector('#jOk').onclick = async () => {
+      if (m.type === 'tag' && tagWinner(mid)) { toast(`이미 ${teamOf(tagWinner(mid)).name}이 이겼어요.`); return; }
+      await judge(true);
+      net.say(G.code, tid || '', m.type === 'tag' ? `${label} — ${teamOf(G.members[d?.caught]?.team).name} 술래 ${G.members[d?.caught]?.name || ''} 잡았다! '${m.title}' 승리` : `${label} — '${m.title}' 완료!`);
+      closeSheet();
+    };
     el.querySelector('#jNo').onclick = async () => { const why = el.querySelector('#jWhy').value.trim(); await judge(false); await net.delPhoto(G.code, key, mid); net.say(G.code, tid || '', `${label} — '${m.title}' 다시 해 주세요${why ? ' — ' + why : ''}`); closeSheet(); };
-    if (m.type === 'photo') { const url = await net.getPhoto(G.code, key, mid); el.querySelector('#ph').innerHTML = url ? `<img class="photo" src="${url}" alt="">` : '<p class="fine">사진이 없어요.</p>'; }
+    if (m.type === 'photo' || m.type === 'tag') { const url = await net.getPhoto(G.code, key, mid); el.querySelector('#ph').innerHTML = url ? `<img class="photo" src="${url}" alt="">` : '<p class="fine">사진이 없어요.</p>'; }
     if (m.type === 'voice') { const url = await net.getPhoto(G.code, key, mid); el.querySelector('#ph').innerHTML = url ? `<audio controls src="${url}" class="recplay"></audio>` : '<p class="fine">녹음이 없어요.</p>'; }
   });
 }
@@ -1175,9 +1181,8 @@ function missionForm(id, draftM) {
   openSheet(`<h3>${id ? '미션 고치기' : '새 미션'}</h3><form class="stack" id="mf">
     <input name="title" placeholder="미션 이름 (예: 경기전 홍살문)" value="${esc(m.title || '')}" required>
     <label>종류<select name="type">${Object.entries(TYPES).filter(([k]) => k !== 'tag' || !solo() || m.type === 'tag').map(([k, [, n]]) => `<option value="${k}" ${m.type === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-    <div class="tagset stack"><p class="fine">팀마다 술래를 한 명씩 정해요. 반경 안에서 술래가 다른 팀 사람에게 잡기 거리 안으로 먼저 다가가면 그 팀이 이겨요.</p>
-      ${Object.entries(G.teams).map(([tid, t]) => `<label><span><span class="dot" style="background:${esc(t.color)}"></span> ${esc(t.name)} 술래</span><select name="it_${tid}"><option value="">정하지 않음</option>${Object.entries(G.members).filter(([, mm]) => mm.team === tid).map(([u, mm]) => `<option value="${u}" ${m.it?.[tid] === u ? 'selected' : ''}>${esc(mm.name)}</option>`).join('')}</select></label>`).join('')}
-      <label>잡기 거리(m) — GPS 오차가 있어 너무 짧으면 안 잡혀요<input name="catchR" type="number" min="2" value="${m.catchR ?? 6}"></label></div>
+    <div class="tagset stack"><p class="fine">팀마다 술래를 한 명씩 정해요. 다른 팀 술래를 찾아 반경(놀이 구역) 안에서 사진을 찍어 올리면, 진행자가 확인해서 먼저 인정받은 팀이 이겨요.</p>
+      ${Object.entries(G.teams).map(([tid, t]) => `<label><span><span class="dot" style="background:${esc(t.color)}"></span> ${esc(t.name)} 술래</span><select name="it_${tid}"><option value="">정하지 않음</option>${Object.entries(G.members).filter(([, mm]) => mm.team === tid).map(([u, mm]) => `<option value="${u}" ${m.it?.[tid] === u ? 'selected' : ''}>${esc(mm.name)}</option>`).join('')}</select></label>`).join('')}</div>
     ${solo() ? '' : `<div class="eachset"><p class="fine">누가 하나요?</p><div class="seg" id="eachSeg"><button type="button" data-v="">팀 미션 (한 명만)</button><button type="button" data-v="1">개인 미션 (각자)</button></div><input type="hidden" name="each" value="${m.each ? '1' : ''}"></div>`}
     <textarea name="desc" placeholder="설명 (무엇을 하면 되는지 — 음성 미션이면 무엇을 녹음할지: 노래 한 소절, 팀 구호, 시 낭송 등)">${esc(m.desc || '')}</textarea>
     <div class="qa stack"><input name="q" placeholder="문제" value="${esc(m.q || '')}"><input name="ans" placeholder="${m.ah ? '정답 (바꿀 때만 적기)' : '정답 — 띄어쓰기·대소문자는 무시해요'}"></div>
@@ -1195,7 +1200,7 @@ function missionForm(id, draftM) {
     paint();
     // 개인전에선 개인 미션 칸이 없으니 원래 값을 둔다
     const read = () => ({ ...m, each: solo() ? m.each : f.each?.value === '1', title: f.title.value.trim(), type: f.type.value, desc: f.desc.value.trim(), q: f.q.value.trim(), r: +f.r.value || 0, pts: +f.pts.value || 0, _ans: f.ans.value,
-      it: Object.fromEntries(Object.keys(G.teams).map(tid => [tid, f['it_' + tid]?.value]).filter(([, u]) => u)), catchR: Math.max(2, +f.catchR.value || 6) });
+      it: Object.fromEntries(Object.keys(G.teams).map(tid => [tid, f['it_' + tid]?.value]).filter(([, u]) => u)) });
     el.querySelector('#pickMap').onclick = () => {
       const cur = read();
       $('#sheet').hidden = true; $('#placing').hidden = false;
@@ -1210,7 +1215,8 @@ function missionForm(id, draftM) {
       const ans = v._ans; delete v._ans; delete v.ans;
       if (v.type !== 'quiz') { delete v.q; delete v.ah; }
       if (v.type === 'tag') { delete v.each; if (Object.keys(v.it).length < 2) { el.querySelector('#mfMsg').textContent = '술래를 두 팀 넘게 정해 주세요.'; return; } }
-      else { delete v.it; delete v.catchR; }
+      else delete v.it;
+      delete v.catchR; // 예전 GPS 잡기 거리는 이제 쓰지 않는다
       if (!v.each) delete v.each;
       // 새 미션은 id를 먼저 받아야 정답 해시를 만들 수 있다
       const isNew = !id;
