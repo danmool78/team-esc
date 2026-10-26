@@ -39,7 +39,7 @@ const TEAM_PRESET = [['청팀', '#3d7be0'], ['홍팀', '#e0503d'], ['녹팀', '#
 // 개인전: 사람마다 색 (uid로 늘 같은 색)
 const PERSON_COLORS = ['#3d7be0', '#e0503d', '#3dae6a', '#d9a520', '#8e5bd6', '#e8862e', '#3fbfd9', '#e06aa8', '#7fae3a', '#c0763f', '#5a6fd6', '#d6455f'];
 const personColor = uid => PERSON_COLORS[[...uid].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % PERSON_COLORS.length];
-const TYPES = { arrive: ['pin', '도착'], quiz: ['quiz', '퀴즈'], photo: ['camera', '사진'], task: ['flag', '현장 미션'], sing: ['mic', '노래'], tag: ['tag', '술래잡기'] };
+const TYPES = { arrive: ['pin', '도착'], quiz: ['quiz', '퀴즈'], photo: ['camera', '사진'], task: ['flag', '현장 미션'], voice: ['mic', '음성'], tag: ['tag', '술래잡기'] };
 const tic = type => ic(TYPES[type]?.[0] || 'pin');
 // 알림(팀 없는 소식)은 확성기 아이콘으로 — 예전 소식 앞의 이모티콘은 떼어 낸다
 const plain = t => String(t || '').replace(/^📣\s*/u, '');
@@ -834,7 +834,7 @@ function openMission(id) {
   else if (m.type === 'quiz') act = retryNote(m) + `<div class="box">${esc(m.q)}</div><form class="row" id="qForm"><input id="qAns" placeholder="정답" autocomplete="off"><button class="btn primary">제출</button></form><p class="msg" id="qMsg"></p>`;
   else if (m.type === 'photo') act = retryNote(m) + `<label class="btn wide primary" style="text-align:center">${ic('camera')} 사진 찍어 올리기<input type="file" accept="image/*" capture="environment" id="photoIn" hidden></label><p class="msg" id="qMsg"></p>`;
   else if (m.type === 'task') act = retryNote(m) + `<button class="btn wide primary" id="taskBtn">${ic('flag')} 해냈어요 — 진행자에게 확인 요청</button>`;
-  else if (m.type === 'sing') act = retryNote(m) + `<div class="rec" id="rec"></div><p class="msg" id="qMsg"></p>`;
+  else if (m.type === 'voice') act = retryNote(m) + `<div class="rec" id="rec"></div><p class="msg" id="qMsg"></p>`;
   else act = `<div class="box">도착! 곧 완료돼요.</div>`;
   // 테스트 모드: 미션 자리로 바로 옮겨 가 본다
   if (sim && !d) act += `<button class="btn wide" id="simGo">${ic('flask')} 여기로 이동 (테스트)</button>`;
@@ -858,7 +858,7 @@ function openMission(id) {
     });
     el.querySelector('#simGo')?.addEventListener('click', () => { closeSheet(); setMyPos({ lat: m.lat, lng: m.lng, acc: 3 }); setTimeout(() => openMission(id), 300); });
     el.querySelector('#taskBtn')?.addEventListener('click', async () => { await finish(id, m, 'wait'); closeSheet(); toast('확인을 요청했어요.'); });
-    if (el.querySelector('#rec')) singRecorder(el, id, m);
+    if (el.querySelector('#rec')) voiceRecorder(el, id, m);
     el.querySelector('#mEdit')?.addEventListener('click', () => missionForm(id));
     el.querySelector('#mToggle')?.addEventListener('click', async () => { await net.saveMission(G.code, id, { ...m, open: m.open === false }); closeSheet(); });
     el.querySelector('#mDel')?.addEventListener('click', async () => { if (confirmIn(el.querySelector('#mDel'))) { await net.delMission(G.code, id); closeSheet(); } });
@@ -877,13 +877,13 @@ function retryNote(m) {
   const why = f?.text.split('다시 해 주세요')[1]?.replace(/^\s*[—:-]\s*/, '').trim();
   return f ? `<div class="box warn">${ic('megaphone')} 진행자: 다시 해 주세요${why ? ` — <b>${esc(why)}</b>` : ''}</div>` : '';
 }
-/* ---------- 노래 미션: 현장에서 한 소절 녹음 → 들어 보고 보내기 → 진행자가 듣고 인정 ----------
+/* ---------- 음성 미션: 현장에서 녹음(노래 한 소절, 팀 구호 등 — 미션 설명대로) → 들어 보고 보내기 → 진행자가 듣고 인정 ----------
    녹음은 사진과 같은 자리(photos)에 data URL로 둔다. 길이는 최대 20초, 32kbps로 작게(규칙의 크기 한도 안) */
 const REC_MAX = 20;
-function singRecorder(el, id, m) {
+function voiceRecorder(el, id, m) {
   const box = el.querySelector('#rec'), msg = el.querySelector('#qMsg');
   let rec = null, chunks = [], timer = null, url = null, blob = null;
-  const idle = () => { box.innerHTML = `<button class="btn wide primary" id="recGo">${ic('mic')} 녹음 시작 — 노래 한 소절 (최대 ${REC_MAX}초)</button>`; box.querySelector('#recGo').onclick = start; };
+  const idle = () => { box.innerHTML = `<button class="btn wide primary" id="recGo">${ic('mic')} 녹음 시작 (최대 ${REC_MAX}초)</button>`; box.querySelector('#recGo').onclick = start; };
   async function start() {
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { msg.className = 'msg err'; msg.textContent = '이 브라우저는 녹음을 할 수 없어요. 크롬이나 사파리로 열어 주세요.'; return; }
     let stream;
@@ -912,7 +912,7 @@ function singRecorder(el, id, m) {
       try {
         await net.savePhoto(G.code, photoKey(m), id, data);
         await finish(id, m, 'wait');
-        closeSheet(); toast('노래를 보냈어요. 진행자가 듣고 인정하면 점수가 올라가요.', 'mic');
+        closeSheet(); toast('녹음을 보냈어요. 진행자가 듣고 인정하면 점수가 올라가요.', 'mic');
       } catch (er) { msg.className = 'msg err'; msg.textContent = '보내지 못했어요 (' + (er.code || er.message) + ')'; }
     };
   }
@@ -994,13 +994,13 @@ async function judgeSheet(kind, who, mid) {
   const judge = ok => (kind === 'u' ? net.judgeMine(G.code, who, mid, ok) : net.judge(G.code, who, mid, ok));
   const label = solo() ? d?.name : `${teamOf(tid).name}${kind === 'u' ? ' ' + d?.name : ''}`;
   openSheet(`<p class="eyebrow">확인 요청 · ${esc(solo() ? '개인' : teamOf(tid).name)}</p><h3>${esc(m.title)}</h3><p class="fine">${esc(d?.name)} · ${clock(d?.t)}</p>
-    <div id="ph">${m.type === 'photo' ? '<p class="fine">사진을 불러오는 중…</p>' : m.type === 'sing' ? '<p class="fine">노래를 불러오는 중…</p>' : ''}</div>
-    <label class="fine">다시 하게 할 때 이유 (모두에게 알려요)<input id="jWhy" maxlength="60" placeholder="${m.type === 'sing' ? '예: 더 크게 부르세요' : '예: 팀원 모두 나오게 찍어 주세요'}"></label>
+    <div id="ph">${m.type === 'photo' ? '<p class="fine">사진을 불러오는 중…</p>' : m.type === 'voice' ? '<p class="fine">녹음을 불러오는 중…</p>' : ''}</div>
+    <label class="fine">다시 하게 할 때 이유 (모두에게 알려요)<input id="jWhy" maxlength="60" placeholder="${m.type === 'voice' ? '예: 더 크게 불러 주세요' : '예: 팀원 모두 나오게 찍어 주세요'}"></label>
     <div class="grid2"><button class="btn danger" id="jNo">다시 하게 하기</button><button class="btn primary" id="jOk">인정 (+${m.pts || 0}점)</button></div>`, async el => {
     el.querySelector('#jOk').onclick = async () => { await judge(true); net.say(G.code, tid || '', `${label} — '${m.title}' 완료!`); closeSheet(); };
     el.querySelector('#jNo').onclick = async () => { const why = el.querySelector('#jWhy').value.trim(); await judge(false); await net.delPhoto(G.code, key, mid); net.say(G.code, tid || '', `${label} — '${m.title}' 다시 해 주세요${why ? ' — ' + why : ''}`); closeSheet(); };
     if (m.type === 'photo') { const url = await net.getPhoto(G.code, key, mid); el.querySelector('#ph').innerHTML = url ? `<img class="photo" src="${url}" alt="">` : '<p class="fine">사진이 없어요.</p>'; }
-    if (m.type === 'sing') { const url = await net.getPhoto(G.code, key, mid); el.querySelector('#ph').innerHTML = url ? `<audio controls src="${url}" class="recplay"></audio>` : '<p class="fine">녹음이 없어요.</p>'; }
+    if (m.type === 'voice') { const url = await net.getPhoto(G.code, key, mid); el.querySelector('#ph').innerHTML = url ? `<audio controls src="${url}" class="recplay"></audio>` : '<p class="fine">녹음이 없어요.</p>'; }
   });
 }
 /* ---------- 결과: 게임이 끝나면 모두에게 등수를 바로 보여 준다 ---------- */
@@ -1179,7 +1179,7 @@ function missionForm(id, draftM) {
       ${Object.entries(G.teams).map(([tid, t]) => `<label><span><span class="dot" style="background:${esc(t.color)}"></span> ${esc(t.name)} 술래</span><select name="it_${tid}"><option value="">정하지 않음</option>${Object.entries(G.members).filter(([, mm]) => mm.team === tid).map(([u, mm]) => `<option value="${u}" ${m.it?.[tid] === u ? 'selected' : ''}>${esc(mm.name)}</option>`).join('')}</select></label>`).join('')}
       <label>잡기 거리(m) — GPS 오차가 있어 너무 짧으면 안 잡혀요<input name="catchR" type="number" min="2" value="${m.catchR ?? 6}"></label></div>
     ${solo() ? '' : `<label class="check"><input type="checkbox" name="each" ${m.each ? 'checked' : ''}><span>개인 미션 — 팀원 각자 해서 점수를 팀에 보태요</span></label>`}
-    <textarea name="desc" placeholder="설명 (무엇을 하면 되는지)">${esc(m.desc || '')}</textarea>
+    <textarea name="desc" placeholder="설명 (무엇을 하면 되는지 — 음성 미션이면 무엇을 녹음할지: 노래 한 소절, 팀 구호, 시 낭송 등)">${esc(m.desc || '')}</textarea>
     <div class="qa stack"><input name="q" placeholder="문제" value="${esc(m.q || '')}"><input name="ans" placeholder="${m.ah ? '정답 (바꿀 때만 적기)' : '정답 — 띄어쓰기·대소문자는 무시해요'}"></div>
     <div class="grid2"><label>반경(m)<input name="r" type="number" min="0" value="${m.r ?? 25}"></label><label>점수<input name="pts" type="number" min="0" value="${m.pts ?? 10}"></label></div>
     <div class="box" id="where">${m.lat ? `${ic('pin')} ${m.lat.toFixed(5)}, ${m.lng.toFixed(5)}` : '위치를 정해 주세요'}</div>
