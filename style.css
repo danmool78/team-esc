@@ -361,7 +361,7 @@ label.btn{flex-direction:row;justify-content:center;align-items:center;gap:4px}
 .gate .stars{position:fixed}
 @keyframes twinkle{from{opacity:.35}to{opacity:1}}
 
-/* 노래 미션 녹음 */
+/* 음성 미션 녹음 */
 .rec{display:flex;flex-direction:column;gap:10px;margin-top:8px}
 .recbar{display:flex;align-items:center;gap:8px;justify-content:center;font-size:15px;color:#ffd2d2}
 .recdot{width:12px;height:12px;border-radius:50%;background:#ff4d4d;animation:twinkle .6s infinite alternate}

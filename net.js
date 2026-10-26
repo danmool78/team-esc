@@ -6,12 +6,12 @@
      games/{code}/teams/{tid}    { name, color }
      games/{code}/members/{uid}  { name, avatar, team, online, joined }
      games/{code}/pos/{uid}      { lat, lng, acc, t, sim }  — 걸을 때마다 몇 초에 한 번 (sim: 테스트 모드)
-     games/{code}/missions/{mid} { title, desc, type: arrive|quiz|photo|task|sing, each, lat, lng, r, q, ah, pts, order, open }
+     games/{code}/missions/{mid} { title, desc, type: arrive|quiz|photo|task|voice, each, lat, lng, r, q, ah, pts, order, open }
                                  each = 개인 미션 (팀원 각자 해서 점수를 팀에 보탠다). 개인전(mode solo)이면 모든 미션이 개인 미션
                                  type tag = 술래잡기: it{팀: 술래 uid}, catchR(잡기 거리 m) — 먼저 잡은 술래의 팀이 done에 ok (caught: 잡힌 사람)
      games/{code}/done/{tid}/{mid} { by, name, t, pts, status: ok|wait }
      games/{code}/pdone/{uid}/{mid} { name, team, t, pts, status: ok|wait } — 개인 미션·개인전의 완료
-     games/{code}/photos/{tid}_{mid}  사진·노래 녹음 (개인 완료는 u_{uid}_{mid})(작게 줄인 JPEG / 녹음 audio data URL) — done을 가볍게 두려고 따로
+     games/{code}/photos/{tid}_{mid}  사진·음성 녹음 (개인 완료는 u_{uid}_{mid})(작게 줄인 JPEG / 녹음 audio data URL) — done을 가볍게 두려고 따로
      games/{code}/feed/{push}    { t, team, text } */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js';
 import {
