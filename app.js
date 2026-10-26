@@ -6,6 +6,7 @@ import { JEONJU, dist, fmtDist } from './geo.js';
 // 3D 장면은 판 번호를 붙여 불러온다 — 폰이 예전 world.js를 들고 있으면 새 app.js가 부르는 함수가 없어 위치가 멈췄다
 import * as W from './world.js?v=__BUILD__';
 import { ic, iconImage, iconURL } from './icons.js';
+import { SAMPLES } from './samples.js';
 
 // 판 번호: 배포 때 GitHub Actions가 index.html과 같이 커밋 번호로 바꾼다. 홈 화면 앱이 예전 index.html을 들고 있으면
 // 새 app.js가 없는 단추를 찾다 멈춰 빈 화면이 된다 — 판이 다르면 주소를 바꿔 한 번 새로 불러온다
@@ -949,6 +950,8 @@ function hostPanel() {
     <div class="hostgrid">
       ${st !== 'live' ? `<button class="btn primary small" id="hStart">${ic('play')} ${st === 'ended' ? '다시 시작' : '게임 시작'}</button>` : `<button class="btn small" id="hEnd">${ic('stop')} 게임 끝내기</button>`}
       <button class="btn small" id="hAdd">${ic('plus')} 미션 더하기</button>
+      <button class="btn small" id="hSample">${ic('flag')} 샘플 미션 넣기</button>
+      <button class="btn small" id="hExport">${ic('down')} 미션 표 내려받기</button>
       <button class="btn small" id="hTeams">${ic('team')} ${solo() ? '방식·팀' : '팀 정하기'}</button>
       <button class="btn small" id="hEndAt">${ic('clock')} 끝나는 시간</button>
       <button class="btn small" id="hNotice">${ic('megaphone')} 알림 보내기</button>
@@ -960,12 +963,74 @@ function hostPanel() {
     ${waits.length ? waits.map(({ kind, who, tid, mid, d }) => `<div class="item" data-judge="${kind}|${who}|${mid}"><div class="ic wait">${tic(G.missions[mid]?.type)}</div>
       <div class="tx"><b>${esc(G.missions[mid]?.title || mid)}${kind === 'u' && !solo() ? ' (개인)' : ''}</b><small><span class="dot" style="background:${esc(kind === 'u' && solo() ? personColor(who) : teamOf(tid).color)}"></span> ${solo() ? '' : esc(teamOf(tid).name) + ' · '}${esc(d.name)} · ${clock(d.t)}</small></div><div class="rt">보기 ›</div></div>`).join('') : '<p class="empty">없어요.</p>'}`;
 }
+/* ---------- 샘플 미션 넣기 · 미션 표 내려받기 ---------- */
+// 지역 샘플(samples.js)을 한 번에 넣는다. 이름이 같은 미션은 건너뛰고, 순서는 지금 미션들 뒤에 붙인다
+function sampleSheet() {
+  const opts = Object.entries(SAMPLES);
+  const c = G.meta.center;
+  const row = s => s.missions.filter(x => x.type !== 'tag' || !solo()).map(x => `<li>${esc(x.title)} <small class="fine">· ${TYPES[x.type][1]}${solo() ? '' : x.type === 'tag' ? '' : x.each ? ' · 개인' : ' · 팀'} · ${x.pts}점</small></li>`).join('');
+  openSheet(`<p class="eyebrow">샘플 미션 넣기</p><h3>지역 샘플을 한 번에 넣어요</h3>
+    <label>지역<select id="smpWhich">${opts.map(([k, s]) => `<option value="${k}">${esc(s.name)} (${s.missions.length}개)</option>`).join('')}</select></label>
+    <div id="smpInfo"></div><ul class="smp" id="smpList"></ul>
+    <p class="fine">넣은 뒤에도 미션마다 고치거나 지울 수 있어요. 술래잡기는 닫힌 채로 들어가니 술래를 정하고 여세요.</p>
+    <button class="btn wide primary" id="smpGo">이대로 넣기</button><p class="msg" id="smpMsg"></p>`, el => {
+    const paint = () => {
+      const s = SAMPLES[el.querySelector('#smpWhich').value];
+      el.querySelector('#smpList').innerHTML = row(s);
+      const far = c ? dist(c, s.center) : 0;
+      el.querySelector('#smpInfo').innerHTML = far > 3000 ? `<div class="box warn">이 게임 지역에서 ${fmtDist(far)} 떨어진 곳의 샘플이에요. 지역을 확인해 주세요.</div>` : '';
+    };
+    el.querySelector('#smpWhich').onchange = paint; paint();
+    el.querySelector('#smpGo').onclick = async () => {
+      const s = SAMPLES[el.querySelector('#smpWhich').value], msg = el.querySelector('#smpMsg');
+      const have = new Set(Object.values(G.missions).map(x => x.title));
+      const add = s.missions.filter(x => !have.has(x.title) && (x.type !== 'tag' || !solo()));
+      if (!add.length) { msg.className = 'msg err'; msg.textContent = '이미 다 들어 있어요.'; return; }
+      msg.className = 'msg'; msg.textContent = '넣는 중…';
+      let order = Math.max(0, ...Object.values(G.missions).map(x => x.order || 0)) + 1;
+      const stamp = Date.now().toString(36);
+      try {
+        for (const [i, x] of add.entries()) {
+          const id = `s${stamp}${i}`, { ans, ...v } = x;
+          const mv = { ...v, order: order++, open: x.open !== false };
+          if (solo()) delete mv.each;
+          if (x.type === 'tag') mv.it = {};
+          if (ans) mv.ah = await answerHash(id, ans);
+          await net.saveMission(G.code, id, mv);
+        }
+        closeSheet(); toast(`샘플 미션 ${add.length}개를 넣었어요.`, 'flag');
+        if (isLive()) net.say(G.code, '', `새 미션 ${add.length}개가 생겼어요`);
+      } catch (er) { msg.className = 'msg err'; msg.textContent = '넣지 못했어요 (' + (er.code || er.message) + ')'; }
+    };
+  });
+}
+// 미션 표 내려받기: 엑셀·구글 시트에서 바로 열리는 CSV (한글이 깨지지 않게 BOM). 퀴즈 정답은 저장하지 않으므로 칸만 둔다
+function exportMissions() {
+  const list = sortedMissions();
+  if (!list.length) { toast('아직 미션이 없어요.'); return; }
+  const cell = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const head = ['순서', '미션', '종류', '팀/개인', '점수', '반경(m)', '위도', '경도', '설명', '퀴즈 문제', '술래', '상태', '해낸 팀·사람'];
+  const rows = list.map(([id, m], i) => [i + 1, m.title, TYPES[m.type]?.[1] || m.type, solo() ? '개인전' : m.type === 'tag' ? '팀' : m.each ? '개인' : '팀', m.pts || 0, m.r || 0,
+    m.lat?.toFixed(6), m.lng?.toFixed(6), m.desc || '', m.q || '',
+    Object.entries(m.it || {}).map(([tid, u]) => `${teamOf(tid).name} ${G.members[u]?.name || '?'}`).join(' / '),
+    m.open === false ? '닫힘' : '열림',
+    isEach(m) ? eachDone(id).map(([u]) => G.members[u]?.name || '?').join(' / ') : Object.keys(G.teams).filter(t => G.done[t]?.[id]?.status === 'ok').map(t => teamOf(t).name).join(' / ')]);
+  const csv = '\ufeff' + [head, ...rows].map(r => r.map(cell).join(',')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = `vision-quest-missions-${G.code}.csv`; // 영문 이름: 일부 브라우저가 한글 파일 이름을 'download'로 바꿔 버린다
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast('미션 표를 내려받았어요 (엑셀·구글 시트에서 열려요).', 'down');
+}
 function bindHost(el) {
   el.querySelector('#hCopy')?.addEventListener('click', e => { navigator.clipboard?.writeText(e.target.dataset.link); toast('초대 링크를 복사했어요.'); });
   // 다시 시작할 때 이미 지난 끝나는 시간은 지운다
   el.querySelector('#hStart')?.addEventListener('click', async () => { if (timeUp()) await net.saveMeta(G.code, { endAt: null }); await net.setStatus(G.code, 'live'); net.say(G.code, '', '게임이 시작됐어요!'); });
   el.querySelector('#hEnd')?.addEventListener('click', async e => { if (!confirmIn(e.target)) return; await net.setStatus(G.code, 'ended'); net.say(G.code, '', '게임이 끝났어요. 수고하셨어요!'); });
   el.querySelector('#hAdd')?.addEventListener('click', () => missionForm());
+  el.querySelector('#hSample')?.addEventListener('click', sampleSheet);
+  el.querySelector('#hExport')?.addEventListener('click', exportMissions);
   el.querySelector('#hTeams')?.addEventListener('click', teamEditor);
   el.querySelector('#hArea')?.addEventListener('click', areaEditor);
   el.querySelector('#hEndAt')?.addEventListener('click', endEditor);
