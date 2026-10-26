@@ -380,7 +380,7 @@ function missionItems(list) {
     const dots = isEach(m) ? (eachDone(id).length ? ` · ${ic('check')} ${eachDone(id).length}명` : '') : Object.entries(G.teams).filter(([t]) => G.done[t]?.[id]?.status === 'ok').map(([, t]) => `<i style="background:${esc(t.color)}"></i>`).join('');
     return `<div class="item" data-m="${id}">
       <div class="ic ${st || ''}">${ic(st === 'ok' ? 'check' : st === 'wait' ? 'wait' : TYPES[m.type]?.[0] || 'pin')}</div>
-      <div class="tx"><b>${esc(m.title)}</b><small>${TYPES[m.type]?.[1] || ''}${m.each && !solo() ? ' · 개인' : ''} · ${m.pts || 0}점${m.open === false ? ' · 닫힘' : ''}<span class="dots">${dots}</span></small></div>
+      <div class="tx"><b>${esc(m.title)}</b><small>${solo() ? '' : `<span class="kind ${m.each ? 'each' : 'team'}">${m.each ? '개인' : '팀'}</span> `}${TYPES[m.type]?.[1] || ''} · ${m.pts || 0}점${m.open === false ? ' · 닫힘' : ''}<span class="dots">${dots}</span></small></div>
       <div class="rt">${d}</div></div>`;
   }).join('');
 }
@@ -839,7 +839,7 @@ function openMission(id) {
   // 테스트 모드: 미션 자리로 바로 옮겨 가 본다
   if (sim && !d) act += `<button class="btn wide" id="simGo">${ic('flask')} 여기로 이동 (테스트)</button>`;
   const host = isHost() ? `<div class="hostgrid"><button class="btn small" id="mEdit">수정</button><button class="btn small" id="mToggle">${m.open === false ? '열기' : '닫기'}</button><button class="btn small danger" id="mDel">삭제</button></div>` : '';
-  openSheet(`<p class="eyebrow">${tic(m.type)} ${TYPES[m.type]?.[1]}${m.each && !solo() ? ' · 개인 미션 — 각자 해서 팀 점수에 보태요' : ''} · ${m.pts || 0}점</p><h3>${esc(m.title)}</h3>
+  openSheet(`<p class="eyebrow">${tic(m.type)} ${TYPES[m.type]?.[1]}${solo() ? '' : m.each ? ' · 개인 미션 — 팀원 각자 해서 팀 점수에 보태요' : m.type === 'tag' ? '' : ' · 팀 미션 — 팀에서 한 명만 하면 돼요'} · ${m.pts || 0}점</p><h3>${esc(m.title)}</h3>
     ${m.desc ? `<p class="fine">${esc(m.desc)}</p>` : ''}<div class="teamrow">${others}</div>${act}${host}`, el => {
     el.querySelector('#qForm')?.addEventListener('submit', async e => {
       e.preventDefault();
@@ -1178,7 +1178,7 @@ function missionForm(id, draftM) {
     <div class="tagset stack"><p class="fine">팀마다 술래를 한 명씩 정해요. 반경 안에서 술래가 다른 팀 사람에게 잡기 거리 안으로 먼저 다가가면 그 팀이 이겨요.</p>
       ${Object.entries(G.teams).map(([tid, t]) => `<label><span><span class="dot" style="background:${esc(t.color)}"></span> ${esc(t.name)} 술래</span><select name="it_${tid}"><option value="">정하지 않음</option>${Object.entries(G.members).filter(([, mm]) => mm.team === tid).map(([u, mm]) => `<option value="${u}" ${m.it?.[tid] === u ? 'selected' : ''}>${esc(mm.name)}</option>`).join('')}</select></label>`).join('')}
       <label>잡기 거리(m) — GPS 오차가 있어 너무 짧으면 안 잡혀요<input name="catchR" type="number" min="2" value="${m.catchR ?? 6}"></label></div>
-    ${solo() ? '' : `<label class="check"><input type="checkbox" name="each" ${m.each ? 'checked' : ''}><span>개인 미션 — 팀원 각자 해서 점수를 팀에 보태요</span></label>`}
+    ${solo() ? '' : `<div class="eachset"><p class="fine">누가 하나요?</p><div class="seg" id="eachSeg"><button type="button" data-v="">팀 미션 (한 명만)</button><button type="button" data-v="1">개인 미션 (각자)</button></div><input type="hidden" name="each" value="${m.each ? '1' : ''}"></div>`}
     <textarea name="desc" placeholder="설명 (무엇을 하면 되는지 — 음성 미션이면 무엇을 녹음할지: 노래 한 소절, 팀 구호, 시 낭송 등)">${esc(m.desc || '')}</textarea>
     <div class="qa stack"><input name="q" placeholder="문제" value="${esc(m.q || '')}"><input name="ans" placeholder="${m.ah ? '정답 (바꿀 때만 적기)' : '정답 — 띄어쓰기·대소문자는 무시해요'}"></div>
     <div class="grid2"><label>반경(m)<input name="r" type="number" min="0" value="${m.r ?? 25}"></label><label>점수<input name="pts" type="number" min="0" value="${m.pts ?? 10}"></label></div>
@@ -1186,10 +1186,15 @@ function missionForm(id, draftM) {
     <div class="grid2"><button type="button" class="btn" id="pickMap">지도에서 고르기</button><button type="button" class="btn" id="pickMe">내 자리로</button></div>
     <button class="btn primary">저장</button><p class="msg" id="mfMsg"></p></form>`, el => {
     const f = el.querySelector('#mf');
-    const qa = () => { el.querySelector('.qa').hidden = f.type.value !== 'quiz'; el.querySelector('.tagset').hidden = f.type.value !== 'tag'; if (f.each) f.each.closest('label').hidden = f.type.value === 'tag'; };
+    const qa = () => { el.querySelector('.qa').hidden = f.type.value !== 'quiz'; el.querySelector('.tagset').hidden = f.type.value !== 'tag'; if (f.each) f.each.closest('.eachset').hidden = f.type.value === 'tag'; };
     f.type.onchange = qa; qa();
+    // 팀 / 개인: 두 칸 중 하나를 고른다 (체크 하나로는 놓치기 쉬웠다)
+    const seg = el.querySelector('#eachSeg');
+    const paint = () => seg?.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === f.each.value));
+    seg?.querySelectorAll('button').forEach(b => (b.onclick = () => { f.each.value = b.dataset.v; paint(); }));
+    paint();
     // 개인전에선 개인 미션 칸이 없으니 원래 값을 둔다
-    const read = () => ({ ...m, each: solo() ? m.each : !!f.each?.checked, title: f.title.value.trim(), type: f.type.value, desc: f.desc.value.trim(), q: f.q.value.trim(), r: +f.r.value || 0, pts: +f.pts.value || 0, _ans: f.ans.value,
+    const read = () => ({ ...m, each: solo() ? m.each : f.each?.value === '1', title: f.title.value.trim(), type: f.type.value, desc: f.desc.value.trim(), q: f.q.value.trim(), r: +f.r.value || 0, pts: +f.pts.value || 0, _ans: f.ans.value,
       it: Object.fromEntries(Object.keys(G.teams).map(tid => [tid, f['it_' + tid]?.value]).filter(([, u]) => u)), catchR: Math.max(2, +f.catchR.value || 6) });
     el.querySelector('#pickMap').onclick = () => {
       const cur = read();
