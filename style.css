@@ -373,3 +373,6 @@ label.btn{flex-direction:row;justify-content:center;align-items:center;gap:4px}
 .kind.team{background:rgba(240,199,106,.18);color:#f0c76a;border:1px solid rgba(240,199,106,.45)}
 .kind.each{background:rgba(255,143,179,.16);color:#ff9fc4;border:1px solid rgba(255,143,179,.45)}
 .eachset .seg{margin:4px 0 0}
+
+/* 샘플 미션 목록 */
+.smp{margin:8px 0;padding-left:18px;max-height:38vh;overflow:auto;font-size:14px;line-height:1.7}
