@@ -960,6 +960,7 @@ function hostPanel() {
       ${st !== 'live' ? `<button class="btn primary small" id="hStart">${ic('play')} ${st === 'ended' ? '다시 시작' : '게임 시작'}</button>` : `<button class="btn small" id="hEnd">${ic('stop')} 게임 끝내기</button>`}
       <button class="btn small" id="hAdd">${ic('flag')} 미션 관리 ${Object.keys(G.missions).length}</button>
       <button class="btn small" id="hGuide">${ic('book')} 미션 안내 페이지</button>
+      <button class="btn small" id="hAlbum">${ic('camera')} 사진 모음 페이지</button>
       <button class="btn small" id="hTeams">${ic('team')} ${solo() ? '방식·팀' : '팀 정하기'}</button>
       <button class="btn small" id="hEndAt">${ic('clock')} 끝나는 시간</button>
       <button class="btn small" id="hNotice">${ic('megaphone')} 알림 보내기</button>
@@ -1108,6 +1109,46 @@ function guideSheet() {
       : (navigator.clipboard?.writeText(link), toast('안내 페이지 링크를 복사했어요.'));
   });
 }
+/* ---------- 사진 모음 페이지 ---------- */
+// 진행자가 인정한 사진(사진·술래잡기 미션)을 미션별로 모아 링크로 보여 준다 (album.html?g=코드, 로그인 없이).
+// 참가자 사진(photos)은 게임 회원만 읽으므로, 인정할 때 진행자 화면이 album에 따로 옮겨 둔다
+const albumLink = () => `${location.origin}${location.pathname.replace(/[^/]*$/, '')}album.html?g=${G.code}${DEMO ? '&demo' : ''}`;
+// 인정된 사진 목록: [key, mid, uid|null, tid, 완료 기록]
+const approvedPhotos = () => [
+  ...Object.entries(G.done).flatMap(([tid, ms]) => Object.entries(ms || {}).map(([mid, d]) => [tid + '_' + mid, mid, null, tid, d])),
+  ...Object.entries(G.pdone).flatMap(([uid, ms]) => Object.entries(ms || {}).map(([mid, d]) => ['u_' + uid + '_' + mid, mid, uid, d.team, d])),
+].filter(([, mid, , , d]) => d?.status === 'ok' && ['photo', 'tag'].includes(G.missions[mid]?.type));
+async function albumPut(key, mid, uid, tid, d) {
+  const url = await net.getPhoto(G.code, key.slice(0, -(mid.length + 1)), mid);
+  if (!url) return false;
+  const m = G.missions[mid] || {};
+  const who = solo() ? d?.name || '' : `${teamOf(tid).name}${uid ? ' · ' + (d?.name || '') : ''}`;
+  await net.albumAdd(G.code, key, { mid, title: m.title || '', who, color: solo() ? personColor(uid) : teamOf(tid).color, t: d?.t || Date.now() }, url);
+  return true;
+}
+// 이 기능 전에 인정한 사진도 모으고, 지운 미션·취소된 사진은 뺀다
+async function albumSync() {
+  const have = await net.albumIdx(G.code), want = approvedPhotos();
+  const keys = new Set(want.map(([k]) => k));
+  for (const k of Object.keys(have)) if (!keys.has(k)) await net.albumDel(G.code, k);
+  for (const [k, mid, uid, tid, d] of want) if (!have[k]) await albumPut(k, mid, uid, tid, d);
+  return Object.keys(await net.albumIdx(G.code)).length;
+}
+function albumSheet() {
+  const link = albumLink();
+  openSheet(`<p class="eyebrow">사진 모음 페이지</p><h3>인정된 사진을 미션별로 한눈에</h3>
+    <p class="fine">진행자가 인정한 사진(사진·술래잡기 미션)이 미션마다 모여요. 링크만 있으면 로그인 없이 볼 수 있고, 새로 인정하는 사진도 저절로 더해져요.</p>
+    <div class="box" id="alN">사진을 모으는 중…</div>
+    <input readonly value="${esc(link)}" onclick="this.select()">
+    <div class="row"><button class="btn wide primary" id="aShare">${ic('megaphone')} 보내기</button><button class="btn wide" id="aCopy">링크 복사</button></div>
+    <a class="btn wide" style="display:block;text-align:center;text-decoration:none;color:inherit" href="${esc(link)}" target="_blank" rel="noopener">사진 모음 열어 보기</a>`, s => {
+    albumSync().then(n => { s.querySelector('#alN').innerHTML = `${ic('camera')} 인정된 사진 ${n}장`; })
+      .catch(er => { s.querySelector('#alN').textContent = '사진을 모으지 못했어요 (' + (er.code || er.message) + ')'; });
+    s.querySelector('#aCopy').onclick = () => { navigator.clipboard?.writeText(link); toast('사진 모음 링크를 복사했어요.'); };
+    s.querySelector('#aShare').onclick = () => navigator.share ? navigator.share({ title: `${G.meta.name || '비전 퀘스트'} 사진 모음`, url: link }).catch(() => {})
+      : (navigator.clipboard?.writeText(link), toast('사진 모음 링크를 복사했어요.'));
+  });
+}
 function bindHost(el) {
   el.querySelector('#hCopy')?.addEventListener('click', e => { navigator.clipboard?.writeText(e.target.dataset.link); toast('초대 링크를 복사했어요.'); });
   // 다시 시작할 때 이미 지난 끝나는 시간은 지운다
@@ -1115,6 +1156,7 @@ function bindHost(el) {
   el.querySelector('#hEnd')?.addEventListener('click', async e => { if (!confirmIn(e.target)) return; await net.setStatus(G.code, 'ended'); net.say(G.code, '', '게임이 끝났어요. 수고하셨어요!'); });
   el.querySelector('#hAdd')?.addEventListener('click', missionManager);
   el.querySelector('#hGuide')?.addEventListener('click', guideSheet);
+  el.querySelector('#hAlbum')?.addEventListener('click', albumSheet);
   el.querySelector('#hTeams')?.addEventListener('click', teamEditor);
   el.querySelector('#hArea')?.addEventListener('click', areaEditor);
   el.querySelector('#hEndAt')?.addEventListener('click', endEditor);
@@ -1150,6 +1192,7 @@ async function judgeSheet(kind, who, mid) {
     el.querySelector('#jOk').onclick = async () => {
       if (m.type === 'tag' && tagWinner(mid)) { toast(`이미 ${teamOf(tagWinner(mid)).name}이 이겼어요.`); return; }
       await judge(true);
+      if (m.type === 'photo' || m.type === 'tag') albumPut(key + '_' + mid, mid, kind === 'u' ? who : null, tid, d).catch(() => {}); // key는 photos 앞부분(팀 또는 u_사람)
       net.say(G.code, tid || '', m.type === 'tag' ? `${label} — ${teamOf(G.members[d?.caught]?.team).name} 술래 ${G.members[d?.caught]?.name || ''} 잡았다! '${m.title}' 승리` : `${label} — '${m.title}' 완료!`);
       closeSheet();
     };

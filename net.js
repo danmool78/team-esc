@@ -15,7 +15,9 @@
      games/{code}/photos/{tid}_{mid}  사진·음성 녹음 (개인 완료는 u_{uid}_{mid})(작게 줄인 JPEG / 녹음 audio data URL) — done을 가볍게 두려고 따로
      games/{code}/feed/{push}    { t, team, text }
      games/{code}/guide          { name, mode, endAt, teams[{name,color}], missions[{title,type,each,pts,desc,r,lat,lng,open}], at }
-                                 미션 안내 페이지(guide.html?g=코드)용 요약 — 진행자 화면이 미션이 바뀔 때마다 써 둔다. 링크만 있으면 로그인 없이 읽는다(퀴즈 문제·정답은 뺀다) */
+                                 미션 안내 페이지(guide.html?g=코드)용 요약 — 진행자 화면이 미션이 바뀔 때마다 써 둔다. 링크만 있으면 로그인 없이 읽는다(퀴즈 문제·정답은 뺀다)
+     games/{code}/albumIdx/{key} { mid, title, who, color, t } — 사진 모음 페이지(album.html?g=코드): 진행자가 인정한 사진(사진·술래잡기)만
+     games/{code}/album/{key}    그 사진(JPEG data URL) — key는 photos와 같다. 목록을 먼저 받고 사진은 하나씩 받게 따로 둔다. 둘 다 누구나 읽기 */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js';
 import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail,
@@ -121,5 +123,9 @@ export const getPhoto = async (code, tid, mid) => (await get(G(code, `photos/${t
 export const delPhoto = (code, tid, mid) => remove(G(code, `photos/${tid}_${mid}`));
 export const publishGuide = (code, g) => set(G(code, 'guide'), g);
 export const readGuide = async code => (await get(G(code, 'guide'))).val();
+export const albumAdd = (code, key, idx, url) => update(G(code), { [`album/${key}`]: url, [`albumIdx/${key}`]: idx });
+export const albumDel = (code, key) => update(G(code), { [`album/${key}`]: null, [`albumIdx/${key}`]: null });
+export const albumIdx = async code => (await get(G(code, 'albumIdx'))).val() || {};
+export const albumPhoto = async (code, key) => (await get(G(code, 'album/' + key))).val();
 export const say = (code, team, text) => push(G(code, 'feed'), { team: team || '', text, t: serverTimestamp() });
 export const me = () => uid();
