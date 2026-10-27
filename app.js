@@ -73,14 +73,23 @@ const authErr = e => {
 };
 $('#emailForm').onsubmit = async e => {
   e.preventDefault();
+  if (inApp) return goOutside();
   $('#authMsg').textContent = '';
   try { await remember(); await (signing ? net.signUp : net.signIn)($('#email').value.trim(), $('#pw').value); } catch (er) { authErr(er); }
 };
-// 카카오톡 등 앱 안 브라우저는 구글이 로그인을 막으므로, 누르면 바로 바깥 브라우저(아이폰 Safari·안드로이드 크롬)로 연다
+// 카카오톡 등 앱 안 브라우저에서 로그인하려 하면 바로 바깥 브라우저(아이폰 Safari·안드로이드 크롬)로 연다 —
+// 구글은 앱 안 로그인을 막고, 이메일도 바깥에서 해야 로그인이 그 브라우저(나중에 설치할 앱)에 남는다. 입력칸을 누르는 순간 넘겨 헛되이 적지 않게
+const goOutside = () => {
+  const out = outUrl(false);
+  if (out) { location.href = out; return true; }
+  $('#authMsg').className = 'msg err'; $('#authMsg').textContent = '이 앱 안에서는 로그인이 막혀요. 메뉴에서 ‘다른 브라우저로 열기’를 눌러 주세요.';
+  return true;
+};
 $('#googleBtn').onclick = () => {
-  if (inApp) { const out = outUrl(false); if (out) { location.href = out; return; } $('#authMsg').className = 'msg err'; $('#authMsg').textContent = '이 앱 안에서는 구글 로그인이 막혀요. 메뉴에서 ‘다른 브라우저로 열기’를 눌러 주세요.'; return; }
+  if (inApp) return goOutside();
   Promise.resolve(remember()).then(() => net.google()).catch(authErr);
 };
+['#email', '#pw'].forEach(s => $(s).addEventListener('pointerdown', e => { if (inApp) { e.preventDefault(); goOutside(); } }));
 /* ---------- 앱으로 설치하기 · 앱 안 브라우저 (그 길과 같게) ---------- */
 // 설치 창 이벤트는 페이지를 연 직후에 올 수 있어 일찍 받아 둔다
 let installEv = null;
