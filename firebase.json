@@ -12,6 +12,8 @@
       "**/.*",
       "**/node_modules/**",
       "_src/**",
+      "promo/**",
+      "package*.json",
       "**/*-firebase-adminsdk-*.json"
     ],
     "headers": [
