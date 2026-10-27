@@ -412,5 +412,3 @@ label.btn{flex-direction:row;justify-content:center;align-items:center;gap:4px}
 .install-note{margin:14px 0 0;padding:10px 12px;border-radius:10px;background:rgba(217,180,106,.08);font-size:12.5px;line-height:1.6;color:var(--muted);text-align:left}
 .install-out{display:block;margin-top:14px;text-decoration:none;text-align:center}
 .install-box .fine{margin:10px 0 0}
-.inapp-note{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:rgba(240,199,106,.1);border:1px solid rgba(240,199,106,.35);font-size:12.5px;line-height:1.6;color:#e8dcc0;text-align:left;word-break:keep-all}
-.inapp-note .btn{display:block;margin-top:8px;text-align:center;text-decoration:none;color:inherit}

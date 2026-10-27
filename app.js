@@ -76,7 +76,11 @@ $('#emailForm').onsubmit = async e => {
   $('#authMsg').textContent = '';
   try { await remember(); await (signing ? net.signUp : net.signIn)($('#email').value.trim(), $('#pw').value); } catch (er) { authErr(er); }
 };
-$('#googleBtn').onclick = () => Promise.resolve(remember()).then(() => net.google()).catch(authErr);
+// 카카오톡 등 앱 안 브라우저는 구글이 로그인을 막으므로, 누르면 바로 바깥 브라우저(아이폰 Safari·안드로이드 크롬)로 연다
+$('#googleBtn').onclick = () => {
+  if (inApp) { const out = outUrl(false); if (out) { location.href = out; return; } $('#authMsg').className = 'msg err'; $('#authMsg').textContent = '이 앱 안에서는 구글 로그인이 막혀요. 메뉴에서 ‘다른 브라우저로 열기’를 눌러 주세요.'; return; }
+  Promise.resolve(remember()).then(() => net.google()).catch(authErr);
+};
 /* ---------- 앱으로 설치하기 · 앱 안 브라우저 (그 길과 같게) ---------- */
 // 설치 창 이벤트는 페이지를 연 직후에 올 수 있어 일찍 받아 둔다
 let installEv = null;
@@ -126,14 +130,6 @@ if (new URLSearchParams(location.search).has('install')) {
   const q = new URLSearchParams(location.search); q.delete('install');
   history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q.toString().replace(/=(&|$)/g, '$1') : '') + location.hash);
   if (!standalone) installSheet();
-}
-// 로그인 카드: 앱 안 브라우저면 구글 로그인이 막힌다고 알리고 바깥 브라우저로 여는 단추
-if (inApp && outUrl(false)) {
-  $('#inAppNote').hidden = false;
-  $('#inAppNote').innerHTML = `카카오톡 같은 앱 안에서는 구글 로그인이 막혀요. 바깥 브라우저로 열어 주세요.<a class="btn wide" href="${esc(outUrl(false))}">${ios ? 'Safari로 열기' : '크롬(기본 브라우저)으로 열기'}</a>`;
-} else if (inApp) {
-  $('#inAppNote').hidden = false;
-  $('#inAppNote').textContent = '앱 안 브라우저에서는 구글 로그인이 막혀요. 메뉴에서 ‘다른 브라우저로 열기’를 눌러 주세요.';
 }
 $('#resetBtn').onclick = async () => {
   const em = $('#email').value.trim();
