@@ -394,3 +394,23 @@ label.btn{flex-direction:row;justify-content:center;align-items:center;gap:4px}
 .mb:disabled{opacity:.3;cursor:default}
 .mb.del{color:var(--bad);border-color:#5a2a22}
 .mb.del.sure{background:var(--bad);color:#fff}
+
+/* 앱으로 설치하기 (그 길과 같게): 로그인 카드·로비의 글씨 단추와 안내 창 */
+.install-app{display:flex;align-items:center;justify-content:center;gap:8px;margin:10px auto 0;border:0;background:none;color:#f0c76a;font-size:15px;font-weight:600;padding:7px 12px;border-radius:999px;cursor:pointer}
+.install-app svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
+.install-app:hover{background:rgba(240,199,106,.1)}
+.install-app[hidden]{display:none}
+.install-box{text-align:center;word-break:keep-all}
+.install-icon{display:block;margin:4px auto 10px;border-radius:16px;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+.install-box h3{margin:0 0 8px;color:#f0c76a}
+.install-lead{margin:0 0 18px;color:var(--muted);font-size:14px;line-height:1.7}
+.install-steps{list-style:none;margin:0;padding:0;text-align:left;counter-reset:st}
+.install-steps li{counter-increment:st;display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line);font-size:15px;line-height:1.55}
+.install-steps li::before{content:counter(st);flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(180deg,#e9c97f,#b88a3e);color:#24180a;font-size:13px;font-weight:700}
+.install-steps li span{flex:1}
+.install-steps svg{flex:none;width:28px;height:28px;padding:4px;border-radius:7px;background:rgba(255,255,255,.08);fill:none;stroke:#7fb2ff;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.install-note{margin:14px 0 0;padding:10px 12px;border-radius:10px;background:rgba(217,180,106,.08);font-size:12.5px;line-height:1.6;color:var(--muted);text-align:left}
+.install-out{display:block;margin-top:14px;text-decoration:none;text-align:center}
+.install-box .fine{margin:10px 0 0}
+.inapp-note{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:rgba(240,199,106,.1);border:1px solid rgba(240,199,106,.35);font-size:12.5px;line-height:1.6;color:#e8dcc0;text-align:left;word-break:keep-all}
+.inapp-note .btn{display:block;margin-top:8px;text-align:center;text-decoration:none;color:inherit}

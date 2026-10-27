@@ -77,6 +77,64 @@ $('#emailForm').onsubmit = async e => {
   try { await remember(); await (signing ? net.signUp : net.signIn)($('#email').value.trim(), $('#pw').value); } catch (er) { authErr(er); }
 };
 $('#googleBtn').onclick = () => Promise.resolve(remember()).then(() => net.google()).catch(authErr);
+/* ---------- 앱으로 설치하기 · 앱 안 브라우저 (그 길과 같게) ---------- */
+// 설치 창 이벤트는 페이지를 연 직후에 올 수 있어 일찍 받아 둔다
+let installEv = null;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEv = e; });
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const inApp = /KAKAOTALK|NAVER|Instagram|FBAN|FBAV|Line\/|DaumApps|everytimeApp|; wv\)/i.test(navigator.userAgent); // 메신저 등 앱 안 브라우저는 설치도 구글 로그인도 못 한다
+// 앱 안 브라우저에서 바깥 브라우저로 넘기는 주소: 카카오톡은 자체 주소(iOS는 Safari, 안드로이드는 기본 브라우저로),
+// 그 밖의 안드로이드 앱 안 브라우저는 크롬 intent. 초대 주소(?g=코드)는 그대로 들고 간다. install이면 넘어가서 설치 안내를 다시 띄운다
+function outUrl(install) {
+  const q = new URLSearchParams(location.search); q.delete('install'); if (install) q.set('install', '');
+  const qs = q.toString().replace(/=(&|$)/g, '$1'), path = location.pathname + (qs ? '?' + qs : '');
+  if (/KAKAOTALK/i.test(navigator.userAgent)) return `kakaotalk://web/openExternal?url=${encodeURIComponent(location.origin + path)}`;
+  if (inApp && /android/i.test(navigator.userAgent)) return `intent://${location.host}${path}#Intent;scheme=https;package=com.android.chrome;end`;
+  return null;
+}
+const INSTALL_ICO = {
+  share: '<path d="M12 3v12M8 7l4-4 4 4"/><path d="M7 10H5.5v10.5h13V10H17"/>',
+  add: '<rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="M12 8.5v7M8.5 12h7"/>',
+  menu: '<circle cx="12" cy="5.5" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="12" cy="18.5" r="1.3"/>',
+  phone: '<rect x="6.5" y="2.5" width="11" height="19" rx="2.2"/><path d="M12 7.5v7m-3-3 3 3 3-3"/>',
+};
+const installSteps = list => `<ol class="install-steps">${list.map(([text, i]) => `<li><span>${text}</span><svg viewBox="0 0 24 24" aria-hidden="true">${INSTALL_ICO[i]}</svg></li>`).join('')}</ol>`;
+// 안내 창: 설치 창을 띄울 수 있으면(안드로이드 크롬 등) '지금 설치하기' 하나, 아이폰은 Safari '홈 화면에 추가' 순서, 그 밖은 브라우저 메뉴 순서
+function installSheet() {
+  const out = inApp && outUrl(true);
+  const body = out ? `<p class="install-note">앱 안 브라우저에서는 설치할 수 없어요. 아래 단추로 열면 그 브라우저에서 설치 안내가 이어져요.</p><a class="btn wide goldbtn install-out" href="${esc(out)}">${ios ? 'Safari로 열기' : '크롬(기본 브라우저)으로 열기'}</a>`
+    : installEv ? `<button class="btn wide goldbtn" id="installNow">지금 설치하기</button><p class="fine">설치 창이 뜨면 ‘설치’를 누르면 끝이에요.</p>`
+    : (ios ? installSteps([['Safari 아래쪽(아이패드는 위쪽)의 공유 단추를 눌러요', 'share'], ['목록을 올려 ‘홈 화면에 추가’를 눌러요', 'add'], ['오른쪽 위 ‘추가’를 누르면 홈 화면에 ‘비전 퀘스트’가 생겨요', 'phone']])
+      : installSteps([['브라우저 오른쪽 위 메뉴(⋮)를 눌러요', 'menu'], ['‘앱 설치’ 또는 ‘홈 화면에 추가’를 눌러요', 'phone'], ['‘설치’를 누르면 홈 화면에 ‘비전 퀘스트’가 생겨요', 'add']]))
+      + (inApp ? `<p class="install-note">카카오톡 같은 앱 안에서 열었다면, 오른쪽 아래(또는 위)의 메뉴에서 ‘다른 브라우저로 열기’를 먼저 눌러요.</p>` : '');
+  openSheet(`<div class="install-box"><img src="assets/icon-192.png" alt="" width="64" height="64" class="install-icon"><h3>앱으로 설치하기</h3>
+    <p class="install-lead">홈 화면에 아이콘이 생기고, 주소창 없이 앱처럼 꽉 찬 화면으로 열려요.</p>${body}</div>`, el => {
+    el.querySelector('#installNow')?.addEventListener('click', async () => {
+      const ev = installEv; installEv = null;
+      ev.prompt(); try { await ev.userChoice; } catch { /* 닫음 */ }
+      closeSheet();
+    });
+  });
+}
+document.querySelectorAll('.install-app').forEach(b => { b.hidden = !!standalone; b.onclick = installSheet; });
+addEventListener('appinstalled', () => { document.querySelectorAll('.install-app').forEach(b => (b.hidden = true)); if ($('#sheetCard .install-box')) closeSheet(); });
+// 설치 창 이벤트가 안내 창을 연 뒤에 오면(바깥 브라우저로 막 넘어온 때) '지금 설치하기'로 바꿔 그린다
+addEventListener('beforeinstallprompt', () => { if (!$('#sheet').hidden && $('#sheetCard .install-box')) installSheet(); });
+// 앱 안 브라우저에서 넘어와 열렸으면 주소의 install을 지우고(홈 화면에 추가할 주소에 남지 않게) 안내 창을 바로 띄운다 (시작 화면이 걷히면 보인다)
+if (new URLSearchParams(location.search).has('install')) {
+  const q = new URLSearchParams(location.search); q.delete('install');
+  history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q.toString().replace(/=(&|$)/g, '$1') : '') + location.hash);
+  if (!standalone) installSheet();
+}
+// 로그인 카드: 앱 안 브라우저면 구글 로그인이 막힌다고 알리고 바깥 브라우저로 여는 단추
+if (inApp && outUrl(false)) {
+  $('#inAppNote').hidden = false;
+  $('#inAppNote').innerHTML = `카카오톡 같은 앱 안에서는 구글 로그인이 막혀요. 바깥 브라우저로 열어 주세요.<a class="btn wide" href="${esc(outUrl(false))}">${ios ? 'Safari로 열기' : '크롬(기본 브라우저)으로 열기'}</a>`;
+} else if (inApp) {
+  $('#inAppNote').hidden = false;
+  $('#inAppNote').textContent = '앱 안 브라우저에서는 구글 로그인이 막혀요. 메뉴에서 ‘다른 브라우저로 열기’를 눌러 주세요.';
+}
 $('#resetBtn').onclick = async () => {
   const em = $('#email').value.trim();
   if (!em) { $('#authMsg').textContent = '이메일을 먼저 적어 주세요.'; return; }
