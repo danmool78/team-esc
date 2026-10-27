@@ -43,7 +43,7 @@ export const writePos = async (code, p) => { S.games[code].pos[ME] = { ...p, t: 
 export const clearPos = async code => { delete S.games[code].pos[ME]; fire(code); };
 export const deleteGame = async code => { subs.delete(code); delete S.games[code]; };
 export const setCohost = async (code, who, on) => { const m = S.games[code].meta; m.hosts ||= {}; if (on) m.hosts[who] = true; else delete m.hosts[who]; fire(code); };
-export const setStatus = async (code, s) => { S.games[code].meta.status = s; fire(code); };
+export const setStatus = async (code, s) => { const m = S.games[code].meta; m.status = s; if (s === 'ended') m.endedAt = now(); else delete m.endedAt; fire(code); };
 export const saveMeta = async (code, p) => { Object.assign(S.games[code].meta, p); fire(code); };
 export const saveTeams = async (code, t) => { S.games[code].teams = t; fire(code); };
 export const addMission = async (code, m) => { S.games[code].missions['m' + now()] = m; fire(code); };
@@ -116,7 +116,7 @@ function seed() {
     BOTS.forEach(([id, name, , team]) => {
       const p = g.pos[id];
       let mid = goals[id];
-      if (!mid || g.done[team]?.[mid]) {
+      if (!mid || !g.missions[mid] || g.done[team]?.[mid]) { // 지운 미션이면 새로 고른다
         const left = Object.keys(g.missions).filter(k => !g.missions[k].each && g.missions[k].type !== 'tag' && !g.done[team]?.[k]); // 가짜 참가자는 팀 미션만 (술래잡기는 빼고)
         mid = goals[id] = left[Math.floor(Math.random() * left.length)];
         if (!mid) return;
