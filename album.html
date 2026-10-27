@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>사진 모음 · 비전 퀘스트</title>
+<meta name="description" content="비전 퀘스트 — 미션마다 인정된 사진 모음">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<style>
+  :root{--gold:#f0c76a;--ink:#e6e9f2;--muted:#aab2cc;--card:rgba(12,18,38,.86);--line:rgba(240,199,106,.35)}
+  *{box-sizing:border-box}
+  html{background:#0a0e1c}
+  body{margin:0;background:radial-gradient(ellipse at 50% 0%,#1d2440,#0a0e1c 70%) fixed;color:var(--ink);font:15px/1.6 "Noto Sans KR",system-ui,sans-serif;-webkit-text-size-adjust:100%}
+  main{max-width:960px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 24px) 16px 48px}
+  header{text-align:center;margin-bottom:16px}
+  header img{width:min(240px,64%);height:auto;filter:drop-shadow(0 4px 10px rgba(0,0,0,.6))}
+  h1{font-size:22px;color:var(--gold);margin:8px 0 2px;line-height:1.35}
+  .sub{color:var(--muted);font-size:13px}
+  .jump{display:flex;gap:6px;overflow-x:auto;padding:4px 0 10px;scrollbar-width:none}
+  .jump::-webkit-scrollbar{display:none}
+  .jump a{flex:none;font-size:13px;color:var(--ink);text-decoration:none;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:999px;padding:4px 12px;white-space:nowrap}
+  .jump a b{color:var(--gold);margin-left:4px}
+  section{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin:12px 0;scroll-margin-top:12px}
+  h2{font-size:16px;color:#fff;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+  h2 small{color:var(--gold);font-size:13px;font-weight:600;margin-left:auto}
+  .ico{width:22px;height:22px;flex:none}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+  @media (max-width:480px){.grid{grid-template-columns:repeat(2,1fr)}}
+  figure{margin:0;border-radius:12px;overflow:hidden;background:rgba(255,255,255,.05);cursor:zoom-in}
+  figure .ph{aspect-ratio:1;background:#151b30 center/cover no-repeat;display:grid;place-items:center;color:var(--muted);font-size:12px}
+  figcaption{display:flex;align-items:center;gap:6px;padding:6px 9px;font-size:12.5px;color:#dfe4f2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  figcaption i{width:9px;height:9px;border-radius:50%;flex:none}
+  .empty{color:var(--muted);text-align:center;padding:30px 0}
+  #lb{position:fixed;inset:0;background:rgba(4,6,14,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px;z-index:9}
+  #lb[hidden]{display:none}
+  #lb img{max-width:100%;max-height:calc(100vh - 140px);border-radius:10px;object-fit:contain}
+  #lb .cap{color:#fff;font-size:14px;text-align:center}
+  #lb .cap small{display:block;color:var(--muted)}
+  #lb .bar{display:flex;gap:8px}
+  #lb button,#lb a{border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;border-radius:10px;padding:8px 14px;font:inherit;font-size:14px;text-decoration:none;cursor:pointer}
+  footer{margin-top:22px;color:#8d96b3;font-size:12px;line-height:1.7;text-align:center}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="assets/title.webp" alt="비전 퀘스트">
+    <h1 id="gName">사진 모음</h1>
+    <div class="sub" id="gSub">불러오는 중…</div>
+  </header>
+  <nav class="jump" id="jump"></nav>
+  <div id="body"></div>
+  <footer>진행자가 인정한 사진만 모았어요. 게임이 끝나고 7일 뒤 서버에서 지워지니, 남기고 싶은 사진은 저장해 두세요.<br>© 2026 SSSOFT · <a href="privacy.html" style="color:inherit">개인정보처리방침</a></footer>
+</main>
+<div id="lb" hidden><img alt=""><div class="cap"></div><div class="bar"><button id="lbPrev">‹ 이전</button><a id="lbSave" download>저장</a><button id="lbNext">다음 ›</button><button id="lbX">닫기</button></div></div>
+<script type="module">
+/* 사진 모음 페이지: album.html?g=게임코드 — 진행자가 인정할 때 옮겨 둔 games/{코드}/albumIdx·album을 로그인 없이 읽어 미션별로 보여 준다.
+   목록(albumIdx)을 먼저 받아 틀을 그리고, 사진(album/{key})은 화면에 가까워질 때 하나씩 받는다(사진이 많아도 처음이 빠르게).
+   ?demo면 서버 없이 그려 본 가짜 사진으로 (데모 게임은 그 폰 메모리에만 있어서) */
+import { ic } from './icons.js';
+
+const q = new URLSearchParams(location.search);
+const code = (q.get('g') || '').trim().toUpperCase();
+const DEMO = q.has('demo');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const $ = s => document.querySelector(s);
+let src; // { name, idx, photo(key) }
+
+async function load() {
+  if (DEMO) {
+    const teams = [['청팀', '#4f8de8'], ['홍팀', '#e8574f'], ['녹팀', '#4fbf6a']];
+    const ms = ['경기전 홍살문 단체 사진', '전동성당 팀 구호', '전주향교 은행나무', '술래잡기: 한옥마을'];
+    const idx = {};
+    ms.forEach((title, i) => teams.forEach(([n, c], j) => { if ((i + j) % 4 !== 3) idx[`t${j}_m${i}`] = { mid: 'm' + i, title, who: n, color: c, t: Date.now() - (i * 3 + j) * 6e5 }; }));
+    idx.u_a_m2 = { mid: 'm2', title: ms[2], who: '청팀 · 다윗', color: '#4f8de8', t: Date.now() };
+    // 미션·팀마다 다른 색 그림 (실제 사진 대신)
+    const photo = async key => {
+      const x = idx[key], cv = Object.assign(document.createElement('canvas'), { width: 480, height: 480 }), g = cv.getContext('2d');
+      const gr = g.createLinearGradient(0, 0, 480, 480); gr.addColorStop(0, x.color); gr.addColorStop(1, '#1b2340');
+      g.fillStyle = gr; g.fillRect(0, 0, 480, 480);
+      g.fillStyle = 'rgba(255,255,255,.85)'; g.font = 'bold 30px sans-serif'; g.textAlign = 'center';
+      g.fillText(x.title.slice(0, 12), 240, 230); g.font = '24px sans-serif'; g.fillText(x.who, 240, 275);
+      return cv.toDataURL('image/jpeg', 0.8);
+    };
+    return { name: '한옥마을 팀 미션 (데모)', idx, photo, order: ms };
+  }
+  if (!code) return null;
+  const net = await import('./net.js');
+  const [idx, guide] = await Promise.all([net.albumIdx(code), net.readGuide(code).catch(() => null)]);
+  return { name: guide?.name || '', idx, photo: key => net.albumPhoto(code, key), order: guide?.missions?.map(m => m.title) || [] };
+}
+
+function render() {
+  const items = Object.entries(src.idx).map(([key, x]) => ({ key, ...x }));
+  $('#gName').textContent = src.name ? `${src.name} 사진 모음` : '사진 모음';
+  if (src.name) document.title = `${src.name} 사진 모음 · 비전 퀘스트`;
+  $('#gSub').textContent = `${code ? `게임 코드 ${code} · ` : ''}사진 ${items.length}장`;
+  if (!items.length) { $('#body').innerHTML = '<section><p class="empty">아직 인정된 사진이 없어요.</p></section>'; return; }
+  // 미션별로 묶고, 미션 순서는 안내 페이지 순서(없으면 처음 올라온 순)
+  const groups = new Map();
+  items.sort((a, b) => a.t - b.t).forEach(x => { if (!groups.has(x.mid)) groups.set(x.mid, []); groups.get(x.mid).push(x); });
+  const pos = t => { const i = src.order?.indexOf(t); return i >= 0 ? i : 1e3; };
+  const list = [...groups.values()].sort((a, b) => pos(a[0].title) - pos(b[0].title));
+  $('#jump').innerHTML = list.map((g, i) => `<a href="#s${i}">${esc(g[0].title)}<b>${g.length}</b></a>`).join('');
+  $('#body').innerHTML = list.map((g, i) => `<section id="s${i}"><h2>${ic(g[0].title.startsWith('술래') ? 'tag' : 'camera')}${esc(g[0].title)}<small>${g.length}장</small></h2>
+    <div class="grid">${g.map(x => `<figure data-k="${esc(x.key)}"><div class="ph">불러오는 중…</div><figcaption><i style="background:${esc(x.color)}"></i>${esc(x.who)}</figcaption></figure>`).join('')}</div></section>`).join('');
+  // 화면 가까이 온 사진만 받는다
+  const urls = {};
+  const io = new IntersectionObserver(es => es.forEach(e => {
+    if (!e.isIntersecting) return;
+    io.unobserve(e.target);
+    const k = e.target.dataset.k, ph = e.target.querySelector('.ph');
+    Promise.resolve(src.photo(k)).then(u => { if (!u) { ph.textContent = '사진이 없어요'; return; } urls[k] = u; ph.textContent = ''; ph.style.backgroundImage = `url("${u}")`; })
+      .catch(() => (ph.textContent = '불러오지 못했어요'));
+  }), { rootMargin: '400px' });
+  const figs = [...document.querySelectorAll('figure')];
+  figs.forEach(f => io.observe(f));
+  // 크게 보기: 이전·다음·저장
+  let cur = -1;
+  const open = i => {
+    cur = (i + figs.length) % figs.length;
+    const f = figs[cur], k = f.dataset.k, x = src.idx[k], show = u => { $('#lb img').src = u; $('#lbSave').href = u; };
+    $('#lb img').src = ''; $('#lbSave').download = `vision-quest-${code || 'demo'}-${k}.jpg`;
+    $('#lb .cap').innerHTML = `${esc(x.title)}<small>${esc(x.who)}</small>`;
+    if (urls[k]) show(urls[k]); else Promise.resolve(src.photo(k)).then(u => { if (u) { urls[k] = u; if (figs[cur] === f) show(u); } });
+    $('#lb').hidden = false;
+  };
+  figs.forEach((f, i) => (f.onclick = () => open(i)));
+  $('#lbPrev').onclick = () => open(cur - 1);
+  $('#lbNext').onclick = () => open(cur + 1);
+  $('#lbX').onclick = () => ($('#lb').hidden = true);
+  $('#lb').onclick = e => { if (e.target.id === 'lb') $('#lb').hidden = true; };
+  addEventListener('keydown', e => { if ($('#lb').hidden) return; if (e.key === 'Escape') $('#lb').hidden = true; if (e.key === 'ArrowLeft') open(cur - 1); if (e.key === 'ArrowRight') open(cur + 1); });
+}
+
+load().then(s => {
+  if (!s) { $('#gSub').textContent = ''; $('#body').innerHTML = '<section><p class="empty">게임 코드가 없는 주소예요. 진행자에게 받은 링크로 열어 주세요.</p></section>'; return; }
+  src = s; render();
+}).catch(e => { console.error(e); $('#gSub').textContent = '사진을 불러오지 못했어요. 잠시 뒤 다시 열어 주세요.'; });
+</script>
+</body>
+</html>

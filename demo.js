@@ -58,6 +58,10 @@ export const getPhoto = async (code, tid, mid) => S.games[code].photos[tid + '_'
 export const delPhoto = async (code, tid, mid) => { delete S.games[code].photos[tid + '_' + mid]; };
 export const publishGuide = async (code, g) => { S.games[code].guide = g; };
 export const readGuide = async code => S.games[code]?.guide || null;
+export const albumAdd = async (code, key, idx, url) => { const g = S.games[code]; (g.album ||= {})[key] = url; (g.albumIdx ||= {})[key] = idx; };
+export const albumDel = async (code, key) => { const g = S.games[code]; delete g.album?.[key]; delete g.albumIdx?.[key]; };
+export const albumIdx = async code => S.games[code]?.albumIdx || {};
+export const albumPhoto = async (code, key) => S.games[code]?.album?.[key];
 export const say = async (code, team, text) => feed(code, team, text);
 export const me = () => ME;
 

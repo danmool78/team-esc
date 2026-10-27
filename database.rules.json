@@ -24,6 +24,14 @@
           ".read": true,
           ".write": "auth != null && (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true)"
         },
+        "albumIdx": {
+          ".read": true,
+          ".write": "auth != null && (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true)"
+        },
+        "album": {
+          ".read": true,
+          ".write": "auth != null && (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true)"
+        },
         "teams": {
           ".read": "auth != null && root.child('games/' + $g + '/members/' + auth.uid).exists()",
           ".write": "auth != null && (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true)"
