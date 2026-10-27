@@ -258,6 +258,7 @@ function onMeta() {
 function refresh() {
   if (!G.code) return;
   syncGuide();
+  if (resultOpen() && JSON.stringify(standings()) + pendings().length !== resultKey) showResults(true);
   renderScores();
   syncPlayers();
   syncMissions();
@@ -1258,9 +1259,14 @@ function checkResults() {
   G.shownResult = true;
   setTimeout(showResults, 1200);
 }
-function showResults() {
+// 끝나기 직전에 올린 사진은 끝난 뒤에 인정되기도 한다 — 결과 창이 열려 있으면 순위를 다시 그린다(빵가루는 처음 한 번만)
+let resultKey = '';
+const resultOpen = () => !$('#sheet').hidden && !!$('#sheetCard .result');
+function showResults(quiet) {
   const rows = standings();
   if (!rows.length) return;
+  const waits = pendings().length;
+  resultKey = JSON.stringify(rows) + waits;
   const medal = r => (r.rank <= 3 ? ic('medal' + r.rank) : `<b class="rk">${r.rank}</b>`);
   const top = rows.filter(r => r.rank <= 3).slice(0, 3);
   // 시상대: 2등 · 1등 · 3등 자리
@@ -1268,9 +1274,10 @@ function showResults() {
   const mine = rows.find(r => r.mine);
   const colors = ['#ff6b9a', '#ffd34e', '#4cc3f0', '#5fd38a', '#9b6bff', '#ffa24c'];
   const confetti = Array.from({ length: 28 }, (_, i) => `<span style="left:${(i * 37) % 100}%;background:${colors[i % 6]};animation-delay:${(i % 7) * 0.18}s;animation-duration:${2.2 + (i % 5) * 0.3}s"></span>`).join('');
-  openSheet(`<div class="confetti">${confetti}</div><div class="result"><div class="rhead">${ic('trophy')}<h3>게임 결과</h3><p class="fine">${esc(G.meta.name || '')}</p></div>
+  openSheet(`${quiet ? '' : `<div class="confetti">${confetti}</div>`}<div class="result"><div class="rhead">${ic('trophy')}<h3>게임 결과</h3><p class="fine">${esc(G.meta.name || '')}</p></div>
     <div class="podium">${podium}</div>
     ${mine ? `<div class="box mineres">${solo() ? '나는' : '우리 팀은'} <b>${mine.rank}등</b>! · ${mine.pts}점</div>` : ''}
+    ${waits ? `<p class="fine" style="text-align:center">${ic('wait')} 진행자가 확인 중인 미션 ${waits}개 — 확인되면 순위가 바뀔 수 있어요</p>` : ''}
     <div class="stack">${rows.map(r => `<div class="item ${r.mine ? 'on' : ''}"><div class="ic">${medal(r)}</div><div class="tx"><b><span class="dot" style="background:${esc(r.color)}"></span> ${esc(r.name)}</b><small>미션 ${r.n}개</small></div><div class="rt"><b>${r.pts}</b>점</div></div>`).join('')}</div></div>`);
 }
 
