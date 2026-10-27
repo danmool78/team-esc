@@ -64,6 +64,7 @@ const code = (q.get('g') || '').trim().toUpperCase();
 const DEMO = q.has('demo');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const $ = s => document.querySelector(s);
+const safe = u => (typeof u === 'string' && /^data:image\/[\w.+-]+;base64,[A-Za-z0-9+/=]+$/.test(u) ? u : ''); // 그림 data URL만 (저장 링크·배경으로 쓰므로)
 let src; // { name, idx, photo(key) }
 
 async function load() {
@@ -110,7 +111,7 @@ function render() {
     if (!e.isIntersecting) return;
     io.unobserve(e.target);
     const k = e.target.dataset.k, ph = e.target.querySelector('.ph');
-    Promise.resolve(src.photo(k)).then(u => { if (!u) { ph.textContent = '사진이 없어요'; return; } urls[k] = u; ph.textContent = ''; ph.style.backgroundImage = `url("${u}")`; })
+    Promise.resolve(src.photo(k)).then(u => { u = safe(u); if (!u) { ph.textContent = '사진이 없어요'; return; } urls[k] = u; ph.textContent = ''; ph.style.backgroundImage = `url("${u}")`; })
       .catch(() => (ph.textContent = '불러오지 못했어요'));
   }), { rootMargin: '400px' });
   const figs = [...document.querySelectorAll('figure')];
@@ -122,7 +123,7 @@ function render() {
     const f = figs[cur], k = f.dataset.k, x = src.idx[k], show = u => { $('#lb img').src = u; $('#lbSave').href = u; };
     $('#lb img').src = ''; $('#lbSave').download = `vision-quest-${code || 'demo'}-${k}.jpg`;
     $('#lb .cap').innerHTML = `${esc(x.title)}<small>${esc(x.who)}</small>`;
-    if (urls[k]) show(urls[k]); else Promise.resolve(src.photo(k)).then(u => { if (u) { urls[k] = u; if (figs[cur] === f) show(u); } });
+    if (urls[k]) show(urls[k]); else Promise.resolve(src.photo(k)).then(u => { u = safe(u); if (u) { urls[k] = u; if (figs[cur] === f) show(u); } });
     $('#lb').hidden = false;
   };
   figs.forEach((f, i) => (f.onclick = () => open(i)));
