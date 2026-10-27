@@ -20,6 +20,10 @@
             ".write": "auth != null && $field !== 'host' && $field !== 'hosts' && data.parent().exists() && data.parent().child('hosts/' + auth.uid).val() === true"
           }
         },
+        "guide": {
+          ".read": true,
+          ".write": "auth != null && (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true)"
+        },
         "teams": {
           ".read": "auth != null && root.child('games/' + $g + '/members/' + auth.uid).exists()",
           ".write": "auth != null && (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true)"

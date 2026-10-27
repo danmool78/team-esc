@@ -257,6 +257,7 @@ function onMeta() {
 
 function refresh() {
   if (!G.code) return;
+  syncGuide();
   renderScores();
   syncPlayers();
   syncMissions();
@@ -960,6 +961,7 @@ function hostPanel() {
       <button class="btn small" id="hAdd">${ic('plus')} 미션 더하기</button>
       <button class="btn small" id="hSample">${ic('flag')} 샘플 미션 넣기</button>
       <button class="btn small" id="hExport">${ic('down')} 미션 표 내려받기</button>
+      <button class="btn small" id="hGuide">${ic('book')} 미션 안내 페이지</button>
       <button class="btn small" id="hTeams">${ic('team')} ${solo() ? '방식·팀' : '팀 정하기'}</button>
       <button class="btn small" id="hEndAt">${ic('clock')} 끝나는 시간</button>
       <button class="btn small" id="hNotice">${ic('megaphone')} 알림 보내기</button>
@@ -1031,6 +1033,45 @@ function exportMissions() {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   toast('미션 표를 내려받았어요 (엑셀·구글 시트에서 열려요).', 'down');
 }
+/* ---------- 미션 안내 페이지 ---------- */
+// 팀원이 게임에 들어오기 전에도 링크로 미리 보게, 진행자 화면이 미션 요약을 games/{코드}/guide에 써 둔다 (바뀔 때만, 잠깐 모아서).
+// 닫힌 미션도 '나중에 열림'으로 보이고, 퀴즈 문제는 현장에서만 보이게 뺀다
+const guideLink = () => `${location.origin}${location.pathname.replace(/[^/]*$/, '')}guide.html?g=${G.code}${DEMO ? '&demo' : ''}`;
+function guideData() {
+  const n = v => (v == null ? null : v);
+  return {
+    name: G.meta.name || '', mode: solo() ? 'solo' : 'team', endAt: n(G.meta.endAt),
+    teams: solo() ? [] : Object.values(G.teams).map(t => ({ name: t.name, color: t.color })),
+    missions: Object.values(G.missions).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(m => ({
+      title: m.title || '', type: m.type || 'arrive', each: !!(m.each && !solo()), pts: m.pts || 0, desc: m.desc || '', r: m.r || 0,
+      lat: n(m.lat), lng: n(m.lng), open: m.open !== false,
+    })),
+  };
+}
+let guideKey = '', guideT = 0;
+function syncGuide() {
+  if (!isHost() || !G.code || !G.meta.host || guideT) return; // refresh는 1초에도 여러 번 불려 미루기만 하면 영영 안 쓰이므로, 걸린 타이머가 있으면 그대로 둔다
+  guideT = setTimeout(() => {
+    guideT = 0;
+    const g = guideData(), key = G.code + JSON.stringify(g);
+    if (key === guideKey) return;
+    guideKey = key;
+    net.publishGuide(G.code, { ...g, at: Date.now() }).catch(() => { guideKey = ''; });
+  }, 1500);
+}
+function guideSheet() {
+  const link = guideLink();
+  openSheet(`<p class="eyebrow">미션 안내 페이지</p><h3>팀원에게 미리 보여 주기</h3>
+    <p class="fine">링크만 있으면 로그인 없이 미션 목록, 미션 하는 법, 준비물을 볼 수 있어요. 미션을 고치면 안내 페이지도 저절로 바뀌어요. 퀴즈 문제는 현장에서만 보여요.</p>
+    <input readonly value="${esc(link)}" onclick="this.select()">
+    <div class="row"><button class="btn wide primary" id="gShare">${ic('megaphone')} 보내기</button><button class="btn wide" id="gCopy">링크 복사</button></div>
+    <a class="btn wide" style="display:block;text-align:center;text-decoration:none;color:inherit" href="${esc(link)}" target="_blank" rel="noopener">안내 페이지 열어 보기</a>`, s => {
+    guideKey = ''; clearTimeout(guideT); guideT = 0; syncGuide(); // 지금 미션으로 한 번 더 써 둔다
+    s.querySelector('#gCopy').onclick = () => { navigator.clipboard?.writeText(link); toast('안내 페이지 링크를 복사했어요.'); };
+    s.querySelector('#gShare').onclick = () => navigator.share ? navigator.share({ title: `${G.meta.name || '비전 퀘스트'} 미션 안내`, url: link }).catch(() => {})
+      : (navigator.clipboard?.writeText(link), toast('안내 페이지 링크를 복사했어요.'));
+  });
+}
 function bindHost(el) {
   el.querySelector('#hCopy')?.addEventListener('click', e => { navigator.clipboard?.writeText(e.target.dataset.link); toast('초대 링크를 복사했어요.'); });
   // 다시 시작할 때 이미 지난 끝나는 시간은 지운다
@@ -1039,6 +1080,7 @@ function bindHost(el) {
   el.querySelector('#hAdd')?.addEventListener('click', () => missionForm());
   el.querySelector('#hSample')?.addEventListener('click', sampleSheet);
   el.querySelector('#hExport')?.addEventListener('click', exportMissions);
+  el.querySelector('#hGuide')?.addEventListener('click', guideSheet);
   el.querySelector('#hTeams')?.addEventListener('click', teamEditor);
   el.querySelector('#hArea')?.addEventListener('click', areaEditor);
   el.querySelector('#hEndAt')?.addEventListener('click', endEditor);

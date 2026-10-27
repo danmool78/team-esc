@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>미션 안내 · 비전 퀘스트</title>
+<meta name="description" content="비전 퀘스트 팀 미션 안내 — 미션 목록과 하는 법을 미리 보세요">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<style>
+  :root{--gold:#f0c76a;--ink:#e6e9f2;--muted:#aab2cc;--card:rgba(12,18,38,.86);--line:rgba(240,199,106,.35)}
+  *{box-sizing:border-box}
+  html{background:#0a0e1c}
+  body{margin:0;background:radial-gradient(ellipse at 50% 0%,#1d2440,#0a0e1c 70%) fixed;color:var(--ink);font:15px/1.7 "Noto Sans KR",system-ui,sans-serif;-webkit-text-size-adjust:100%}
+  main{max-width:760px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 24px) 16px 48px}
+  header{text-align:center;margin-bottom:18px}
+  header img{width:min(260px,70%);height:auto;filter:drop-shadow(0 4px 10px rgba(0,0,0,.6))}
+  h1{font-size:22px;color:var(--gold);margin:8px 0 2px;line-height:1.35}
+  .sub{color:var(--muted);font-size:13px}
+  section{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin:12px 0}
+  h2{font-size:16px;color:var(--gold);margin:0 0 8px;display:flex;align-items:center;gap:8px}
+  p,li{margin:4px 0}
+  ul{padding-left:20px;margin:4px 0}
+  b{color:#fff}
+  .ico{width:22px;height:22px;flex:none;vertical-align:middle}
+  .facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+  .fact{background:rgba(255,255,255,.05);border-radius:12px;padding:8px 12px}
+  .fact small{display:block;color:var(--muted);font-size:12px}
+  .fact b{font-size:17px}
+  .teams{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .chip{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.07);border-radius:999px;padding:3px 10px;font-size:13px}
+  .chip i{width:10px;height:10px;border-radius:50%;display:inline-block}
+  .join{display:block;text-align:center;margin-top:12px;background:linear-gradient(#f6d684,#d9a440);color:#2a1d08;font-weight:700;text-decoration:none;border-radius:12px;padding:11px}
+  .types{display:grid;gap:8px}
+  .type{display:flex;gap:10px;align-items:flex-start;background:rgba(255,255,255,.04);border-radius:12px;padding:9px 12px}
+  .type .ico{width:28px;height:28px;margin-top:2px}
+  .type small{display:block;color:var(--muted);font-size:13px;line-height:1.55}
+  .ms{display:grid;gap:10px}
+  .m{display:flex;gap:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:12px}
+  .m.closed{opacity:.6}
+  .no{flex:none;width:28px;height:28px;border-radius:50%;background:var(--gold);color:#2a1d08;font-weight:800;display:grid;place-items:center;font-size:14px}
+  .m .tx{flex:1;min-width:0}
+  .m .t{font-weight:700;color:#fff;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .m .d{color:#cfd5e6;font-size:14px;margin:3px 0 6px}
+  .tags{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+  .tg{font-size:12px;border-radius:6px;padding:1px 7px;background:rgba(255,255,255,.08);color:#dfe4f2}
+  .tg.team{background:rgba(111,168,255,.2);color:#bcd5ff}
+  .tg.each{background:rgba(127,220,143,.2);color:#bdf0c6}
+  .tg.pts{background:rgba(240,199,106,.2);color:var(--gold);font-weight:700}
+  .tg.later{background:rgba(255,255,255,.12)}
+  .tags a{font-size:12px;color:var(--gold);text-decoration:none;margin-left:auto}
+  .empty{color:var(--muted);text-align:center;padding:30px 0}
+  .fine{color:var(--muted);font-size:13px}
+  footer{margin-top:22px;color:#8d96b3;font-size:12px;line-height:1.7;text-align:center}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="assets/title.webp" alt="비전 퀘스트">
+    <h1 id="gName">미션 안내</h1>
+    <div class="sub" id="gSub">불러오는 중…</div>
+  </header>
+  <div id="body"></div>
+  <footer>안내 내용은 진행자가 미션을 고치면 함께 바뀌어요. 당일 앱에 보이는 미션이 기준이에요.<br>© 2026 SSSOFT · <a href="privacy.html" style="color:inherit">개인정보처리방침</a></footer>
+</main>
+<script type="module">
+/* 미션 안내 페이지: guide.html?g=게임코드 — 진행자 화면이 써 둔 games/{코드}/guide(요약)를 로그인 없이 읽어 보여 준다.
+   ?demo면 서버 없이 전주 샘플로 그린다(데모 게임은 그 폰 메모리에만 있어서) */
+import { ic } from './icons.js';
+
+const q = new URLSearchParams(location.search);
+const code = (q.get('g') || '').trim().toUpperCase();
+const DEMO = q.has('demo');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const $ = s => document.querySelector(s);
+
+// 미션 종류마다 아이콘·이름·하는 법·확인 방법 (app.js TYPES와 같은 아이콘)
+const TYPES = {
+  arrive: ['pin', '도착', '표시된 자리(반경) 안으로 걸어 들어가면 저절로 완료돼요.', '자동 — GPS'],
+  quiz: ['quiz', '퀴즈', '그 자리에 가면 문제가 열려요. 정답을 적어 내면 바로 맞았는지 알려 줘요. 문제는 현장에서만 보여요.', '자동 — 정답'],
+  photo: ['camera', '사진', '그 자리에서 미션대로 사진을 찍어 올려요.', '진행자가 보고 인정'],
+  task: ['flag', '현장 미션', '그 자리에서 미션을 해내고 완료를 눌러요.', '진행자가 확인'],
+  voice: ['mic', '음성', '그 자리에서 노래 한 소절, 구호 등을 녹음(최대 20초)해 들어 보고 보내요. 마이크 허용이 필요해요.', '진행자가 듣고 인정'],
+  tag: ['tag', '술래잡기', '팀마다 술래가 한 명 있어요(지도에 \'술래\' 표시). 다른 팀 술래를 찾아 사진을 찍어 올려요.', '진행자가 보고 먼저 인정받은 팀 승리'],
+};
+
+async function load() {
+  if (DEMO) {
+    const { SAMPLES } = await import('./samples.js');
+    const s = SAMPLES.jeonju;
+    return { name: `${s.name} 미션 (샘플)`, mode: 'team', endAt: null,
+      teams: [{ name: '빨강 팀', color: '#e8574f' }, { name: '파랑 팀', color: '#4f8de8' }, { name: '초록 팀', color: '#4fbf6a' }],
+      missions: s.missions.map(({ ans, q, ...m }) => ({ ...m, each: !!m.each, open: m.open !== false })) };
+  }
+  if (!code) return null;
+  const net = await import('./net.js');
+  return net.readGuide(code);
+}
+
+function when(t) {
+  const d = new Date(t);
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 ${['일', '월', '화', '수', '목', '금', '토'][d.getDay()]}요일 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function render(g) {
+  if (!g) {
+    $('#gSub').textContent = code ? `게임 코드 ${code}` : '';
+    $('#body').innerHTML = `<section><p class="empty">${code ? '아직 안내가 없어요. 진행자에게 다시 링크를 받아 주세요.' : '게임 코드가 없는 주소예요. 진행자에게 받은 링크로 열어 주세요.'}</p></section>`;
+    return;
+  }
+  const solo = g.mode === 'solo';
+  const ms = g.missions || [];
+  const total = ms.reduce((a, m) => a + (m.pts || 0), 0);
+  const used = [...new Set(ms.map(m => m.type))].filter(t => TYPES[t]);
+  document.title = `${g.name || '미션'} 안내 · 비전 퀘스트`;
+  $('#gName').textContent = g.name || '미션 안내';
+  $('#gSub').textContent = `${code ? `게임 코드 ${code} · ` : ''}${solo ? '개인전' : '팀전'} · 미션 ${ms.length}개`;
+  const appLink = `./${code ? `?g=${code}` : ''}`;
+  const mapLink = m => (m.lat == null ? '' : `https://map.kakao.com/link/map/${encodeURIComponent(m.title)},${m.lat},${m.lng}`);
+
+  $('#body').innerHTML = `
+  <section>
+    <h2>${ic('trophy')} 게임 한눈에</h2>
+    <div class="facts">
+      <div class="fact"><small>방식</small><b>${solo ? '개인전' : '팀전'}</b></div>
+      <div class="fact"><small>미션</small><b>${ms.length}개</b></div>
+      <div class="fact"><small>모두 해내면</small><b>${total}점</b></div>
+      <div class="fact"><small>끝나는 시간</small><b>${g.endAt ? when(g.endAt) : '진행자가 알려 줘요'}</b></div>
+    </div>
+    ${g.teams?.length ? `<div class="teams">${g.teams.map(t => `<span class="chip"><i style="background:${esc(t.color)}"></i>${esc(t.name)}</span>`).join('')}</div>` : ''}
+    ${code ? `<a class="join" href="${appLink}">비전 퀘스트 앱 열기 · 코드 ${esc(code)}</a>` : ''}
+  </section>
+
+  <section>
+    <h2>${ic('check')} 미리 준비해요</h2>
+    <ul>
+      <li><b>폰 충전</b>하고 보조배터리를 챙겨요. 게임 중엔 화면이 켜진 채로 위치를 보내요.</li>
+      <li>앱을 열어 <b>로그인</b>(구글 또는 이메일)하고 <b>별칭·인형</b>을 미리 정해 두면 당일 바로 시작해요.</li>
+      <li>게임 코드로 들어가 <b>팀</b>을 고르세요. 진행자가 바꿔 줄 수도 있어요.</li>
+      <li>브라우저가 묻으면 <b>위치 허용</b>을 눌러요. 음성 미션은 <b>마이크</b>, 사진 미션은 <b>카메라</b>도 허용해요.</li>
+      <li>걸을 때는 ${ic('moon')} <b>주머니 모드</b>로 화면을 까맣게 덮어 배터리를 아껴요(1초 길게 누르면 풀려요).</li>
+      <li>홈 화면에 추가해 두면 앱처럼 바로 열려요.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>${ic('team')} 팀 미션과 개인 미션</h2>
+    ${solo ? '<p>개인전이라 모든 미션을 <b>각자</b> 해서 점수를 모아요.</p>' : `
+    <p><span class="tg team">팀</span> <b>팀 미션</b>: 팀에서 <b>한 명만</b> 해내면 팀 전체가 완료돼요.</p>
+    <p><span class="tg each">개인</span> <b>개인 미션</b>: 팀원 <b>각자</b> 해야 하고, 한 사람마다 점수가 팀에 더해져요.</p>`}
+    <p class="fine">점수판에서 다른 팀의 점수가 바로 보여요. 게임이 끝나면 결과(순위·메달)가 모두에게 떠요.</p>
+  </section>
+
+  <section>
+    <h2>${ic('flag')} 미션 하는 법</h2>
+    <div class="types">${used.map(t => { const [icn, name, how, ok] = TYPES[t]; return `<div class="type">${ic(icn)}<div><b>${name}</b><small>${how}<br>확인: ${ok}</small></div></div>`; }).join('')}</div>
+    <p class="fine" style="margin-top:8px">진행자가 '다시 해 주세요'라고 하면 미션 창에 이유가 떠요. 그대로 고쳐서 다시 보내면 돼요. 미션은 지도의 빛기둥을 누르거나 미션 탭에서 열어요.</p>
+  </section>
+
+  <section>
+    <h2>${ic('map')} 미션 목록</h2>
+    ${ms.length ? `<div class="ms">${ms.map((m, i) => { const t = TYPES[m.type] || TYPES.arrive; const map = mapLink(m); return `
+      <div class="m${m.open ? '' : ' closed'}"><div class="no">${i + 1}</div><div class="tx">
+        <div class="t">${ic(t[0])}${esc(m.title)}</div>
+        ${m.desc ? `<div class="d">${esc(m.desc)}</div>` : ''}
+        <div class="tags"><span class="tg">${t[1]}</span>${solo ? '' : m.type === 'tag' ? '<span class="tg team">팀</span>' : m.each ? '<span class="tg each">개인</span>' : '<span class="tg team">팀</span>'}
+          <span class="tg pts">${m.pts || 0}점</span>${m.r ? `<span class="tg">반경 ${m.r}m</span>` : ''}${m.open ? '' : '<span class="tg later">나중에 열려요</span>'}
+          ${map ? `<a href="${map}" target="_blank" rel="noopener">지도에서 보기 ›</a>` : ''}</div>
+      </div></div>`; }).join('')}</div>` : '<p class="empty">아직 미션이 없어요.</p>'}
+  </section>`;
+}
+
+load().then(render).catch(e => { console.error(e); $('#gSub').textContent = '안내를 불러오지 못했어요. 잠시 뒤 다시 열어 주세요.'; });
+</script>
+</body>
+</html>

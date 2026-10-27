@@ -71,6 +71,7 @@ const ICONS = {
   medal1: `<path d="M8 2.5l2.5 6h3L16 2.5z" fill="#4cc3f0"/><circle cx="12" cy="14.5" r="6.5" fill="#ffd34e"/><path d="M12 11.3v6.4M10.7 12.4l1.3-1.1" stroke="#b07a10" stroke-width="1.8"/>${shine(9.6, 12.2, 1.1)}`,
   medal2: `<path d="M8 2.5l2.5 6h3L16 2.5z" fill="#ff6b9a"/><circle cx="12" cy="14.5" r="6.5" fill="#dfe6ee"/><path d="M10 12.6a2 2 0 1 1 3.4 1.5L10 17.6h4" stroke="#6b7785" stroke-width="1.6"/>${shine(9.6, 12.2, 1.1)}`,
   medal3: `<path d="M8 2.5l2.5 6h3L16 2.5z" fill="#5fd38a"/><circle cx="12" cy="14.5" r="6.5" fill="#e8a46a"/><path d="M10.2 12h3.4l-1.8 2a1.9 1.9 0 1 1-1.8 2.6" stroke="#8a4f22" stroke-width="1.6"/>${shine(9.6, 12.2, 1.1)}`,
+  book: `<path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5V6.5z" fill="#6fa8ff"/><path d="M12 6.5c2-1.5 5-2 8.5-1.5v13c-3.5-.5-6.5 0-8.5 1.5V6.5z" fill="#ffd36a"/><path d="M14.5 9.5c1.5-.6 3-.8 4-.7M14.5 12.5c1.5-.6 3-.8 4-.7" stroke-width="1.2"/>`,
   down: `<path d="M6.5 9.5L12 15l5.5-5.5" stroke="currentColor" stroke-width="2.4"/>`,
   up: `<path d="M6.5 14.5L12 9l5.5 5.5" stroke="currentColor" stroke-width="2.4"/>`,
 };
