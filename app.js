@@ -217,7 +217,7 @@ async function enter(code) {
     feed: (f, isNew) => {
       G.feed.unshift(f);
       if (G.feed.length > 60) G.feed.pop();
-      if (isNew) { toast(plain(f.text), f.team ? null : 'megaphone'); if (tab !== 'feed') unseen++; }
+      if (isNew) { toast(plain(f.text), f.team ? null : 'megaphone'); if (tab !== 'feed') unseen++; if (plain(f.text).startsWith('깜짝 미션')) navigator.vibrate?.([300, 120, 300]); }
       if (tab === 'feed') renderPanel(); else renderTabs();
     },
   });
@@ -326,8 +326,8 @@ function syncMissions() {
     const stack = placed.filter(p => dist(p, m) < 15).length; placed.push(m); // 같은 자리 몇 번째인지
     const st = myDone(id)?.status;
     const by = isEach(m) ? (eachDone(id).length ? eachDone(id).length + '명' : '') : Object.keys(G.teams).filter(t => G.done[t]?.[id]?.status === 'ok').map(t => G.teams[t].name).join('·');
-    W.upsertMission({ id, stack, icon: iconImage(TYPES[m.type]?.[0] || 'pin'), title: `${m.title}${m.each && !solo() ? ' (개인)' : ''}`, lat: m.lat, lng: m.lng, r: m.r, dim: st === 'ok' || m.open === false,
-      color: st === 'ok' ? '#7fdc8f' : st === 'wait' ? '#f0d79a' : '#ffcf6a', sub: `${m.pts || 0}점${by ? ' · ✓ ' + by : ''}` });
+    W.upsertMission({ id, stack, icon: iconImage(TYPES[m.type]?.[0] || 'pin'), title: `${m.title}${m.each && !solo() ? ' (개인)' : ''}`, lat: m.lat, lng: m.lng, r: m.r, dim: st === 'ok' || m.open === false || expired(m),
+      color: st === 'ok' ? '#7fdc8f' : st === 'wait' ? '#f0d79a' : '#ffcf6a', sub: `${m.pts || 0}점${m.until && m.open !== false ? (expired(m) ? ' · 시간 끝' : ` · 남은 ${Math.ceil((m.until - Date.now()) / 60e3)}분`) : ''}${by ? ' · ✓ ' + by : ''}` });
   });
   removedMissions(seen);
 }
@@ -383,7 +383,7 @@ function missionItems(list) {
     const dots = isEach(m) ? (eachDone(id).length ? ` · ${ic('check')} ${eachDone(id).length}명` : '') : Object.entries(G.teams).filter(([t]) => G.done[t]?.[id]?.status === 'ok').map(([, t]) => `<i style="background:${esc(t.color)}"></i>`).join('');
     return `<div class="item" data-m="${id}">
       <div class="ic ${st || ''}">${ic(st === 'ok' ? 'check' : st === 'wait' ? 'wait' : TYPES[m.type]?.[0] || 'pin')}</div>
-      <div class="tx"><b>${esc(m.title)}</b><small>${solo() ? '' : `<span class="kind ${m.each ? 'each' : 'team'}">${m.each ? '개인' : '팀'}</span> `}${TYPES[m.type]?.[1] || ''} · ${m.pts || 0}점${m.open === false ? ' · 닫힘' : ''}<span class="dots">${dots}</span></small></div>
+      <div class="tx"><b>${esc(m.title)}</b><small>${solo() ? '' : `<span class="kind ${m.each ? 'each' : 'team'}">${m.each ? '개인' : '팀'}</span> `}${TYPES[m.type]?.[1] || ''} · ${m.pts || 0}점${m.open === false ? ' · 닫힘' : m.until ? ` · ${ic('clock')}${cd(m)}` : ''}<span class="dots">${dots}</span></small></div>
       <div class="rt">${d}</div></div>`;
   }).join('');
 }
@@ -755,6 +755,18 @@ const near = m => myLL && (!m.r || dist(myLL, m) <= m.r + Math.min(myLL.acc || 0
 const busy = new Set();
 // 미션을 할 수 있는 사람: 개인전은 누구나, 팀전은 팀이 있어야
 const canPlay = () => solo() || !!myTeam();
+// 깜짝 미션(제한 시간): limit(분)을 정하면 열리는 순간부터 until(시각)까지만 할 수 있다. 게임 끝나는 시간은 넘기지 않는다
+const expired = m => !!m.until && Date.now() >= m.until;
+const startUntil = m => Math.min(Date.now() + m.limit * 60e3, G.meta.endAt > Date.now() ? G.meta.endAt : Infinity);
+const cd = m => (m.until ? `<span class="cd" data-until="${m.until}">${expired(m) ? '시간 끝' : left(m.until - Date.now())}</span>` : ''); // 1초마다 tickTimer가 고친다
+// 열고 닫기: 깜짝 미션은 열 때 시계를 새로 건다 (모두에게 알리고)
+async function setOpen(id, m, open) {
+  const v = { ...m, open };
+  delete v.until;
+  if (open && m.limit) v.until = startUntil(m);
+  await net.saveMission(G.code, id, v);
+  if (open && m.limit && isLive()) net.say(G.code, '', `깜짝 미션! '${m.title}' — ${Math.round((v.until - Date.now()) / 60e3)}분 안에 해내세요`);
+}
 /* ---------- 술래잡기 (술래 사진 찍기) ----------
    진행자가 팀마다 술래를 한 명씩 정한다(mission.it = {팀: uid}). 술래는 지도에 '술래'로 보인다.
    다른 팀 술래를 찾아 놀이 구역(반경) 안에서 사진을 찍어 올리면(누구를 찍었는지 caught) 진행자가 확인하고,
@@ -782,7 +794,7 @@ function tagInfo(id, m, live) {
 function checkArrive() {
   if (!isLive() || !canPlay() || !myLL) return;
   Object.entries(G.missions).forEach(([id, m]) => {
-    if (m.type !== 'arrive' || m.open === false || myDone(id) || busy.has(id) || !near(m)) return;
+    if (m.type !== 'arrive' || m.open === false || expired(m) || myDone(id) || busy.has(id) || !near(m)) return;
     busy.add(id);
     finish(id, m, 'ok').finally(() => busy.delete(id));
   });
@@ -829,6 +841,7 @@ function openMission(id) {
   else if (d?.status === 'wait') act = `<div class="box">${ic('wait')} 진행자가 확인하고 있어요.</div>`;
   else if (!canPlay()) act = `<div class="box">팀에 들어가야 미션을 할 수 있어요.</div>`;
   else if (!live) act = `<div class="box">${G.meta.status === 'ended' || timeUp() ? '게임이 끝났어요.' : '진행자가 게임을 시작하면 열려요.'}</div>`;
+  else if (expired(m)) act = `<div class="box">${ic('clock')} 깜짝 미션 시간이 끝났어요.</div>`;
   else if (!near(m)) act = retryNote(m) + `<div class="box">${myLL ? `${fmtDist(dist(myLL, m))} 남았어요. ` : '위치 공유를 켜 주세요. '}반경 ${m.r}m 안으로 가면 ${m.type === 'arrive' ? '저절로 완료돼요' : '열려요'}.</div>`;
   else if (m.type === 'quiz') act = retryNote(m) + `<div class="box">${esc(m.q)}</div><form class="row" id="qForm"><input id="qAns" placeholder="정답" autocomplete="off"><button class="btn primary">제출</button></form><p class="msg" id="qMsg"></p>`;
   else if (m.type === 'photo') act = retryNote(m) + `<label class="btn wide primary" style="text-align:center">${ic('camera')} 사진 찍어 올리기<input type="file" accept="image/*" capture="environment" id="photoIn" hidden></label><p class="msg" id="qMsg"></p>`;
@@ -839,7 +852,7 @@ function openMission(id) {
   if (sim && !d) act += `<button class="btn wide" id="simGo">${ic('flask')} 여기로 이동 (테스트)</button>`;
   const host = isHost() ? `<div class="hostgrid"><button class="btn small" id="mEdit">수정</button><button class="btn small" id="mToggle">${m.open === false ? '열기' : '닫기'}</button><button class="btn small danger" id="mDel">삭제</button></div>` : '';
   openSheet(`<p class="eyebrow">${tic(m.type)} ${TYPES[m.type]?.[1]}${solo() ? '' : m.each ? ' · 개인 미션 — 팀원 각자 해서 팀 점수에 보태요' : m.type === 'tag' ? '' : ' · 팀 미션 — 팀에서 한 명만 하면 돼요'} · ${m.pts || 0}점</p><h3>${esc(m.title)}</h3>
-    ${m.desc ? `<p class="fine">${esc(m.desc)}</p>` : ''}<div class="teamrow">${others}</div>${act}${host}`, el => {
+    ${m.desc ? `<p class="fine">${esc(m.desc)}</p>` : ''}${m.until && m.open !== false && !expired(m) && !d ? `<div class="box warn">${ic('clock')} 깜짝 미션 — 남은 시간 <b>${cd(m)}</b></div>` : ''}<div class="teamrow">${others}</div>${act}${host}`, el => {
     el.querySelector('#qForm')?.addEventListener('submit', async e => {
       e.preventDefault();
       const a = el.querySelector('#qAns').value;
@@ -870,7 +883,7 @@ function openMission(id) {
       } catch (er) { el.querySelector('#qMsg').className = 'msg err'; el.querySelector('#qMsg').textContent = '올리지 못했어요 (' + (er.code || er.message) + ')'; }
     });
     el.querySelector('#mEdit')?.addEventListener('click', () => missionForm(id));
-    el.querySelector('#mToggle')?.addEventListener('click', async () => { await net.saveMission(G.code, id, { ...m, open: m.open === false }); closeSheet(); });
+    el.querySelector('#mToggle')?.addEventListener('click', async () => { await setOpen(id, m, m.open === false); closeSheet(); });
     el.querySelector('#mDel')?.addEventListener('click', async () => { if (confirmIn(el.querySelector('#mDel'))) { await net.delMission(G.code, id); closeSheet(); } });
   });
 }
@@ -982,7 +995,7 @@ function missionManager() {
     <div class="hostgrid"><button class="btn small primary" id="mgAdd">${ic('plus')} 미션 더하기</button><button class="btn small" id="mgSample">${ic('flag')} 샘플 넣기</button><button class="btn small" id="mgExport">${ic('down')} 표 내려받기</button></div>
     ${list.length ? `<div class="mgr">${list.map(([id, m], i) => `<div class="mrow${m.open === false ? ' off' : ''}" data-id="${id}">
       <span class="no">${i + 1}</span><div class="ic">${tic(m.type)}</div>
-      <div class="tx" data-edit><b>${esc(m.title)}</b><small>${solo() ? '' : m.type === 'tag' ? '<span class="kind team">팀</span> ' : `<span class="kind ${m.each ? 'each' : 'team'}">${m.each ? '개인' : '팀'}</span> `}${TYPES[m.type]?.[1] || ''} · ${m.pts || 0}점${m.open === false ? ' · 닫힘' : ''}</small></div>
+      <div class="tx" data-edit><b>${esc(m.title)}</b><small>${solo() ? '' : m.type === 'tag' ? '<span class="kind team">팀</span> ' : `<span class="kind ${m.each ? 'each' : 'team'}">${m.each ? '개인' : '팀'}</span> `}${TYPES[m.type]?.[1] || ''} · ${m.pts || 0}점${m.limit ? ` · 깜짝 ${m.limit}분` : ''}${m.open === false ? ' · 닫힘' : m.until ? ' · ' + cd(m) : ''}</small></div>
       <div class="acts"><button class="mb" data-up ${i ? '' : 'disabled'} aria-label="위로">${ic('up')}</button><button class="mb" data-down ${i < list.length - 1 ? '' : 'disabled'} aria-label="아래로">${ic('down')}</button>
         <button class="mb txt" data-open>${m.open === false ? '열기' : '닫기'}</button><button class="mb txt del" data-del>삭제</button></div></div>`).join('')}</div>
       <p class="fine">이름을 누르면 고쳐요. 닫은 미션은 참가자에게 안 보여요.</p>` : '<p class="empty">아직 미션이 없어요. 더하거나 샘플을 넣어 보세요.</p>'}`, el => {
@@ -1001,7 +1014,7 @@ function missionManager() {
       };
       row.querySelector('[data-up]').onclick = () => move(-1);
       row.querySelector('[data-down]').onclick = () => move(1);
-      row.querySelector('[data-open]').onclick = async () => { await net.saveMission(G.code, id, { ...m, open: m.open === false }); missionManager(); };
+      row.querySelector('[data-open]').onclick = async () => { await setOpen(id, m, m.open === false); missionManager(); };
       row.querySelector('[data-del]').onclick = async e => {
         const b = e.currentTarget;
         if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = '지울까요?'; b.classList.add('sure'); return; }
@@ -1081,7 +1094,7 @@ function guideData() {
     teams: solo() ? [] : Object.values(G.teams).map(t => ({ name: t.name, color: t.color })),
     missions: Object.values(G.missions).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(m => ({
       title: m.title || '', type: m.type || 'arrive', each: !!(m.each && !solo()), pts: m.pts || 0, desc: m.desc || '', r: m.r || 0,
-      lat: n(m.lat), lng: n(m.lng), open: m.open !== false,
+      lat: n(m.lat), lng: n(m.lng), open: m.open !== false, limit: m.limit || 0,
     })),
   };
 }
@@ -1230,6 +1243,13 @@ const left = ms => { const s = Math.max(0, Math.ceil(ms / 1000)), h = Math.floor
 // 위쪽에 남은 시간을 1초마다. 5분·1분 전에 알리고, 시간이 다 되면 진행자 화면이 게임을 끝낸다
 let warned = {};
 function tickTimer() {
+  const now = Date.now();
+  document.querySelectorAll('.cd[data-until]').forEach(s => { const u = +s.dataset.until; s.textContent = u <= now ? '시간 끝' : left(u - now); });
+  if (G.code) {
+    const timed = Object.values(G.missions).filter(m => m.until && m.open !== false);
+    if (timed.some(m => m.until <= now && m.until > now - 1000)) refresh(); // 방금 끝난 깜짝 미션
+    else if (timed.length && now % 15000 < 1000) syncMissions();
+  }
   const el = $('#gTimer'), end = G.meta.endAt;
   el.hidden = !end || !G.code || G.meta.status === 'ended';
   if (el.hidden) return;
@@ -1379,6 +1399,8 @@ function missionForm(id, draftM, back) {
     <textarea name="desc" placeholder="설명 (무엇을 하면 되는지 — 음성 미션이면 무엇을 녹음할지: 노래 한 소절, 팀 구호, 시 낭송 등)">${esc(m.desc || '')}</textarea>
     <div class="qa stack"><input name="q" placeholder="문제" value="${esc(m.q || '')}"><input name="ans" placeholder="${m.ah ? '정답 (바꿀 때만 적기)' : '정답 — 띄어쓰기·대소문자는 무시해요'}"></div>
     <div class="grid2"><label>반경(m)<input name="r" type="number" min="0" value="${m.r ?? 25}"></label><label>점수<input name="pts" type="number" min="0" value="${m.pts ?? 10}"></label></div>
+    <label>제한 시간 (깜짝 미션)<select name="limit">${[0, 5, 10, 15, 20, 30, 45, 60].map(n => `<option value="${n}" ${(m.limit || 0) === n ? 'selected' : ''}>${n ? n + '분 — 열리는 순간부터' : '없음'}</option>`).join('')}</select></label>
+    <p class="fine" id="limitNote" hidden>저장(열기)하는 순간부터 시간이 가고, 모두에게 깜짝 미션 소식이 가요. 게임 끝나는 시간을 넘으면 그때까지만이에요.</p>
     <div class="box" id="where">${m.lat ? `${ic('pin')} ${m.lat.toFixed(5)}, ${m.lng.toFixed(5)}` : '위치를 정해 주세요'}</div>
     <div class="grid2"><button type="button" class="btn" id="pickMap">지도에서 고르기</button><button type="button" class="btn" id="pickMe">내 자리로</button></div>
     <button class="btn primary">저장</button><p class="msg" id="mfMsg"></p></form>`, el => {
@@ -1386,13 +1408,15 @@ function missionForm(id, draftM, back) {
     el.querySelector('#mfBack')?.addEventListener('click', back);
     const qa = () => { el.querySelector('.qa').hidden = f.type.value !== 'quiz'; el.querySelector('.tagset').hidden = f.type.value !== 'tag'; if (f.each) f.each.closest('.eachset').hidden = f.type.value === 'tag'; };
     f.type.onchange = qa; qa();
+    const ln = () => (el.querySelector('#limitNote').hidden = !+f.limit.value);
+    f.limit.onchange = ln; ln();
     // 팀 / 개인: 두 칸 중 하나를 고른다 (체크 하나로는 놓치기 쉬웠다)
     const seg = el.querySelector('#eachSeg');
     const paint = () => seg?.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === f.each.value));
     seg?.querySelectorAll('button').forEach(b => (b.onclick = () => { f.each.value = b.dataset.v; paint(); }));
     paint();
     // 개인전에선 개인 미션 칸이 없으니 원래 값을 둔다
-    const read = () => ({ ...m, each: solo() ? m.each : f.each?.value === '1', title: f.title.value.trim(), type: f.type.value, desc: f.desc.value.trim(), q: f.q.value.trim(), r: +f.r.value || 0, pts: +f.pts.value || 0, _ans: f.ans.value,
+    const read = () => ({ ...m, each: solo() ? m.each : f.each?.value === '1', title: f.title.value.trim(), type: f.type.value, desc: f.desc.value.trim(), q: f.q.value.trim(), r: +f.r.value || 0, pts: +f.pts.value || 0, limit: +f.limit.value || 0, _ans: f.ans.value,
       it: Object.fromEntries(Object.keys(G.teams).map(tid => [tid, f['it_' + tid]?.value]).filter(([, u]) => u)) });
     el.querySelector('#pickMap').onclick = () => {
       const cur = read();
@@ -1411,12 +1435,17 @@ function missionForm(id, draftM, back) {
       else delete v.it;
       delete v.catchR; // 예전 GPS 잡기 거리는 이제 쓰지 않는다
       if (!v.each) delete v.each;
+      // 제한 시간: 새로 정했거나 바꿨거나 이미 끝났으면 지금부터 다시 건다 (글자만 고칠 땐 시계를 그대로)
+      const isNew = !id, restart = v.limit && v.open !== false && (isNew || v.limit !== m.limit || !m.until || expired(m));
+      if (!v.limit) { delete v.limit; delete v.until; }
+      else if (restart) v.until = startUntil(v);
+      if (G.meta.endAt && G.meta.endAt <= Date.now() && v.limit) { el.querySelector('#mfMsg').textContent = '게임 끝나는 시간이 지났어요. 끝나는 시간을 먼저 늘려 주세요.'; return; }
       // 새 미션은 id를 먼저 받아야 정답 해시를 만들 수 있다
-      const isNew = !id;
       if (!id) { const r = await net.addMission(G.code, { ...v, open: true }); id = r?.key || Object.keys(G.missions).find(k => G.missions[k].title === v.title); }
       if (v.type === 'quiz' && ans.trim()) v.ah = await answerHash(id, ans);
       await net.saveMission(G.code, id, v);
-      if (isLive() && isNew) net.say(G.code, '', `새 미션 — '${v.title}'`);
+      if (isLive() && restart) net.say(G.code, '', `깜짝 미션! '${v.title}' — ${Math.round((v.until - Date.now()) / 60e3)}분 안에 해내세요`);
+      else if (isLive() && isNew) net.say(G.code, '', `새 미션 — '${v.title}'`);
       if (back) back(); else closeSheet();
     };
   });
