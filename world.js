@@ -774,7 +774,7 @@ function frameLoop(now) {
     m.glow.material.opacity = (m.dim ? 0.35 : 0.8) + Math.sin(t * 2.5) * 0.15;
     const s = cam.dist * 0.018 * m.tag.userData.h;
     m.tag.scale.set(s * m.tag.userData.aspect, s, 1);
-    m.tag.position.y = beamH + s * 0.6;
+    m.tag.position.y = beamH + s * (0.6 + 1.25 * (m.stack || 0)); // 같은 자리 미션은 이름표를 위로 쌓는다
   });
   renderer.render(scene, camera);
 }

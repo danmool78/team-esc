@@ -318,13 +318,14 @@ function syncPlayers() {
 }
 function syncMissions() {
   if (!W.frame()) return;
-  const seen = new Set();
-  Object.entries(G.missions).forEach(([id, m]) => {
+  const seen = new Set(), placed = [];
+  Object.entries(G.missions).sort((x, y) => (x[1].order ?? 0) - (y[1].order ?? 0)).forEach(([id, m]) => {
     if (m.open === false && !isHost()) { W.removeMission(id); return; }
     seen.add(id);
+    const stack = placed.filter(p => dist(p, m) < 15).length; placed.push(m); // 같은 자리 몇 번째인지
     const st = myDone(id)?.status;
     const by = isEach(m) ? (eachDone(id).length ? eachDone(id).length + '명' : '') : Object.keys(G.teams).filter(t => G.done[t]?.[id]?.status === 'ok').map(t => G.teams[t].name).join('·');
-    W.upsertMission({ id, icon: iconImage(TYPES[m.type]?.[0] || 'pin'), title: `${m.title}${m.each && !solo() ? ' (개인)' : ''}`, lat: m.lat, lng: m.lng, r: m.r, dim: st === 'ok' || m.open === false,
+    W.upsertMission({ id, stack, icon: iconImage(TYPES[m.type]?.[0] || 'pin'), title: `${m.title}${m.each && !solo() ? ' (개인)' : ''}`, lat: m.lat, lng: m.lng, r: m.r, dim: st === 'ok' || m.open === false,
       color: st === 'ok' ? '#7fdc8f' : st === 'wait' ? '#f0d79a' : '#ffcf6a', sub: `${m.pts || 0}점${by ? ' · ✓ ' + by : ''}` });
   });
   removedMissions(seen);
@@ -538,7 +539,14 @@ const setBld = v => { W.setBuildings(v); $('#fabBld').classList.toggle('on', v);
 setBld(store.get('bld') !== 'off');
 $('#fabBld').onclick = () => setBld(!$('#fabBld').classList.contains('on'));
 W.on('tapPlayer', focusPlayer);
-W.on('tapMission', openMission);
+// 같은 자리(15m 안)에 미션이 여럿이면 빛기둥이 겹쳐 위의 것만 눌리므로, 어느 미션인지 고르게 한다
+W.on('tapMission', id => {
+  const m = G.missions[id];
+  const here = m ? sortedMissions().filter(([, x]) => dist(x, m) < 15) : [];
+  if (here.length < 2) return openMission(id);
+  openSheet(`<p class="eyebrow">이 자리의 미션 ${here.length}개</p><h3>어느 미션을 볼까요?</h3>${missionItems(here)}`, el =>
+    el.querySelectorAll('.item[data-m]').forEach(n => (n.onclick = () => openMission(n.dataset.m))));
+});
 W.on('tapGround', ll => {
   if (placing) { const f = placing; placing = null; $('#placing').hidden = true; f(ll); return; }
   if (sim) setMyPos({ lat: ll.lat, lng: ll.lng, acc: 3 });
