@@ -375,7 +375,7 @@ function missionList() {
   return banner + missionItems(list);
 }
 function missionItems(list) {
-  if (!list.length) return `<p class="empty">아직 미션이 없어요.${isHost() ? '<br>진행 탭에서 미션을 더해 주세요.' : ''}</p>`;
+  if (!list.length) return `<p class="empty">아직 미션이 없어요.${isHost() ? '<br>진행 탭 「미션 관리」에서 미션을 더해 주세요.' : ''}</p>`;
   return list.map(([id, m]) => {
     const st = myDone(id)?.status;
     const d = myLL ? fmtDist(dist(myLL, m)) : '';
@@ -958,9 +958,7 @@ function hostPanel() {
   return `<div class="code">${G.code}</div><p class="fine" style="text-align:center">참가자에게 이 코드를 알려 주세요 · <button class="link" id="hCopy" data-link="${esc(link)}">초대 링크 복사</button></p>
     <div class="hostgrid">
       ${st !== 'live' ? `<button class="btn primary small" id="hStart">${ic('play')} ${st === 'ended' ? '다시 시작' : '게임 시작'}</button>` : `<button class="btn small" id="hEnd">${ic('stop')} 게임 끝내기</button>`}
-      <button class="btn small" id="hAdd">${ic('plus')} 미션 더하기</button>
-      <button class="btn small" id="hSample">${ic('flag')} 샘플 미션 넣기</button>
-      <button class="btn small" id="hExport">${ic('down')} 미션 표 내려받기</button>
+      <button class="btn small" id="hAdd">${ic('flag')} 미션 관리 ${Object.keys(G.missions).length}</button>
       <button class="btn small" id="hGuide">${ic('book')} 미션 안내 페이지</button>
       <button class="btn small" id="hTeams">${ic('team')} ${solo() ? '방식·팀' : '팀 정하기'}</button>
       <button class="btn small" id="hEndAt">${ic('clock')} 끝나는 시간</button>
@@ -972,6 +970,44 @@ function hostPanel() {
     <div class="group-h">확인을 기다리는 미션 ${waits.length}</div>
     ${waits.length ? waits.map(({ kind, who, tid, mid, d }) => `<div class="item" data-judge="${kind}|${who}|${mid}"><div class="ic wait">${tic(G.missions[mid]?.type)}</div>
       <div class="tx"><b>${esc(G.missions[mid]?.title || mid)}${kind === 'u' && !solo() ? ' (개인)' : ''}</b><small><span class="dot" style="background:${esc(kind === 'u' && solo() ? personColor(who) : teamOf(tid).color)}"></span> ${solo() ? '' : esc(teamOf(tid).name) + ' · '}${esc(d.name)} · ${clock(d.t)}</small></div><div class="rt">보기 ›</div></div>`).join('') : '<p class="empty">없어요.</p>'}`;
+}
+/* ---------- 미션 관리 ---------- */
+// 진행자가 미션 전체를 목록으로 보며 더하기·고치기·지우기·순서 바꾸기·열고 닫기를 한 곳에서 한다.
+// 이 창은 refresh가 다시 그리지 않으므로 바꾼 뒤엔 스스로 다시 그린다 (그래서 '한 번 더 누르기' 지우기가 풀리지 않는다)
+function missionManager() {
+  const list = Object.entries(G.missions).sort((a, b) => (a[1].order ?? 0) - (b[1].order ?? 0));
+  const total = list.reduce((a, [, m]) => a + (m.pts || 0), 0);
+  openSheet(`<p class="eyebrow">미션 관리</p><h3>미션 ${list.length}개 · 모두 ${total}점</h3>
+    <div class="hostgrid"><button class="btn small primary" id="mgAdd">${ic('plus')} 미션 더하기</button><button class="btn small" id="mgSample">${ic('flag')} 샘플 넣기</button><button class="btn small" id="mgExport">${ic('down')} 표 내려받기</button></div>
+    ${list.length ? `<div class="mgr">${list.map(([id, m], i) => `<div class="mrow${m.open === false ? ' off' : ''}" data-id="${id}">
+      <span class="no">${i + 1}</span><div class="ic">${tic(m.type)}</div>
+      <div class="tx" data-edit><b>${esc(m.title)}</b><small>${solo() ? '' : m.type === 'tag' ? '<span class="kind team">팀</span> ' : `<span class="kind ${m.each ? 'each' : 'team'}">${m.each ? '개인' : '팀'}</span> `}${TYPES[m.type]?.[1] || ''} · ${m.pts || 0}점${m.open === false ? ' · 닫힘' : ''}</small></div>
+      <div class="acts"><button class="mb" data-up ${i ? '' : 'disabled'} aria-label="위로">${ic('up')}</button><button class="mb" data-down ${i < list.length - 1 ? '' : 'disabled'} aria-label="아래로">${ic('down')}</button>
+        <button class="mb txt" data-open>${m.open === false ? '열기' : '닫기'}</button><button class="mb txt del" data-del>삭제</button></div></div>`).join('')}</div>
+      <p class="fine">이름을 누르면 고쳐요. 닫은 미션은 참가자에게 안 보여요.</p>` : '<p class="empty">아직 미션이 없어요. 더하거나 샘플을 넣어 보세요.</p>'}`, el => {
+    el.querySelector('#mgAdd').onclick = () => missionForm(null, null, missionManager);
+    el.querySelector('#mgSample').onclick = sampleSheet;
+    el.querySelector('#mgExport').onclick = exportMissions;
+    el.querySelectorAll('.mrow').forEach(row => {
+      const id = row.dataset.id, m = G.missions[id], i = list.findIndex(([k]) => k === id);
+      row.querySelector('[data-edit]').onclick = () => missionForm(id, null, missionManager);
+      // 순서: 목록 차례대로 order를 다시 매기고, 바뀐 것만 저장한다 (예전 미션은 order가 겹치거나 없을 수 있다)
+      const move = async d => {
+        const ids = list.map(([k]) => k);
+        [ids[i], ids[i + d]] = [ids[i + d], ids[i]];
+        await Promise.all(ids.map((k, n) => (G.missions[k].order === n ? null : net.saveMission(G.code, k, { ...G.missions[k], order: n }))));
+        missionManager();
+      };
+      row.querySelector('[data-up]').onclick = () => move(-1);
+      row.querySelector('[data-down]').onclick = () => move(1);
+      row.querySelector('[data-open]').onclick = async () => { await net.saveMission(G.code, id, { ...m, open: m.open === false }); missionManager(); };
+      row.querySelector('[data-del]').onclick = async e => {
+        const b = e.currentTarget;
+        if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = '지울까요?'; b.classList.add('sure'); return; }
+        await net.delMission(G.code, id); missionManager();
+      };
+    });
+  });
 }
 /* ---------- 샘플 미션 넣기 · 미션 표 내려받기 ---------- */
 // 지역 샘플(samples.js)을 한 번에 넣는다. 이름이 같은 미션은 건너뛰고, 순서는 지금 미션들 뒤에 붙인다
@@ -1008,7 +1044,7 @@ function sampleSheet() {
           if (ans) mv.ah = await answerHash(id, ans);
           await net.saveMission(G.code, id, mv);
         }
-        closeSheet(); toast(`샘플 미션 ${add.length}개를 넣었어요.`, 'flag');
+        missionManager(); toast(`샘플 미션 ${add.length}개를 넣었어요.`, 'flag');
         if (isLive()) net.say(G.code, '', `새 미션 ${add.length}개가 생겼어요`);
       } catch (er) { msg.className = 'msg err'; msg.textContent = '넣지 못했어요 (' + (er.code || er.message) + ')'; }
     };
@@ -1077,9 +1113,7 @@ function bindHost(el) {
   // 다시 시작할 때 이미 지난 끝나는 시간은 지운다
   el.querySelector('#hStart')?.addEventListener('click', async () => { if (timeUp()) await net.saveMeta(G.code, { endAt: null }); await net.setStatus(G.code, 'live'); net.say(G.code, '', '게임이 시작됐어요!'); });
   el.querySelector('#hEnd')?.addEventListener('click', async e => { if (!confirmIn(e.target)) return; await net.setStatus(G.code, 'ended'); net.say(G.code, '', '게임이 끝났어요. 수고하셨어요!'); });
-  el.querySelector('#hAdd')?.addEventListener('click', () => missionForm());
-  el.querySelector('#hSample')?.addEventListener('click', sampleSheet);
-  el.querySelector('#hExport')?.addEventListener('click', exportMissions);
+  el.querySelector('#hAdd')?.addEventListener('click', missionManager);
   el.querySelector('#hGuide')?.addEventListener('click', guideSheet);
   el.querySelector('#hTeams')?.addEventListener('click', teamEditor);
   el.querySelector('#hArea')?.addEventListener('click', areaEditor);
@@ -1291,9 +1325,9 @@ function teamEditor() {
     }));
   });
 }
-function missionForm(id, draftM) {
+function missionForm(id, draftM, back) {
   const m = draftM || (id ? { ...G.missions[id] } : { type: 'arrive', r: 25, pts: 10, open: true, order: Object.keys(G.missions).length });
-  openSheet(`<h3>${id ? '미션 고치기' : '새 미션'}</h3><form class="stack" id="mf">
+  openSheet(`${back ? `<button class="link" id="mfBack">‹ 미션 목록</button>` : ''}<h3>${id ? '미션 고치기' : '새 미션'}</h3><form class="stack" id="mf">
     <input name="title" placeholder="미션 이름 (예: 경기전 홍살문)" value="${esc(m.title || '')}" required>
     <label>종류<select name="type">${Object.entries(TYPES).filter(([k]) => k !== 'tag' || !solo() || m.type === 'tag').map(([k, [, n]]) => `<option value="${k}" ${m.type === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
     <div class="tagset stack"><p class="fine">팀마다 술래를 한 명씩 정해요. 다른 팀 술래를 찾아 반경(놀이 구역) 안에서 사진을 찍어 올리면, 진행자가 확인해서 먼저 인정받은 팀이 이겨요.</p>
@@ -1306,6 +1340,7 @@ function missionForm(id, draftM) {
     <div class="grid2"><button type="button" class="btn" id="pickMap">지도에서 고르기</button><button type="button" class="btn" id="pickMe">내 자리로</button></div>
     <button class="btn primary">저장</button><p class="msg" id="mfMsg"></p></form>`, el => {
     const f = el.querySelector('#mf');
+    el.querySelector('#mfBack')?.addEventListener('click', back);
     const qa = () => { el.querySelector('.qa').hidden = f.type.value !== 'quiz'; el.querySelector('.tagset').hidden = f.type.value !== 'tag'; if (f.each) f.each.closest('.eachset').hidden = f.type.value === 'tag'; };
     f.type.onchange = qa; qa();
     // 팀 / 개인: 두 칸 중 하나를 고른다 (체크 하나로는 놓치기 쉬웠다)
@@ -1319,9 +1354,9 @@ function missionForm(id, draftM) {
     el.querySelector('#pickMap').onclick = () => {
       const cur = read();
       $('#sheet').hidden = true; $('#placing').hidden = false;
-      placing = ll => missionForm(id, { ...cur, lat: ll.lat, lng: ll.lng });
+      placing = ll => missionForm(id, { ...cur, lat: ll.lat, lng: ll.lng }, back);
     };
-    el.querySelector('#pickMe').onclick = () => { if (!myLL) { el.querySelector('#mfMsg').textContent = '위치 공유를 먼저 켜 주세요.'; return; } missionForm(id, { ...read(), lat: myLL.lat, lng: myLL.lng }); };
+    el.querySelector('#pickMe').onclick = () => { if (!myLL) { el.querySelector('#mfMsg').textContent = '위치 공유를 먼저 켜 주세요.'; return; } missionForm(id, { ...read(), lat: myLL.lat, lng: myLL.lng }, back); };
     f.onsubmit = async e => {
       e.preventDefault();
       const v = read();
@@ -1339,7 +1374,7 @@ function missionForm(id, draftM) {
       if (v.type === 'quiz' && ans.trim()) v.ah = await answerHash(id, ans);
       await net.saveMission(G.code, id, v);
       if (isLive() && isNew) net.say(G.code, '', `새 미션 — '${v.title}'`);
-      closeSheet();
+      if (back) back(); else closeSheet();
     };
   });
 }

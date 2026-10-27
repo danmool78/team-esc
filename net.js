@@ -1,7 +1,8 @@
 /* Firebase: 로그인(이메일·구글)과 실시간 데이터베이스.
    자료 구조 (database.rules.json과 같게)
      users/{uid}                 { name, gender, avatar }
-     games/{code}/meta           { name, host, hosts{uid:true}, mode: team|solo, endAt(끝나는 시각 ms), center{lat,lng}, radius, layer, status: ready|live|ended, created }
+     games/{code}/meta           { name, host, hosts{uid:true}, mode: team|solo, endAt(끝나는 시각 ms), center{lat,lng}, radius, layer, status: ready|live|ended, endedAt(끝낸 시각), created }
+                                 끝나고 7일 지난 게임은 통째로 지운다 (.github/workflows/cleanup.yml)
                                  host = 게임을 만든 진행자(바꿀 수 없음), hosts = 그가 회원 중에서 더한 진행자(host·hosts 말고는 똑같이 진행)
      games/{code}/teams/{tid}    { name, color }
      games/{code}/members/{uid}  { name, avatar, team, online, joined }
@@ -103,7 +104,8 @@ export async function deleteGame(code) {
 }
 // 진행자 더하기·빼기: 게임을 만든 진행자만 (규칙이 막는다)
 export const setCohost = (code, who, on) => set(G(code, `meta/hosts/${who}`), on ? true : null);
-export const setStatus = (code, status) => set(G(code, 'meta/status'), status);
+// 끝낸 시각(endedAt)을 함께 적는다 — 7일 지난 끝난 게임은 GitHub Actions가 매일 지운다(_src/cleanup.mjs)
+export const setStatus = (code, status) => update(G(code, 'meta'), { status, endedAt: status === 'ended' ? serverTimestamp() : null });
 export const saveMeta = (code, patch) => update(G(code, 'meta'), patch);
 export const saveTeams = (code, teams) => set(G(code, 'teams'), teams);
 export const addMission = (code, m) => push(G(code, 'missions'), m);

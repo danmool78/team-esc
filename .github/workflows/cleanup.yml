@@ -1,0 +1,25 @@
+name: Delete games ended over 7 days ago
+# 매일 새벽 4시 13분(한국 시각)에 끝나고 7일 지난 게임을 서버에서 지운다 (_src/cleanup.mjs).
+# Actions 탭에서 손으로 돌릴 수도 있다 — dry를 켜면 지울 대상만 보여 준다
+on:
+  schedule:
+    - cron: '13 19 * * *'
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: '지우지 않고 대상만 보기'
+        type: boolean
+        default: false
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm i --no-save firebase-admin@13
+      - name: Delete old ended games
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TEAM_ESC }}
+        run: node _src/cleanup.mjs ${{ inputs.dry && '--dry' || '' }}
