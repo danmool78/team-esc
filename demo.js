@@ -56,6 +56,8 @@ export const judge = async (code, tid, mid, ok) => { const g = S.games[code]; if
 export const savePhoto = async (code, tid, mid, url) => { S.games[code].photos[tid + '_' + mid] = url; };
 export const getPhoto = async (code, tid, mid) => S.games[code].photos[tid + '_' + mid];
 export const delPhoto = async (code, tid, mid) => { delete S.games[code].photos[tid + '_' + mid]; };
+export const publishGuide = async (code, g) => { S.games[code].guide = g; };
+export const readGuide = async code => S.games[code]?.guide || null;
 export const say = async (code, team, text) => feed(code, team, text);
 export const me = () => ME;
 

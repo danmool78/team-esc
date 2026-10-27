@@ -12,7 +12,9 @@
      games/{code}/done/{tid}/{mid} { by, name, t, pts, status: ok|wait }
      games/{code}/pdone/{uid}/{mid} { name, team, t, pts, status: ok|wait } — 개인 미션·개인전의 완료
      games/{code}/photos/{tid}_{mid}  사진·음성 녹음 (개인 완료는 u_{uid}_{mid})(작게 줄인 JPEG / 녹음 audio data URL) — done을 가볍게 두려고 따로
-     games/{code}/feed/{push}    { t, team, text } */
+     games/{code}/feed/{push}    { t, team, text }
+     games/{code}/guide          { name, mode, endAt, teams[{name,color}], missions[{title,type,each,pts,desc,r,lat,lng,open}], at }
+                                 미션 안내 페이지(guide.html?g=코드)용 요약 — 진행자 화면이 미션이 바뀔 때마다 써 둔다. 링크만 있으면 로그인 없이 읽는다(퀴즈 문제·정답은 뺀다) */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js';
 import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail,
@@ -115,5 +117,7 @@ export const judge = (code, tid, mid, ok) => (ok ? set(G(code, `done/${tid}/${mi
 export const savePhoto = (code, tid, mid, url) => set(G(code, `photos/${tid}_${mid}`), url);
 export const getPhoto = async (code, tid, mid) => (await get(G(code, `photos/${tid}_${mid}`))).val();
 export const delPhoto = (code, tid, mid) => remove(G(code, `photos/${tid}_${mid}`));
+export const publishGuide = (code, g) => set(G(code, 'guide'), g);
+export const readGuide = async code => (await get(G(code, 'guide'))).val();
 export const say = (code, team, text) => push(G(code, 'feed'), { team: team || '', text, t: serverTimestamp() });
 export const me = () => uid();
