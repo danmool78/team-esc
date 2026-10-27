@@ -1061,7 +1061,7 @@ function syncGuide() {
 }
 function guideSheet() {
   const link = guideLink();
-  openSheet(`<p class="eyebrow">미션 안내 페이지</p><h3>팀원에게 미리 보여 주기</h3>
+  openSheet(`<p class="eyebrow">미션 안내 페이지</p><h3>참가자에게 미리 보여 주기</h3>
     <p class="fine">링크만 있으면 로그인 없이 미션 목록, 미션 하는 법, 준비물을 볼 수 있어요. 미션을 고치면 안내 페이지도 저절로 바뀌어요. 퀴즈 문제는 현장에서만 보여요.</p>
     <input readonly value="${esc(link)}" onclick="this.select()">
     <div class="row"><button class="btn wide primary" id="gShare">${ic('megaphone')} 보내기</button><button class="btn wide" id="gCopy">링크 복사</button></div>
