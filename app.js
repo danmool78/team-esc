@@ -757,13 +757,33 @@ const busy = new Set();
 const canPlay = () => solo() || !!myTeam();
 // 깜짝 미션(제한 시간): limit(분)을 정하면 열리는 순간부터 until(시각)까지만 할 수 있다. 게임 끝나는 시간은 넘기지 않는다
 const expired = m => !!m.until && Date.now() >= m.until;
-const startUntil = m => Math.min(Date.now() + m.limit * 60e3, G.meta.endAt > Date.now() ? G.meta.endAt : Infinity);
+// openAt(연 시각)을 따로 두어 끝나는 시간을 늦추면 다시 계산한다(reTime)
+const capUntil = (m, openAt, end = G.meta.endAt) => Math.min(openAt + m.limit * 60e3, end > Date.now() ? end : Infinity);
+const startUntil = m => capUntil(m, Date.now());
+const late = id => expired(G.missions[id] || {}); // 창을 연 사이 시간이 끝났는지 (보내기 직전에 다시 본다)
+// 게임 시작(다시 시작) 때: 열려 있는 깜짝 미션의 시계를 그때부터 건다 — 시작 전에 만든 미션이 미리 끝나 버리지 않게
+async function armTimed() {
+  for (const [id, m] of Object.entries(G.missions)) {
+    if (!m.limit || m.open === false || (m.until && !expired(m))) continue;
+    const now = Date.now();
+    await net.saveMission(G.code, id, { ...m, openAt: now, until: startUntil(m) });
+    net.say(G.code, '', `깜짝 미션! '${m.title}' — ${m.limit}분 안에 해내세요`);
+  }
+}
+// 끝나는 시간을 바꾸면 돌고 있는 깜짝 미션의 마감도 다시 (연 시각 + 제한 시간, 끝나는 시간까지)
+async function reTime(end) {
+  for (const [id, m] of Object.entries(G.missions)) {
+    if (!m.limit || !m.openAt || m.open === false || Date.now() >= m.openAt + m.limit * 60e3) continue;
+    const u = capUntil(m, m.openAt, end);
+    if (u !== m.until) await net.saveMission(G.code, id, { ...m, until: u });
+  }
+}
 const cd = m => (m.until ? `<span class="cd" data-until="${m.until}">${expired(m) ? '시간 끝' : left(m.until - Date.now())}</span>` : ''); // 1초마다 tickTimer가 고친다
 // 열고 닫기: 깜짝 미션은 열 때 시계를 새로 건다 (모두에게 알리고)
 async function setOpen(id, m, open) {
   const v = { ...m, open };
-  delete v.until;
-  if (open && m.limit) v.until = startUntil(m);
+  delete v.until; delete v.openAt;
+  if (open && m.limit && isLive()) { v.openAt = Date.now(); v.until = startUntil(m); } // 시작 전이면 시작할 때 건다(armTimed)
   await net.saveMission(G.code, id, v);
   if (open && m.limit && isLive()) net.say(G.code, '', `깜짝 미션! '${m.title}' — ${Math.round((v.until - Date.now()) / 60e3)}분 안에 해내세요`);
 }
@@ -799,14 +819,19 @@ function checkArrive() {
     finish(id, m, 'ok').finally(() => busy.delete(id));
   });
 }
-async function finish(id, m, status) {
+// 완료를 먼저 쓴다 — 시간이 끝났거나 다른 팀원이 먼저 해냈으면 규칙이 막아 false (사진이 홀로 남지 않게 사진은 그 뒤에, attach)
+async function finish(id, m, status, attach) {
   const t = myTeam(), d = { name: profile.name, pts: m.pts || 0, status };
   try {
     if (isEach(m)) await net.completeMine(G.code, id, { ...d, team: t });
     else await net.complete(G.code, t, id, d);
-    await net.say(G.code, t, `${solo() ? '' : teamOf(t).name + ' '}${profile.name} — '${m.title}' ${status === 'ok' ? '완료!' : '확인 요청'}${m.each && !solo() ? ' (개인)' : ''}`);
-  } catch { /* 다른 팀원이 먼저 해냈으면 규칙이 막는다 */ }
+  } catch { return false; }
+  if (attach) await attach(); // 실패하면 부른 쪽이 알린다 (진행자 창엔 '사진이 없어요' → 다시 하게)
+  net.say(G.code, t, `${solo() ? '' : teamOf(t).name + ' '}${profile.name} — '${m.title}' ${status === 'ok' ? '완료!' : '확인 요청'}${m.each && !solo() ? ' (개인)' : ''}`).catch(() => {});
+  return true;
 }
+const safeData = u => (typeof u === 'string' && /^data:(image|audio)\/[\w.+-]+(;[\w.+=-]+)*;base64,[A-Za-z0-9+/=]+$/.test(u) ? u : '');
+const NOPE = '보내지 못했어요 — 깜짝 미션 시간이 끝났거나 이미 해냈어요.';
 // 사진 자리: 팀 미션은 팀, 개인 완료는 사람마다
 const photoKey = (m, uid = net.me()) => (isEach(m) ? 'u_' + uid : myTeam());
 async function sha(s) {
@@ -857,27 +882,34 @@ function openMission(id) {
       e.preventDefault();
       const a = el.querySelector('#qAns').value;
       const ok = m.ah ? (await answerHash(id, a)) === m.ah : norm(a) === norm(m.ans || '');
-      if (ok) { await finish(id, m, 'ok'); closeSheet(); toast('정답이에요!', 'party'); }
+      if (ok && (late(id) || !(await finish(id, m, 'ok')))) { const q = el.querySelector('#qMsg'); q.className = 'msg err'; q.textContent = NOPE; return; }
+      if (ok) { closeSheet(); toast('정답이에요!', 'party'); }
       else { const q = el.querySelector('#qMsg'); q.className = 'msg err'; q.textContent = '아니에요. 다시 생각해 보세요.'; }
     });
     el.querySelector('#photoIn')?.addEventListener('change', async e => {
       const f = e.target.files[0];
       if (!f) return;
-      el.querySelector('#qMsg').textContent = '올리는 중…';
-      await net.savePhoto(G.code, photoKey(m), id, await shrink(f));
-      await finish(id, m, 'wait');
-      closeSheet(); toast('사진을 올렸어요. 진행자가 확인하면 점수가 올라가요.');
+      const q = el.querySelector('#qMsg'), err = t => { q.className = 'msg err'; q.textContent = t; };
+      if (late(id)) return err(NOPE);
+      q.textContent = '올리는 중…';
+      try {
+        const url = await shrink(f);
+        if (!(await finish(id, m, 'wait', () => net.savePhoto(G.code, photoKey(m), id, url)))) return err(NOPE);
+        closeSheet(); toast('사진을 올렸어요. 진행자가 확인하면 점수가 올라가요.');
+      } catch (er) { err('올리지 못했어요 (' + (er.code || er.message) + ')'); }
     });
     el.querySelector('#simGo')?.addEventListener('click', () => { closeSheet(); setMyPos({ lat: m.lat, lng: m.lng, acc: 3 }); setTimeout(() => openMission(id), 300); });
-    el.querySelector('#taskBtn')?.addEventListener('click', async () => { await finish(id, m, 'wait'); closeSheet(); toast('확인을 요청했어요.'); });
+    el.querySelector('#taskBtn')?.addEventListener('click', async () => { if (late(id) || !(await finish(id, m, 'wait'))) { toast(NOPE, 'clock'); return; } closeSheet(); toast('확인을 요청했어요.'); });
     if (el.querySelector('#rec')) voiceRecorder(el, id, m);
     el.querySelector('#tagPhoto')?.addEventListener('change', async e => {
       const f = e.target.files[0], who = el.querySelector('#tagWho').value, t = myTeam();
       if (!f || !who) return;
       el.querySelector('#qMsg').textContent = '올리는 중…';
+      if (late(id)) { el.querySelector('#qMsg').className = 'msg err'; el.querySelector('#qMsg').textContent = NOPE; return; }
       try {
-        await net.savePhoto(G.code, t, id, await shrink(f));
-        await net.complete(G.code, t, id, { name: profile.name, pts: m.pts || 0, status: 'wait', caught: who });
+        const url = await shrink(f);
+        await net.complete(G.code, t, id, { name: profile.name, pts: m.pts || 0, status: 'wait', caught: who }); // 완료 먼저 (사진이 홀로 남지 않게)
+        await net.savePhoto(G.code, t, id, url);
         await net.say(G.code, t, `${teamOf(t).name} ${profile.name} — ${teamOf(G.members[who]?.team).name} 술래 ${G.members[who]?.name} 사진! '${m.title}' 확인 요청`);
         closeSheet(); toast('술래 사진을 올렸어요. 진행자가 확인하면 승리!', 'tag');
       } catch (er) { el.querySelector('#qMsg').className = 'msg err'; el.querySelector('#qMsg').textContent = '올리지 못했어요 (' + (er.code || er.message) + ')'; }
@@ -933,8 +965,7 @@ function voiceRecorder(el, id, m) {
       const data = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(blob); });
       if (data.length > 390000) { msg.className = 'msg err'; msg.textContent = '너무 길어요. 조금 짧게 다시 녹음해 주세요.'; return; }
       try {
-        await net.savePhoto(G.code, photoKey(m), id, data);
-        await finish(id, m, 'wait');
+        if (late(id) || !(await finish(id, m, 'wait', () => net.savePhoto(G.code, photoKey(m), id, data)))) { msg.className = 'msg err'; msg.textContent = NOPE; return; }
         closeSheet(); toast('녹음을 보냈어요. 진행자가 듣고 인정하면 점수가 올라가요.', 'mic');
       } catch (er) { msg.className = 'msg err'; msg.textContent = '보내지 못했어요 (' + (er.code || er.message) + ')'; }
     };
@@ -1132,11 +1163,11 @@ const approvedPhotos = () => [
   ...Object.entries(G.pdone).flatMap(([uid, ms]) => Object.entries(ms || {}).map(([mid, d]) => ['u_' + uid + '_' + mid, mid, uid, d.team, d])),
 ].filter(([, mid, , , d]) => d?.status === 'ok' && ['photo', 'tag'].includes(G.missions[mid]?.type));
 async function albumPut(key, mid, uid, tid, d) {
-  const url = await net.getPhoto(G.code, key.slice(0, -(mid.length + 1)), mid);
-  if (!url) return false;
+  const url = safeData(await net.getPhoto(G.code, key.slice(0, -(mid.length + 1)), mid));
+  if (!url.startsWith('data:image/')) return false;
   const m = G.missions[mid] || {};
   const who = solo() ? d?.name || '' : `${teamOf(tid).name}${uid ? ' · ' + (d?.name || '') : ''}`;
-  await net.albumAdd(G.code, key, { mid, title: m.title || '', who, color: solo() ? personColor(uid) : teamOf(tid).color, t: d?.t || Date.now() }, url);
+  await net.albumAdd(G.code, key, { mid, title: m.title || '', who, color: solo() && uid ? personColor(uid) : teamOf(tid).color, t: d?.t || Date.now() }, url);
   return true;
 }
 // 이 기능 전에 인정한 사진도 모으고, 지운 미션·취소된 사진은 뺀다
@@ -1165,8 +1196,14 @@ function albumSheet() {
 function bindHost(el) {
   el.querySelector('#hCopy')?.addEventListener('click', e => { navigator.clipboard?.writeText(e.target.dataset.link); toast('초대 링크를 복사했어요.'); });
   // 다시 시작할 때 이미 지난 끝나는 시간은 지운다
-  el.querySelector('#hStart')?.addEventListener('click', async () => { if (timeUp()) await net.saveMeta(G.code, { endAt: null }); await net.setStatus(G.code, 'live'); net.say(G.code, '', '게임이 시작됐어요!'); });
-  el.querySelector('#hEnd')?.addEventListener('click', async e => { if (!confirmIn(e.target)) return; await net.setStatus(G.code, 'ended'); net.say(G.code, '', '게임이 끝났어요. 수고하셨어요!'); });
+  el.querySelector('#hStart')?.addEventListener('click', async () => { if (timeUp()) await net.saveMeta(G.code, { endAt: null }); await net.setStatus(G.code, 'live'); net.say(G.code, '', '게임이 시작됐어요!'); armTimed(); });
+  // 끝내기는 따로 창을 띄워 묻는다 — 진행 탭은 자주 새로 그려져 '한 번 더 누르기'가 풀리고, 아이콘을 누르면 단추가 아닌 아이콘에 표시가 붙었다
+  el.querySelector('#hEnd')?.addEventListener('click', () => openSheet(`<p class="eyebrow">게임 끝내기</p><h3>지금 게임을 끝낼까요?</h3>
+    <p class="fine">모두에게 결과가 뜨고, 그 뒤로는 미션을 할 수 없어요. 진행 탭에서 다시 시작할 수 있어요.</p>
+    <div class="row"><button class="btn wide danger" id="endYes">끝내기</button><button class="btn wide" id="endNo">그만두기</button></div>`, s => {
+    s.querySelector('#endNo').onclick = closeSheet;
+    s.querySelector('#endYes').onclick = async () => { closeSheet(); await net.setStatus(G.code, 'ended'); net.say(G.code, '', '게임이 끝났어요. 수고하셨어요!'); };
+  }));
   el.querySelector('#hAdd')?.addEventListener('click', missionManager);
   el.querySelector('#hGuide')?.addEventListener('click', guideSheet);
   el.querySelector('#hAlbum')?.addEventListener('click', albumSheet);
@@ -1210,8 +1247,8 @@ async function judgeSheet(kind, who, mid) {
       closeSheet();
     };
     el.querySelector('#jNo').onclick = async () => { const why = el.querySelector('#jWhy').value.trim(); await judge(false); await net.delPhoto(G.code, key, mid); net.say(G.code, tid || '', `${label} — '${m.title}' 다시 해 주세요${why ? ' — ' + why : ''}`); closeSheet(); };
-    if (m.type === 'photo' || m.type === 'tag') { const url = await net.getPhoto(G.code, key, mid); el.querySelector('#ph').innerHTML = url ? `<img class="photo" src="${url}" alt="">` : '<p class="fine">사진이 없어요.</p>'; }
-    if (m.type === 'voice') { const url = await net.getPhoto(G.code, key, mid); el.querySelector('#ph').innerHTML = url ? `<audio controls src="${url}" class="recplay"></audio>` : '<p class="fine">녹음이 없어요.</p>'; }
+    if (m.type === 'photo' || m.type === 'tag') { const url = safeData(await net.getPhoto(G.code, key, mid)); el.querySelector('#ph').innerHTML = url ? `<img class="photo" src="${url}" alt="">` : '<p class="fine">사진이 없어요.</p>'; }
+    if (m.type === 'voice') { const url = safeData(await net.getPhoto(G.code, key, mid)); el.querySelector('#ph').innerHTML = url ? `<audio controls src="${url}" class="recplay"></audio>` : '<p class="fine">녹음이 없어요.</p>'; }
   });
 }
 /* ---------- 결과: 게임이 끝나면 모두에게 등수를 바로 보여 준다 ---------- */
@@ -1277,6 +1314,7 @@ function endEditor() {
     const save = async t => {
       if (t <= Date.now()) { el.querySelector('#eMsg').className = 'msg err'; el.querySelector('#eMsg').textContent = '지금보다 뒤의 시각으로 정해 주세요.'; return; }
       await net.saveMeta(G.code, { endAt: t });
+      reTime(t);
       net.say(G.code, '', `끝나는 시간: ${hhmm(t)} (남은 ${left(t - Date.now())})`);
       closeSheet();
     };
@@ -1436,10 +1474,13 @@ function missionForm(id, draftM, back) {
       delete v.catchR; // 예전 GPS 잡기 거리는 이제 쓰지 않는다
       if (!v.each) delete v.each;
       // 제한 시간: 새로 정했거나 바꿨거나 이미 끝났으면 지금부터 다시 건다 (글자만 고칠 땐 시계를 그대로)
-      const isNew = !id, restart = v.limit && v.open !== false && (isNew || v.limit !== m.limit || !m.until || expired(m));
-      if (!v.limit) { delete v.limit; delete v.until; }
-      else if (restart) v.until = startUntil(v);
-      if (G.meta.endAt && G.meta.endAt <= Date.now() && v.limit) { el.querySelector('#mfMsg').textContent = '게임 끝나는 시간이 지났어요. 끝나는 시간을 먼저 늘려 주세요.'; return; }
+      // 비교는 저장된 미션과 (위치 고르기를 거치면 m은 고치던 초안이다). 시계는 게임 중일 때만 — 시작 전이면 시작할 때 건다(armTimed)
+      const was = (id && G.missions[id]) || {};
+      const isNew = !id, restart = !!v.limit && v.open !== false && isLive() && (isNew || v.limit !== was.limit || !was.until || expired(was));
+      if (restart && G.meta.endAt && G.meta.endAt <= Date.now()) { el.querySelector('#mfMsg').textContent = '게임 끝나는 시간이 지났어요. 끝나는 시간을 먼저 늘려 주세요.'; return; }
+      if (!v.limit) { delete v.limit; delete v.until; delete v.openAt; }
+      else if (restart) { v.openAt = Date.now(); v.until = startUntil(v); }
+      else if (!isLive()) { delete v.until; delete v.openAt; }
       // 새 미션은 id를 먼저 받아야 정답 해시를 만들 수 있다
       if (!id) { const r = await net.addMission(G.code, { ...v, open: true }); id = r?.key || Object.keys(G.missions).find(k => G.missions[k].title === v.title); }
       if (v.type === 'quiz' && ans.trim()) v.ah = await answerHash(id, ans);
