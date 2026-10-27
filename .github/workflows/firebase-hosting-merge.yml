@@ -17,6 +17,13 @@ jobs:
         run: |
           echo "$SA" > "$RUNNER_TEMP/sa.json"
           GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json" npx -y firebase-tools@14 deploy --only database --project team-esc --non-interactive
+      # 호스팅 저장 공간(무료 10GB)이 예전 판으로 차면 배포가 막히므로, 올리기 전에 예전 판을 지운다 (_src/prune-hosting.mjs)
+      - name: Prune old Hosting versions
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TEAM_ESC }}
+        run: |
+          npm i --no-save --no-package-lock firebase-admin@13
+          node _src/prune-hosting.mjs
       # 판 번호: index.html과 app.js의 __BUILD__를 커밋 번호로 — 둘이 어긋나면(예전 화면을 들고 있으면) 앱이 스스로 새로 불러온다
       - name: Stamp build id
         run: sed -i "s/__BUILD__/${GITHUB_SHA::8}/g" index.html app.js
