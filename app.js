@@ -537,12 +537,13 @@ setFab();
 W.on('unfollow', setFab);
 // 폰 나침반: 안드로이드는 deviceorientationabsolute(alpha는 반시계), 아이폰은 webkitCompassHeading(누른 뒤 허락을 받아야 한다).
 // 나침반이 없는 기기(PC)는 걸어간 방향으로 돌린다
-let compassOn = false;
+let compassOn = false, phoneHeading = null, headingAt = 0; // 조준 카메라 화살표도 쓴다
 function startCompass() {
   if (compassOn || !window.DeviceOrientationEvent) return;
   const on = e => {
     const h = e.webkitCompassHeading ?? (e.absolute && e.alpha != null ? 360 - e.alpha : null);
     W.setCompass(h == null ? null : h + (screen.orientation?.angle || 0)); // 가로로 들면 그만큼 더한다
+    if (h != null) { phoneHeading = h + (screen.orientation?.angle || 0); headingAt = Date.now(); }
   };
   const listen = () => (compassOn = true) && window.addEventListener('ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation', on);
   // 아이폰은 단추를 누른 순간에만 물을 수 있다 — 그 밖에서 부르면 조용히 넘어가고 다음 누름에 다시 묻는다
@@ -983,6 +984,7 @@ function openMission(id) {
       catch (er) { el.querySelector('#qMsg').className = 'msg err'; el.querySelector('#qMsg').textContent = er.message === NOPE ? NOPE : '올리지 못했어요 (' + (er.code || er.message) + ')'; }
     });
     el.querySelector('#tagCam')?.addEventListener('click', () => {
+      startCompass();
       const targets = [...el.querySelectorAll('#tagWho option')].map(o => ({ uid: o.value, label: o.textContent }));
       aimCamera({ targets, pick: el.querySelector('#tagWho').value, send: sendTag,
         fail: () => { const q = el.querySelector('#qMsg'); q.className = 'msg err'; q.textContent = '카메라를 열 수 없어요(권한이 꺼져 있을 수 있어요). 아래 ‘기본 카메라로 찍기’를 눌러 주세요.'; } });
@@ -1048,6 +1050,9 @@ function voiceRecorder(el, id, m) {
 /* ---------- 술래 조준 카메라 ---------- */
 // 술래 사진은 앱 안에서 카메라를 띄워 찍는다 — 기본 카메라 앱 화면엔 아무것도 그릴 수 없어서. 가운데 표적과 찾을 술래 이름을 띄우고,
 // 찍은 사진에도 표적·대상·시각을 새긴다(진행자 확인·사진 모음에서 보인다). 카메라를 못 열면 fail → 기본 카메라로 찍게 안내
+// 방위(북에서 시계 방향, 도)와 여덟 방위 이름
+const bearingTo = (a, b) => { const r = Math.PI / 180, y = Math.sin((b.lng - a.lng) * r) * Math.cos(b.lat * r), x = Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lng - a.lng) * r); return (Math.atan2(y, x) / r + 360) % 360; };
+const compass8 = d => ['북', '북동', '동', '남동', '남', '남서', '서', '북서'][Math.round(d / 45) % 8];
 const RETICLE = `<svg class="aim-ret" viewBox="0 0 200 200" aria-hidden="true"><g fill="none" stroke-linecap="round">
   <circle cx="100" cy="100" r="62" stroke="rgba(0,0,0,.45)" stroke-width="7"/><circle cx="100" cy="100" r="62" stroke="#ff4d4d" stroke-width="3"/>
   <circle cx="100" cy="100" r="5" fill="#ff4d4d" stroke="#fff" stroke-width="1.5"/>
@@ -1076,14 +1081,28 @@ async function aimCamera({ targets, pick, send, fail }) {
   box.className = 'aim';
   box.innerHTML = `<video playsinline muted autoplay></video><img class="aim-pic" alt="" hidden>${RETICLE}
     <div class="aim-top"><button class="aim-x" aria-label="닫기">×</button><button class="aim-who"></button></div>
+    <div class="aim-nav"><svg class="aim-arrow" viewBox="0 0 40 40" aria-hidden="true"><path d="M20 3l11 30-11-7-11 7z" fill="#ff4d4d" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg><div><b class="aim-dist"></b><small class="aim-sub"></small></div></div>
     <div class="aim-bot"><p class="aim-msg"></p><div class="aim-ctl"><button class="aim-shot" aria-label="찍기"></button></div></div><div class="aim-flash"></div>`;
   document.body.appendChild(box);
   const $a = s => box.querySelector(s), v = $a('video');
   v.srcObject = stream; v.play().catch(() => {});
   const who = () => ($a('.aim-who').innerHTML = `${ic('tag')} <b>${esc(targets[cur].label)}</b>${targets.length > 1 ? ' <small>바꾸기 ›</small>' : ''}`);
   who();
-  $a('.aim-who').onclick = () => { if (targets.length > 1 && !shot) { cur = (cur + 1) % targets.length; who(); } };
-  const close = () => { stream.getTracks().forEach(t => t.stop()); box.remove(); };
+  $a('.aim-who').onclick = () => { if (targets.length > 1 && !shot) { cur = (cur + 1) % targets.length; who(); nav?.(); } };
+  // 대상 술래까지 거리·방향: 나침반이 있으면 화살표가 실제 그쪽을, 없으면 북쪽 기준으로 돌리고 방위를 글로
+  const nav = () => {
+    const p = G.pos[targets[cur].uid], me = myLL, arrow = $a('.aim-arrow');
+    if (!p || !me) { $a('.aim-dist').textContent = p ? '내 위치를 켜 주세요' : '위치를 몰라요'; $a('.aim-sub').textContent = ''; arrow.style.opacity = .3; return; }
+    const d = dist(me, p), b = bearingTo(me, p), fresh = phoneHeading != null && Date.now() - headingAt < 3000;
+    const old = Date.now() - (p.t || 0) > 60e3 ? ` · ${ago(p.t)} 위치` : '';
+    arrow.style.opacity = 1; arrow.style.transform = `rotate(${fresh ? b - phoneHeading : b}deg)`;
+    $a('.aim-nav').classList.toggle('near', d < 15);
+    $a('.aim-dist').textContent = d < 15 ? `바로 근처! ${fmtDist(d)}` : fmtDist(d);
+    $a('.aim-sub').textContent = (fresh ? '화살표 쪽으로' : `${compass8(b)}쪽 · 북쪽 기준`) + old;
+  };
+  nav();
+  const navT = setInterval(nav, 500);
+  const close = () => { clearInterval(navT); stream.getTracks().forEach(t => t.stop()); box.remove(); };
   $a('.aim-x').onclick = close;
   const ctl = $a('.aim-ctl'), msg = t => ($a('.aim-msg').textContent = t || '');
   const live = () => { shot = null; $a('.aim-pic').hidden = true; $a('.aim-ret').style.display = ''; v.play().catch(() => {}); msg(''); ctl.innerHTML = '<button class="aim-shot" aria-label="찍기"></button>'; ctl.querySelector('.aim-shot').onclick = take; };
