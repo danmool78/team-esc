@@ -433,3 +433,11 @@ label.btn{flex-direction:row;justify-content:center;align-items:center;gap:4px}
 .aim-flash.on{animation:aimFlash .35s ease-out}
 @keyframes aimFlash{0%{opacity:.85}100%{opacity:0}}
 .aim-alt{display:block;text-align:center;margin-top:8px;font-size:13px;color:var(--muted);text-decoration:underline;cursor:pointer}
+
+/* 조준 카메라: 대상 술래까지 거리·방향 */
+.aim-nav{position:absolute;left:50%;top:calc(env(safe-area-inset-top) + 72px);transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:8px 16px 8px 10px;border-radius:14px;background:rgba(0,0,0,.5);color:#fff;white-space:nowrap}
+.aim-arrow{width:34px;height:34px;transition:transform .4s ease-out}
+.aim-nav b{display:block;font-size:18px}
+.aim-nav small{display:block;font-size:12px;color:#ffcfcf}
+.aim-nav.near{background:rgba(255,77,77,.75);animation:aimNear .8s ease-in-out infinite}
+@keyframes aimNear{50%{box-shadow:0 0 0 8px rgba(255,77,77,.25)}}
