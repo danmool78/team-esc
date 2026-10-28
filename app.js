@@ -872,7 +872,8 @@ function tagInfo(id, m, live) {
   else role = `다른 팀 술래를 찾아 <b>사진</b>을 찍어 올려요. 진행자가 확인하면 승리! (우리 팀 술래 <b>${esc(itName(m, t))}</b>는 지켜 주세요)`;
   const up = live && !win && m.it?.[t] !== me && !d && near(m) && targets.length && canPlay()
     ? `<label>누구를 찍었나요?<select id="tagWho">${targets.map(tid => `<option value="${esc(m.it[tid])}">${esc(teamOf(tid).name)} 술래 ${esc(itName(m, tid))}</option>`).join('')}</select></label>
-       <label class="btn wide primary" style="text-align:center">${ic('camera')} 술래 사진 찍어 올리기<input type="file" accept="image/*" capture="environment" id="tagPhoto" hidden></label><p class="msg" id="qMsg"></p>` : '';
+       <button class="btn wide primary" id="tagCam">${ic('aim')} 술래 조준해서 찍기</button>
+       <label class="aim-alt">기본 카메라로 찍기<input type="file" accept="image/*" capture="environment" id="tagPhoto" hidden></label><p class="msg" id="qMsg"></p>` : '';
   return `<div class="teamrow">${its}</div>${retryNote(m)}<div class="box">${role}</div>${up}`;
 }
 function checkArrive() {
@@ -965,18 +966,26 @@ function openMission(id) {
     el.querySelector('#simGo')?.addEventListener('click', () => { closeSheet(); setMyPos({ lat: m.lat, lng: m.lng, acc: 3 }); setTimeout(() => openMission(id), 300); });
     el.querySelector('#taskBtn')?.addEventListener('click', async () => { if (late(id) || !(await finish(id, m, 'wait'))) { toast(NOPE, 'clock'); return; } closeSheet(); toast('확인을 요청했어요.'); });
     if (el.querySelector('#rec')) voiceRecorder(el, id, m);
+    // 술래 사진 보내기: 조준 카메라와 기본 카메라가 함께 쓴다. 실패하면 throw (조준 카메라는 그 화면에 알린다)
+    const sendTag = async (url, who) => {
+      const t = myTeam();
+      if (late(id)) throw new Error(NOPE);
+      await net.complete(G.code, t, id, { name: profile.name, pts: m.pts || 0, status: 'wait', caught: who }); // 완료 먼저 (사진이 홀로 남지 않게)
+      await net.savePhoto(G.code, t, id, url);
+      await net.say(G.code, t, `${teamOf(t).name} ${profile.name} — ${teamOf(G.members[who]?.team).name} 술래 ${G.members[who]?.name} 사진! '${m.title}' 확인 요청`);
+      closeSheet(); toast('술래 사진을 올렸어요. 진행자가 확인하면 승리!', 'tag');
+    };
     el.querySelector('#tagPhoto')?.addEventListener('change', async e => {
-      const f = e.target.files[0], who = el.querySelector('#tagWho').value, t = myTeam();
+      const f = e.target.files[0], who = el.querySelector('#tagWho').value;
       if (!f || !who) return;
       el.querySelector('#qMsg').textContent = '올리는 중…';
-      if (late(id)) { el.querySelector('#qMsg').className = 'msg err'; el.querySelector('#qMsg').textContent = NOPE; return; }
-      try {
-        const url = await shrink(f);
-        await net.complete(G.code, t, id, { name: profile.name, pts: m.pts || 0, status: 'wait', caught: who }); // 완료 먼저 (사진이 홀로 남지 않게)
-        await net.savePhoto(G.code, t, id, url);
-        await net.say(G.code, t, `${teamOf(t).name} ${profile.name} — ${teamOf(G.members[who]?.team).name} 술래 ${G.members[who]?.name} 사진! '${m.title}' 확인 요청`);
-        closeSheet(); toast('술래 사진을 올렸어요. 진행자가 확인하면 승리!', 'tag');
-      } catch (er) { el.querySelector('#qMsg').className = 'msg err'; el.querySelector('#qMsg').textContent = '올리지 못했어요 (' + (er.code || er.message) + ')'; }
+      try { await sendTag(await shrink(f), who); }
+      catch (er) { el.querySelector('#qMsg').className = 'msg err'; el.querySelector('#qMsg').textContent = er.message === NOPE ? NOPE : '올리지 못했어요 (' + (er.code || er.message) + ')'; }
+    });
+    el.querySelector('#tagCam')?.addEventListener('click', () => {
+      const targets = [...el.querySelectorAll('#tagWho option')].map(o => ({ uid: o.value, label: o.textContent }));
+      aimCamera({ targets, pick: el.querySelector('#tagWho').value, send: sendTag,
+        fail: () => { const q = el.querySelector('#qMsg'); q.className = 'msg err'; q.textContent = '카메라를 열 수 없어요(권한이 꺼져 있을 수 있어요). 아래 ‘기본 카메라로 찍기’를 눌러 주세요.'; } });
     });
     el.querySelector('#mEdit')?.addEventListener('click', () => missionForm(id));
     el.querySelector('#mToggle')?.addEventListener('click', async () => { await setOpen(id, m, m.open === false); closeSheet(); });
@@ -1035,6 +1044,71 @@ function voiceRecorder(el, id, m) {
     };
   }
   idle();
+}
+/* ---------- 술래 조준 카메라 ---------- */
+// 술래 사진은 앱 안에서 카메라를 띄워 찍는다 — 기본 카메라 앱 화면엔 아무것도 그릴 수 없어서. 가운데 표적과 찾을 술래 이름을 띄우고,
+// 찍은 사진에도 표적·대상·시각을 새긴다(진행자 확인·사진 모음에서 보인다). 카메라를 못 열면 fail → 기본 카메라로 찍게 안내
+const RETICLE = `<svg class="aim-ret" viewBox="0 0 200 200" aria-hidden="true"><g fill="none" stroke-linecap="round">
+  <circle cx="100" cy="100" r="62" stroke="rgba(0,0,0,.45)" stroke-width="7"/><circle cx="100" cy="100" r="62" stroke="#ff4d4d" stroke-width="3"/>
+  <circle cx="100" cy="100" r="5" fill="#ff4d4d" stroke="#fff" stroke-width="1.5"/>
+  <path d="M100 18v30M100 152v30M18 100h30M152 100h30" stroke="rgba(0,0,0,.45)" stroke-width="7"/><path d="M100 18v30M100 152v30M18 100h30M152 100h30" stroke="#ff4d4d" stroke-width="3"/>
+  <path d="M8 34V8h26M166 8h26v26M192 166v26h-26M34 192H8v-26" stroke="#fff" stroke-width="3" opacity=".85"/></g></svg>`;
+// 찍은 사진에 표적을 그린다 (화면의 표적과 같은 자리·비율)
+function stampReticle(g, w, h, label) {
+  const s = Math.min(w, h) * 0.6 / 200, cx = w / 2, cy = h / 2;
+  g.save(); g.translate(cx - 100 * s, cy - 100 * s); g.scale(s, s); g.lineCap = 'round';
+  const both = (fn, wide) => { g.strokeStyle = 'rgba(0,0,0,.45)'; g.lineWidth = wide; fn(); g.stroke(); g.strokeStyle = '#ff4d4d'; g.lineWidth = 3; fn(); g.stroke(); };
+  both(() => { g.beginPath(); g.arc(100, 100, 62, 0, Math.PI * 2); }, 7);
+  both(() => { g.beginPath(); [[100, 18, 100, 48], [100, 152, 100, 182], [18, 100, 48, 100], [152, 100, 182, 100]].forEach(([a, b, c, d]) => { g.moveTo(a, b); g.lineTo(c, d); }); }, 7);
+  g.beginPath(); g.arc(100, 100, 5, 0, Math.PI * 2); g.fillStyle = '#ff4d4d'; g.fill(); g.restore();
+  // 아래쪽 띠: 대상 · 시각
+  const fs = Math.round(Math.max(14, w * 0.035)), text = `술래 조준 · ${label} · ${new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}`;
+  g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, h - fs * 2.1, w, fs * 2.1);
+  g.fillStyle = '#fff'; g.font = `600 ${fs}px "Noto Sans KR", system-ui, sans-serif`; g.textBaseline = 'middle'; g.fillText(text, fs * 0.7, h - fs * 1.05);
+}
+async function aimCamera({ targets, pick, send, fail }) {
+  if (!navigator.mediaDevices?.getUserMedia || !targets.length) return fail();
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1920 } }, audio: false }); }
+  catch { return fail(); }
+  let cur = Math.max(0, targets.findIndex(t => t.uid === pick)), shot = null;
+  const box = document.createElement('div');
+  box.className = 'aim';
+  box.innerHTML = `<video playsinline muted autoplay></video><img class="aim-pic" alt="" hidden>${RETICLE}
+    <div class="aim-top"><button class="aim-x" aria-label="닫기">×</button><button class="aim-who"></button></div>
+    <div class="aim-bot"><p class="aim-msg"></p><div class="aim-ctl"><button class="aim-shot" aria-label="찍기"></button></div></div><div class="aim-flash"></div>`;
+  document.body.appendChild(box);
+  const $a = s => box.querySelector(s), v = $a('video');
+  v.srcObject = stream; v.play().catch(() => {});
+  const who = () => ($a('.aim-who').innerHTML = `${ic('tag')} <b>${esc(targets[cur].label)}</b>${targets.length > 1 ? ' <small>바꾸기 ›</small>' : ''}`);
+  who();
+  $a('.aim-who').onclick = () => { if (targets.length > 1 && !shot) { cur = (cur + 1) % targets.length; who(); } };
+  const close = () => { stream.getTracks().forEach(t => t.stop()); box.remove(); };
+  $a('.aim-x').onclick = close;
+  const ctl = $a('.aim-ctl'), msg = t => ($a('.aim-msg').textContent = t || '');
+  const live = () => { shot = null; $a('.aim-pic').hidden = true; $a('.aim-ret').style.display = ''; v.play().catch(() => {}); msg(''); ctl.innerHTML = '<button class="aim-shot" aria-label="찍기"></button>'; ctl.querySelector('.aim-shot').onclick = take; };
+  function take() {
+    if (!v.videoWidth) return;
+    // 화면에 보이는 그대로(가운데를 채워 자른 영역)를 긴 변 900px로
+    const vw = v.videoWidth, vh = v.videoHeight, bw = box.clientWidth, bh = box.clientHeight;
+    const s = Math.max(bw / vw, bh / vh), cw = bw / s, ch = bh / s, k = Math.min(1, 900 / Math.max(cw, ch));
+    const c = document.createElement('canvas'); c.width = Math.round(cw * k); c.height = Math.round(ch * k);
+    const g = c.getContext('2d');
+    g.drawImage(v, (vw - cw) / 2, (vh - ch) / 2, cw, ch, 0, 0, c.width, c.height);
+    stampReticle(g, c.width, c.height, targets[cur].label);
+    shot = c.toDataURL('image/jpeg', 0.72);
+    $a('.aim-flash').classList.remove('on'); void $a('.aim-flash').offsetWidth; $a('.aim-flash').classList.add('on');
+    navigator.vibrate?.(40);
+    v.pause(); $a('.aim-pic').src = shot; $a('.aim-pic').hidden = false; $a('.aim-ret').style.display = 'none';
+    ctl.innerHTML = `<button class="btn" id="aimAgain">다시 찍기</button><button class="btn goldbtn" id="aimSend">보내기 — 진행자 확인</button>`;
+    ctl.querySelector('#aimAgain').onclick = live;
+    ctl.querySelector('#aimSend').onclick = async () => {
+      ctl.querySelectorAll('button').forEach(b => (b.disabled = true)); msg('보내는 중…');
+      try { await send(shot, targets[cur].uid); close(); }
+      catch (er) { msg(er.message === NOPE ? NOPE : '보내지 못했어요 (' + (er.code || er.message) + ')'); ctl.querySelectorAll('button').forEach(b => (b.disabled = false)); }
+    };
+  }
+  ctl.querySelector('.aim-shot').onclick = take;
 }
 async function shrink(file) {
   const bmp = await createImageBitmap(file);
