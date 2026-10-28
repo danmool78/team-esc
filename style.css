@@ -412,3 +412,24 @@ label.btn{flex-direction:row;justify-content:center;align-items:center;gap:4px}
 .install-note{margin:14px 0 0;padding:10px 12px;border-radius:10px;background:rgba(217,180,106,.08);font-size:12.5px;line-height:1.6;color:var(--muted);text-align:left}
 .install-out{display:block;margin-top:14px;text-decoration:none;text-align:center}
 .install-box .fine{margin:10px 0 0}
+
+/* 술래 조준 카메라: 꽉 찬 카메라 화면 + 가운데 표적 + 대상 이름 + 셔터 (app.js aimCamera) */
+.aim{position:fixed;inset:0;z-index:60;background:#000;overflow:hidden;touch-action:none}
+.aim video,.aim .aim-pic{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.aim-ret{position:absolute;left:50%;top:50%;width:60vmin;height:60vmin;transform:translate(-50%,-50%);pointer-events:none;filter:drop-shadow(0 0 6px rgba(255,77,77,.55));animation:aimPulse 1.6s ease-in-out infinite}
+@keyframes aimPulse{50%{transform:translate(-50%,-50%) scale(1.04)}}
+.aim-top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 12px) 14px 12px;background:linear-gradient(rgba(0,0,0,.6),transparent)}
+.aim-x{width:40px;height:40px;border-radius:50%;border:0;background:rgba(0,0,0,.45);color:#fff;font-size:24px;line-height:1;cursor:pointer}
+.aim-who{flex:1;display:flex;align-items:center;gap:8px;justify-content:center;border:1px solid rgba(255,77,77,.6);background:rgba(0,0,0,.45);color:#fff;border-radius:999px;padding:8px 14px;font-size:15px;cursor:pointer;margin-right:50px}
+.aim-who small{color:#ffb3b3;font-size:12px}
+.aim-who .ico{width:20px;height:20px}
+.aim-bot{position:absolute;left:0;right:0;bottom:0;padding:16px 16px calc(env(safe-area-inset-bottom) + 22px);background:linear-gradient(transparent,rgba(0,0,0,.7));text-align:center}
+.aim-msg{margin:0 0 10px;color:#fff;font-size:14px;min-height:1em}
+.aim-ctl{display:flex;gap:10px;justify-content:center}
+.aim-ctl .btn{flex:1;max-width:220px}
+.aim-shot{width:74px;height:74px;border-radius:50%;border:5px solid #fff;background:#ff4d4d;box-shadow:0 0 0 3px rgba(0,0,0,.35);cursor:pointer}
+.aim-shot:active{transform:scale(.93)}
+.aim-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+.aim-flash.on{animation:aimFlash .35s ease-out}
+@keyframes aimFlash{0%{opacity:.85}100%{opacity:0}}
+.aim-alt{display:block;text-align:center;margin-top:8px;font-size:13px;color:var(--muted);text-decoration:underline;cursor:pointer}
