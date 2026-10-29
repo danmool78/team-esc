@@ -115,7 +115,12 @@ function render(g) {
   document.title = `${g.name || '미션'} 안내 · 비전 퀘스트`;
   $('#gName').textContent = g.name || '미션 안내';
   $('#gSub').textContent = `${code ? `게임 코드 ${code} · ` : ''}${solo ? '개인전' : '팀전'} · 미션 ${ms.length}개`;
-  const appLink = `./${code ? `?g=${code}` : ''}`;
+  // 카카오톡 등 앱 안 브라우저에서 열었으면 앱 열기는 바깥 브라우저로 (거기선 로그인·설치가 막힌다) — app.js outUrl과 같은 방식
+  const appUrl = new URL(`./${code ? `?g=${code}` : ''}`, location.href).href;
+  const ua = navigator.userAgent, inApp = /KAKAOTALK|NAVER|Instagram|FBAN|FBAV|Line\/|DaumApps|everytimeApp|; wv\)/i.test(ua);
+  const appLink = /KAKAOTALK/i.test(ua) ? `kakaotalk://web/openExternal?url=${encodeURIComponent(appUrl)}`
+    : inApp && /android/i.test(ua) ? `intent://${location.host}${new URL(appUrl).pathname}${new URL(appUrl).search}#Intent;scheme=https;package=com.android.chrome;end`
+    : appUrl;
   const mapLink = m => (m.lat == null ? '' : `https://map.kakao.com/link/map/${encodeURIComponent(m.title)},${m.lat},${m.lng}`);
 
   $('#body').innerHTML = `
@@ -128,7 +133,7 @@ function render(g) {
       <div class="fact"><small>끝나는 시간</small><b>${g.endAt ? when(g.endAt) : '진행자가 알려 줘요'}</b></div>
     </div>
     ${g.teams?.length ? `<div class="teams">${g.teams.map(t => `<span class="chip"><i style="background:${esc(t.color)}"></i>${esc(t.name)}</span>`).join('')}</div>` : ''}
-    ${code ? `<a class="join" href="${appLink}">비전 퀘스트 앱 열기 · 코드 ${esc(code)}</a>` : ''}
+    ${code ? `<a class="join" href="${esc(appLink)}">비전 퀘스트 앱 열기 · 코드 ${esc(code)}</a>` : ''}
   </section>
 
   <section>
