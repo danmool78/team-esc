@@ -74,7 +74,7 @@ export const frame = () => T && T.frame;
 export const setBuildings = setBuildingsOn;
 // 게임 반경: 땅 위에 깔린 연두색 띠(미션 표지의 금빛과 헷갈리지 않게)(폭 EDGE m). 지도는 반경과 상관없이 어디로든 옮겨 볼 수 있고, 이 띠만 게임 지역을 알려 준다.
 // 조각이 새로 생길 때마다 띠를 땅 높이에 다시 맞춘다
-const EDGE = 5, edgeMat = new THREE.MeshBasicMaterial({ color: 0x9be86b, transparent: true, opacity: 0.75, depthWrite: false, side: THREE.DoubleSide });
+const EDGE = 8, edgeMat = new THREE.MeshBasicMaterial({ color: 0x1fd14a, transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide });
 let edgeAt = 0;
 function drawEdge(now) {
   if (!T.edgeR || T.edgeVer === T.version || now - edgeAt < 500) return;

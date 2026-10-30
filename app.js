@@ -399,7 +399,8 @@ function syncMissions() {
     const stack = placed.filter(p => dist(p, m) < 15).length; placed.push(m); // 같은 자리 몇 번째인지
     const st = myDone(id)?.status;
     const by = isEach(m) ? (eachDone(id).length ? eachDone(id).length + '명' : '') : Object.keys(G.teams).filter(t => G.done[t]?.[id]?.status === 'ok').map(t => G.teams[t].name).join('·');
-    W.upsertMission({ id, stack, icon: iconImage(TYPES[m.type]?.[0] || 'pin'), title: `${m.title}${m.each && !solo() ? ' (개인)' : ''}`, lat: m.lat, lng: m.lng, r: m.r, dim: st === 'ok' || m.open === false || expired(m),
+    const z = m.type === 'tag' ? { ...zone(m), r: 0 } : m; // 술래잡기는 가운데 표지만 — 구역은 연두색 띠
+    W.upsertMission({ id, stack, icon: iconImage(TYPES[m.type]?.[0] || 'pin'), title: `${m.title}${m.each && !solo() ? ' (개인)' : ''}`, lat: z.lat, lng: z.lng, r: z.r, dim: st === 'ok' || m.open === false || expired(m),
       color: st === 'ok' ? '#7fdc8f' : st === 'wait' ? '#f0d79a' : '#ffcf6a', sub: `${m.pts || 0}점${m.until && m.open !== false ? (expired(m) ? ' · 시간 끝' : ` · 남은 ${Math.ceil((m.until - Date.now()) / 60e3)}분`) : ''}${by ? ' · ✓ ' + by : ''}` });
   });
   removedMissions(seen);
@@ -452,7 +453,7 @@ function missionItems(list) {
   if (!list.length) return `<p class="empty">아직 미션이 없어요.${isHost() ? '<br>진행 탭 「미션 관리」에서 미션을 더해 주세요.' : ''}</p>`;
   return list.map(([id, m]) => {
     const st = myDone(id)?.status;
-    const d = myLL ? fmtDist(dist(myLL, m)) : '';
+    const d = !myLL ? '' : m.type === 'tag' ? (near(m) ? '지역 안' : '') : fmtDist(dist(myLL, m));
     // 해낸 팀은 팀 색 점으로, 개인 미션은 해낸 사람 수로
     const dots = isEach(m) ? (eachDone(id).length ? ` · ${ic('check')} ${eachDone(id).length}명` : '') : Object.entries(G.teams).filter(([t]) => G.done[t]?.[id]?.status === 'ok').map(([, t]) => `<i style="background:${esc(t.color)}"></i>`).join('');
     return `<div class="item" data-m="${id}">
@@ -850,7 +851,9 @@ function setMyPos(p) {
 }
 
 /* ---------- 미션 수행 ---------- */
-const near = m => myLL && (!m.r || dist(myLL, m) <= m.r + Math.min(myLL.acc || 0, 15)); // GPS 오차를 15m까지는 봐준다
+// 술래잡기 구역은 늘 게임 지역 전체(연두색 띠) — 진행자가 지역을 바꾸면 함께 따라간다. 미션에 적힌 자리·반경은 쓰지 않는다
+const zone = m => (m.type === 'tag' && G.meta.center ? { lat: G.meta.center.lat, lng: G.meta.center.lng, r: G.meta.radius || m.r } : m);
+const near = m => { const z = zone(m); return myLL && (!z.r || dist(myLL, z) <= z.r + Math.min(myLL.acc || 0, 15)); }; // GPS 오차를 15m까지는 봐준다
 const busy = new Set();
 // 미션을 할 수 있는 사람: 개인전은 누구나, 팀전은 팀이 있어야
 const canPlay = () => solo() || !!myTeam();
@@ -888,7 +891,7 @@ async function setOpen(id, m, open) {
 }
 /* ---------- 술래잡기 (술래 사진 찍기) ----------
    진행자가 팀마다 술래를 한 명씩 정한다(mission.it = {팀: uid}). 술래는 지도에 '술래'로 보인다.
-   다른 팀 술래를 찾아 놀이 구역(반경) 안에서 사진을 찍어 올리면(누구를 찍었는지 caught) 진행자가 확인하고,
+   다른 팀 술래를 찾아 게임 지역(연두색 띠) 안에서 사진을 찍어 올리면(누구를 찍었는지 caught) 진행자가 확인하고,
    먼저 인정받은 팀이 이긴다 — GPS 거리로 자동 판정하던 것은 오차가 커서 사진으로 바꿨다 */
 const tagWinner = id => Object.keys(G.teams).find(t => G.done[t]?.[id]?.status === 'ok');
 const tagLive = ([id, m]) => m.type === 'tag' && m.open !== false && !tagWinner(id);
@@ -903,7 +906,7 @@ function tagInfo(id, m, live) {
   else if (!live) role = G.meta.status === 'ended' || timeUp() ? '게임이 끝났어요.' : '진행자가 게임을 시작하면 열려요.';
   else if (m.it?.[t] === me) role = `${ic('tag')} <b>내가 술래!</b> 다른 팀에게 사진 찍히지 않게 피해 다녀요. 찍혀서 진행자가 인정하면 그 팀이 이겨요.`;
   else if (d?.status === 'wait') role = `${ic('wait')} 우리 팀이 올린 술래 사진을 진행자가 확인하고 있어요.`;
-  else if (!near(m)) role = `놀이 구역(반경 ${m.r}m) 안으로 들어가면 술래 사진을 올릴 수 있어요. 우리 팀 술래 <b>${esc(itName(m, t))}</b>는 지켜 주세요!`;
+  else if (!near(m)) role = `게임 지역(지도의 연두색 띠) 안으로 들어가면 술래 사진을 올릴 수 있어요. 우리 팀 술래 <b>${esc(itName(m, t))}</b>는 지켜 주세요!`;
   else role = `다른 팀 술래를 찾아 <b>사진</b>을 찍어 올려요. 진행자가 확인하면 승리! (우리 팀 술래 <b>${esc(itName(m, t))}</b>는 지켜 주세요)`;
   const up = live && !win && m.it?.[t] !== me && !d && near(m) && targets.length && canPlay()
     ? `<label>누구를 찍었나요?<select id="tagWho">${targets.map(tid => `<option value="${esc(m.it[tid])}">${esc(teamOf(tid).name)} 술래 ${esc(itName(m, tid))}</option>`).join('')}</select></label>
@@ -1293,7 +1296,7 @@ function sampleSheet() {
           const id = `s${stamp}${i}`, { ans, ...v } = x;
           const mv = { ...v, order: order++, open: x.open !== false };
           if (solo()) delete mv.each;
-          if (x.type === 'tag') mv.it = {};
+          if (x.type === 'tag') Object.assign(mv, { it: {} }, zone(mv)); // 구역은 이 게임의 지역 전체
           if (ans) mv.ah = await answerHash(id, ans);
           await net.saveMission(G.code, id, mv);
         }
@@ -1309,8 +1312,8 @@ function exportMissions() {
   if (!list.length) { toast('아직 미션이 없어요.'); return; }
   const cell = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   const head = ['순서', '미션', '종류', '팀/개인', '점수', '반경(m)', '위도', '경도', '설명', '퀴즈 문제', '술래', '상태', '해낸 팀·사람'];
-  const rows = list.map(([id, m], i) => [i + 1, m.title, TYPES[m.type]?.[1] || m.type, solo() ? '개인전' : m.type === 'tag' ? '팀' : m.each ? '개인' : '팀', m.pts || 0, m.r || 0,
-    m.lat?.toFixed(6), m.lng?.toFixed(6), m.desc || '', m.q || '',
+  const rows = list.map(([id, m], i) => [i + 1, m.title, TYPES[m.type]?.[1] || m.type, solo() ? '개인전' : m.type === 'tag' ? '팀' : m.each ? '개인' : '팀', m.pts || 0, zone(m).r || 0,
+    zone(m).lat?.toFixed(6), zone(m).lng?.toFixed(6), m.desc || '', m.q || '',
     Object.entries(m.it || {}).map(([tid, u]) => `${teamOf(tid).name} ${G.members[u]?.name || '?'}`).join(' / '),
     m.open === false ? '닫힘' : '열림',
     isEach(m) ? eachDone(id).map(([u]) => G.members[u]?.name || '?').join(' / ') : Object.keys(G.teams).filter(t => G.done[t]?.[id]?.status === 'ok').map(t => teamOf(t).name).join(' / ')]);
@@ -1332,8 +1335,8 @@ function guideData() {
     name: G.meta.name || '', mode: solo() ? 'solo' : 'team', endAt: n(G.meta.endAt),
     teams: solo() ? [] : Object.values(G.teams).map(t => ({ name: t.name, color: t.color })),
     missions: Object.values(G.missions).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(m => ({
-      title: m.title || '', type: m.type || 'arrive', each: !!(m.each && !solo()), pts: m.pts || 0, desc: m.desc || '', r: m.r || 0,
-      lat: n(m.lat), lng: n(m.lng), open: m.open !== false, limit: m.limit || 0,
+      title: m.title || '', type: m.type || 'arrive', each: !!(m.each && !solo()), pts: m.pts || 0, desc: m.desc || '', r: zone(m).r || 0,
+      lat: n(zone(m).lat), lng: n(zone(m).lng), open: m.open !== false, limit: m.limit || 0,
     })),
   };
 }
@@ -1661,20 +1664,25 @@ function missionForm(id, draftM, back) {
   openSheet(`${back ? `<button class="link" id="mfBack">‹ 미션 목록</button>` : ''}<h3>${id ? '미션 고치기' : '새 미션'}</h3><form class="stack" id="mf">
     <input name="title" placeholder="미션 이름 (예: 경기전 홍살문)" value="${esc(m.title || '')}" required>
     <label>종류<select name="type">${Object.entries(TYPES).filter(([k]) => k !== 'tag' || !solo() || m.type === 'tag').map(([k, [, n]]) => `<option value="${k}" ${m.type === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-    <div class="tagset stack"><p class="fine">팀마다 술래를 한 명씩 정해요. 다른 팀 술래를 찾아 반경(놀이 구역) 안에서 사진을 찍어 올리면, 진행자가 확인해서 먼저 인정받은 팀이 이겨요.</p>
+    <div class="tagset stack"><p class="fine">팀마다 술래를 한 명씩 정해요. 다른 팀 술래를 찾아 게임 지역(연두색 띠) 안에서 사진을 찍어 올리면, 진행자가 확인해서 먼저 인정받은 팀이 이겨요.</p>
       ${Object.entries(G.teams).map(([tid, t]) => `<label><span><span class="dot" style="background:${esc(t.color)}"></span> ${esc(t.name)} 술래</span><select name="it_${tid}"><option value="">정하지 않음</option>${Object.entries(G.members).filter(([, mm]) => mm.team === tid).map(([u, mm]) => `<option value="${u}" ${m.it?.[tid] === u ? 'selected' : ''}>${esc(mm.name)}</option>`).join('')}</select></label>`).join('')}</div>
     ${solo() ? '' : `<div class="eachset"><p class="fine">누가 하나요?</p><div class="seg" id="eachSeg"><button type="button" data-v="">팀 미션 (한 명만)</button><button type="button" data-v="1">개인 미션 (각자)</button></div><input type="hidden" name="each" value="${m.each ? '1' : ''}"></div>`}
     <textarea name="desc" placeholder="설명 (무엇을 하면 되는지 — 음성 미션이면 무엇을 녹음할지: 노래 한 소절, 팀 구호, 시 낭송 등)">${esc(m.desc || '')}</textarea>
     <div class="qa stack"><input name="q" placeholder="문제" value="${esc(m.q || '')}"><input name="ans" placeholder="${m.ah ? '정답 (바꿀 때만 적기)' : '정답 — 띄어쓰기·대소문자는 무시해요'}"></div>
-    <div class="grid2"><label>반경(m)<input name="r" type="number" min="0" value="${m.r ?? 25}"></label><label>점수<input name="pts" type="number" min="0" value="${m.pts ?? 10}"></label></div>
+    <div class="grid2"><label class="rset">반경(m)<input name="r" type="number" min="0" value="${m.r ?? 25}"></label><label>점수<input name="pts" type="number" min="0" value="${m.pts ?? 10}"></label></div>
     <label>제한 시간 (깜짝 미션)<select name="limit">${[0, 5, 10, 15, 20, 30, 45, 60].map(n => `<option value="${n}" ${(m.limit || 0) === n ? 'selected' : ''}>${n ? n + '분 — 열리는 순간부터' : '없음'}</option>`).join('')}</select></label>
     <p class="fine" id="limitNote" hidden>저장(열기)하는 순간부터 시간이 가고, 모두에게 깜짝 미션 소식이 가요. 게임 끝나는 시간을 넘으면 그때까지만이에요.</p>
     <div class="box" id="where">${m.lat ? `${ic('pin')} ${m.lat.toFixed(5)}, ${m.lng.toFixed(5)}` : '위치를 정해 주세요'}</div>
-    <div class="grid2"><button type="button" class="btn" id="pickMap">지도에서 고르기</button><button type="button" class="btn" id="pickMe">내 자리로</button></div>
+    <div class="grid2 placeset"><button type="button" class="btn" id="pickMap">지도에서 고르기</button><button type="button" class="btn" id="pickMe">내 자리로</button></div>
+    <p class="fine tagzone">술래잡기 구역은 게임 지역 전체(지도의 연두색 띠)예요. 진행 탭 '지역 바꾸기'로 바꾸면 함께 바뀌어요.</p>
     <button class="btn primary">저장</button><p class="msg" id="mfMsg"></p></form>`, el => {
     const f = el.querySelector('#mf');
     el.querySelector('#mfBack')?.addEventListener('click', back);
-    const qa = () => { el.querySelector('.qa').hidden = f.type.value !== 'quiz'; el.querySelector('.tagset').hidden = f.type.value !== 'tag'; if (f.each) f.each.closest('.eachset').hidden = f.type.value === 'tag'; };
+    const qa = () => {
+      const tag = f.type.value === 'tag';
+      el.querySelector('.qa').hidden = f.type.value !== 'quiz'; el.querySelector('.tagset').hidden = !tag; if (f.each) f.each.closest('.eachset').hidden = tag;
+      ['.rset', '#where', '.placeset'].forEach(q => (el.querySelector(q).hidden = tag)); el.querySelector('.tagzone').hidden = !tag; // 술래잡기는 게임 지역 전체
+    };
     f.type.onchange = qa; qa();
     const ln = () => (el.querySelector('#limitNote').hidden = !+f.limit.value);
     f.limit.onchange = ln; ln();
@@ -1695,6 +1703,7 @@ function missionForm(id, draftM, back) {
     f.onsubmit = async e => {
       e.preventDefault();
       const v = read();
+      if (v.type === 'tag') Object.assign(v, zone(v)); // 술래잡기는 게임 지역 전체로 적어 둔다 (안내 페이지·표에도 맞게)
       if (!v.lat) { el.querySelector('#mfMsg').textContent = '위치를 정해 주세요.'; return; }
       if (v.type === 'quiz' && !v.ah && !v._ans.trim()) { el.querySelector('#mfMsg').textContent = '정답을 적어 주세요.'; return; }
       const ans = v._ans; delete v._ans; delete v.ans;
