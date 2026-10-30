@@ -286,6 +286,11 @@ async function enter(code) {
       if (isNew) { toast(plain(f.text), f.team ? null : 'megaphone'); if (tab !== 'feed') unseen++; if (plain(f.text).startsWith('깜짝 미션')) navigator.vibrate?.([300, 120, 300]); }
       if (tab === 'feed') renderPanel(); else renderTabs();
     },
+    feedGone: id => {
+      G.feed = G.feed.filter(f => f.id !== id);
+      if (!G.feed.length) unseen = 0;
+      if (tab === 'feed') renderPanel(); else renderTabs();
+    },
   });
   W.follow(net.me());
   // 테스트 모드는 그때만 — 다시 열면 GPS로 (전에 시험해 본 폰이 행사 날 테스트 모드에 갇히지 않게). 끄기를 고른 것만 기억한다
@@ -299,6 +304,7 @@ function onMeta() {
   if (G.endSeen !== undefined && G.meta.endAt !== G.endSeen) { navigator.vibrate?.([200, 100, 200]); warned = {}; }
   G.endSeen = G.meta.endAt;
   tickTimer();
+  if (!isOver()) { G.shownResult = false; if (resultOpen()) closeSheet(); } // 리셋·다시 시작하면 결과 화면을 거둔다
   checkResults();
   $('#hostTab').hidden = !isHost();
   // 테스트 모드 단추도 진행자에게만. 진행자에서 빠졌는데 테스트 모드였으면 GPS로 돌아간다 (데모는 그대로)
@@ -1194,6 +1200,7 @@ function hostPanel() {
       <button class="btn small" id="hEndAt">${ic('clock')} 끝나는 시간</button>
       <button class="btn small" id="hNotice">${ic('megaphone')} 알림 보내기</button>
       <button class="btn small" id="hBanned">${ic('team')} 내보낸 사람</button>
+      <button class="btn small" id="hReset">${ic('stop')} 게임 리셋</button>
       <button class="btn small" id="hArea">${ic('map')} 지역 바꾸기</button>
       ${isOwner() ? `<button class="btn small" id="hHosts">${ic('crown')} 진행자 더하기</button>` : ''}
     </div>
@@ -1411,6 +1418,20 @@ function bindHost(el) {
   }));
   el.querySelector('#hHosts')?.addEventListener('click', hostEditor);
   el.querySelector('#hBanned')?.addEventListener('click', bannedSheet);
+  // 게임 리셋: 연습해 본 뒤 처음부터 다시 할 때. 진행 탭은 자주 새로 그려지므로 따로 창을 띄워 묻는다
+  el.querySelector('#hReset')?.addEventListener('click', () => openSheet(`<p class="eyebrow">게임 리셋</p><h3>게임을 처음 상태로 되돌릴까요?</h3>
+    <div class="box"><b>지워요</b> — 점수·미션 완료 기록, 올린 사진·녹음, 사진 모음, 소식${timeUp() ? ', 이미 지난 끝나는 시간' : ''}<br><b>남아요</b> — 미션, 팀, 참가자와 팀 배정, 진행자${G.meta.endAt && !timeUp() ? ', 끝나는 시간' : ''}</div>
+    <p class="fine">게임은 '시작 전'으로 돌아가요. 되돌릴 수 없으니 남길 사진은 먼저 저장해 두세요.</p>
+    <div class="row"><button class="btn wide danger" id="rsYes">리셋</button><button class="btn wide" id="rsNo">그만두기</button></div><p class="msg" id="rsMsg"></p>`, s => {
+    s.querySelector('#rsNo').onclick = closeSheet;
+    s.querySelector('#rsYes').onclick = async () => {
+      try {
+        await net.resetGame(G.code, Object.keys(G.missions), timeUp());
+        closeSheet(); toast('게임을 처음 상태로 되돌렸어요.');
+        net.say(G.code, '', '진행자가 게임을 처음 상태로 되돌렸어요. 시작하면 알려 드릴게요!');
+      } catch (er) { s.querySelector('#rsMsg').className = 'msg err'; s.querySelector('#rsMsg').textContent = '되돌리지 못했어요 (' + (er.code || er.message) + ')'; }
+    };
+  }));
   el.querySelector('#hNotice')?.addEventListener('click', () => openSheet(`<h3>모두에게 알림</h3><form class="stack" id="nf"><input id="nt" placeholder="예: 10분 뒤 광장에 모여요" required><button class="btn primary">보내기</button></form>`,
     s => (s.querySelector('#nf').onsubmit = async e => { e.preventDefault(); await net.say(G.code, '', s.querySelector('#nt').value.trim()); closeSheet(); })));
   el.querySelectorAll('[data-judge]').forEach(n => (n.onclick = () => judgeSheet(...n.dataset.judge.split('|'))));

@@ -25,7 +25,7 @@ import {
   GoogleAuthProvider, signInWithPopup, signOut as fbSignOut, updateProfile, setPersistence, browserLocalPersistence, browserSessionPersistence,
 } from 'https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js';
 import {
-  getDatabase, ref, get, set, update, remove, push, onValue, onChildAdded, onDisconnect, serverTimestamp, query, limitToLast,
+  getDatabase, ref, get, set, update, remove, push, onValue, onChildAdded, onChildRemoved, onDisconnect, serverTimestamp, query, limitToLast,
 } from 'https://www.gstatic.com/firebasejs/12.13.0/firebase-database.js';
 
 const app = initializeApp({
@@ -93,6 +93,7 @@ export function watch(code, h) {
   const offs = ['meta', 'teams', 'members', 'pos', 'missions', 'done', 'pdone'].map(k => onValue(G(code, k), s => h[k]?.(s.val() || {})));
   let primed = false;
   offs.push(onChildAdded(query(G(code, 'feed'), limitToLast(40)), s => h.feed?.({ id: s.key, ...s.val() }, primed)));
+  offs.push(onChildRemoved(query(G(code, 'feed'), limitToLast(40)), s => h.feedGone?.(s.key))); // 진행자가 소식을 비우면
   // 내보내졌는지: 내 회원 자리가 지워지면 members를 읽을 권한도 사라지므로 따로 본다
   offs.push(onValue(G(code, 'banned/' + uid()), s => s.exists() && h.kicked?.(), () => {}));
   get(G(code, 'feed')).then(() => setTimeout(() => (primed = true), 300));
@@ -137,5 +138,12 @@ export const albumAdd = (code, key, idx, url) => update(G(code), { [`album/${key
 export const albumDel = (code, key) => update(G(code), { [`album/${key}`]: null, [`albumIdx/${key}`]: null });
 export const albumIdx = async code => (await get(G(code, 'albumIdx'))).val() || {};
 export const albumPhoto = async (code, key) => (await get(G(code, 'album/' + key))).val();
+// 게임 리셋 (진행자): 점수·완료·사진·녹음·사진 모음·소식 같은 데이터만 지우고 '시작 전'으로. 미션·팀·참가자(팀 배정)·설정은 남긴다.
+// 끝나는 시간은 이미 지났을 때만 지운다(clearEnd). 깜짝 미션은 시계를 비워 다시 시작할 때 걸리게(armTimed)
+export const resetGame = (code, missionIds, clearEnd) => update(G(code), {
+  feed: null, done: null, pdone: null, photos: null, album: null, albumIdx: null,
+  'meta/status': 'ready', 'meta/endedAt': null, ...(clearEnd ? { 'meta/endAt': null } : {}),
+  ...Object.fromEntries(missionIds.flatMap(id => [[`missions/${id}/until`, null], [`missions/${id}/openAt`, null]])),
+});
 export const say = (code, team, text) => push(G(code, 'feed'), { team: team || '', text, t: serverTimestamp() });
 export const me = () => uid();

@@ -68,6 +68,14 @@ export const albumDel = async (code, key) => { const g = S.games[code]; delete g
 export const albumIdx = async code => S.games[code]?.albumIdx || {};
 export const albumPhoto = async (code, key) => S.games[code]?.album?.[key];
 export const say = async (code, team, text) => feed(code, team, text);
+export const resetGame = async (code, ids, clearEnd) => {
+  const g = S.games[code], gone = g.feed.splice(0);
+  Object.assign(g, { done: {}, pdone: {}, photos: {}, album: {}, albumIdx: {} });
+  g.meta.status = 'ready'; delete g.meta.endedAt; if (clearEnd) delete g.meta.endAt;
+  ids.forEach(id => { if (g.missions[id]) { delete g.missions[id].until; delete g.missions[id].openAt; } });
+  (subs.get(code) || []).forEach(h => gone.forEach(f => h.feedGone?.(f.id)));
+  fire(code);
+};
 export const me = () => ME;
 
 /* ---------- 미리 차려 둔 게임 'DEMO': 한옥마을 둘레의 미션과 가짜 참가자 ---------- */
