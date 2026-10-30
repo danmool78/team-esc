@@ -892,12 +892,16 @@ async function setOpen(id, m, open) {
 /* ---------- 술래잡기 (술래 사진 찍기) ----------
    진행자가 팀마다 술래를 한 명씩 정한다(mission.it = {팀: uid}). 술래는 지도에 '술래'로 보인다.
    다른 팀 술래를 찾아 게임 지역(연두색 띠) 안에서 사진을 찍어 올리면(누구를 찍었는지 caught) 진행자가 확인하고,
-   먼저 인정받은 팀이 이긴다 — GPS 거리로 자동 판정하던 것은 오차가 커서 사진으로 바꿨다 */
-const tagWinner = id => Object.keys(G.teams).find(t => G.done[t]?.[id]?.status === 'ok');
+   먼저 인정받은 팀이 이긴다 — GPS 거리로 자동 판정하던 것은 오차가 커서 사진으로 바꿨다.
+   진행자 술래 모드(mission.itHost = 진행자 uid): 진행자 한 명이 모든 팀의 술래. 팀마다 진행자 사진을 찍어 인정받으면 그 팀에 점수
+   (팀마다 한 번, 한 팀이 잡아도 끝나지 않는다) */
+const tagWinner = id => (G.missions[id]?.itHost ? null : Object.keys(G.teams).find(t => G.done[t]?.[id]?.status === 'ok'));
 const tagLive = ([id, m]) => m.type === 'tag' && m.open !== false && !tagWinner(id);
-const isIt = uid => isLive() && Object.entries(G.missions).some(e => tagLive(e) && Object.values(e[1].it || {}).includes(uid));
+const itsOf = m => (m.itHost ? [m.itHost] : Object.values(m.it || {}));
+const isIt = uid => isLive() && Object.entries(G.missions).some(e => tagLive(e) && itsOf(e[1]).includes(uid));
 const itName = (m, tid) => G.members[m.it?.[tid]]?.name || '?';
 function tagInfo(id, m, live) {
+  if (m.itHost) return hostTagInfo(id, m, live);
   const its = Object.entries(m.it || {}).map(([tid, u]) => `<span class="pill"><span class="dot" style="background:${esc(teamOf(tid).color)}"></span> ${esc(teamOf(tid).name)} ${esc(G.members[u]?.name || '?')}</span>`).join('');
   const win = tagWinner(id), me = net.me(), t = myTeam(), d = G.done[t]?.[id];
   const targets = Object.keys(m.it || {}).filter(tid => tid !== t && G.teams[tid]);
@@ -913,6 +917,24 @@ function tagInfo(id, m, live) {
        <button class="btn wide primary" id="tagCam">${ic('aim')} 술래 조준해서 찍기</button>
        <label class="aim-alt">기본 카메라로 찍기<input type="file" accept="image/*" capture="environment" id="tagPhoto" hidden></label><p class="msg" id="qMsg"></p>` : '';
   return `<div class="teamrow">${its}</div>${retryNote(m)}<div class="box">${role}</div>${up}`;
+}
+// 이름 뒤 을/를: 마지막 글자에 받침이 있으면 '을'
+const josa = s => { const c = String(s).slice(-1).charCodeAt(0) - 0xac00; return c >= 0 && c < 11172 && c % 28 ? '을' : '를'; };
+// 진행자 술래: 모든 팀이 진행자 한 명을 쫓는다. 잡은(인정받은) 팀은 점수, 다른 팀은 계속
+function hostTagInfo(id, m, live) {
+  const me = net.me(), t = myTeam(), d = G.done[t]?.[id], hn = G.members[m.itHost]?.name || '진행자';
+  let role;
+  if (!live) role = G.meta.status === 'ended' || timeUp() ? '게임이 끝났어요.' : '진행자가 게임을 시작하면 열려요.';
+  else if (me === m.itHost) role = `${ic('tag')} <b>내가 술래!</b> 모든 팀이 나를 찾아 사진을 찍으러 와요. 찍혀서 인정되면 그 팀이 ${m.pts || 0}점을 받아요.`;
+  else if (d?.status === 'ok') role = `${ic('check')} 우리 팀이 진행자 술래를 잡았어요! (+${m.pts || 0}점)`;
+  else if (d?.status === 'wait') role = `${ic('wait')} 우리 팀이 올린 술래 사진을 확인하고 있어요.`;
+  else if (!near(m)) role = `게임 지역(지도의 연두색 띠) 안으로 들어가면 술래 사진을 올릴 수 있어요.`;
+  else role = `진행자 술래 <b>${esc(hn)}</b>${josa(hn)} 찾아 <b>사진</b>을 찍어 올려요. 인정되면 우리 팀 +${m.pts || 0}점! 지도에 '술래'로 보여요.`;
+  const up = live && me !== m.itHost && !d && near(m) && canPlay()
+    ? `<select id="tagWho" hidden><option value="${esc(m.itHost)}">진행자 술래 ${esc(hn)}</option></select>
+       <button class="btn wide primary" id="tagCam">${ic('aim')} 술래 조준해서 찍기</button>
+       <label class="aim-alt">기본 카메라로 찍기<input type="file" accept="image/*" capture="environment" id="tagPhoto" hidden></label><p class="msg" id="qMsg"></p>` : '';
+  return `<div class="box">${ic('tag')} 진행자 술래 · <b>${esc(hn)}</b></div>${retryNote(m)}<div class="box">${role}</div>${up}`; // 팀마다 잡았는지는 미션 창 위의 팀 줄이 보여 준다
 }
 function checkArrive() {
   if (!isLive() || !canPlay() || !myLL) return;
@@ -1010,7 +1032,7 @@ function openMission(id) {
       if (late(id)) throw new Error(NOPE);
       await net.complete(G.code, t, id, { name: profile.name, pts: m.pts || 0, status: 'wait', caught: who }); // 완료 먼저 (사진이 홀로 남지 않게)
       await net.savePhoto(G.code, t, id, url);
-      await net.say(G.code, t, `${teamOf(t).name} ${profile.name} — ${teamOf(G.members[who]?.team).name} 술래 ${G.members[who]?.name} 사진! '${m.title}' 확인 요청`);
+      await net.say(G.code, t, `${teamOf(t).name} ${profile.name} — ${m.itHost ? '진행자' : teamOf(G.members[who]?.team).name} 술래 ${G.members[who]?.name} 사진! '${m.title}' 확인 요청`);
       closeSheet(); toast('술래 사진을 올렸어요. 진행자가 확인하면 승리!', 'tag');
     };
     el.querySelector('#tagPhoto')?.addEventListener('change', async e => {
@@ -1336,7 +1358,7 @@ function guideData() {
     teams: solo() ? [] : Object.values(G.teams).map(t => ({ name: t.name, color: t.color })),
     missions: Object.values(G.missions).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(m => ({
       title: m.title || '', type: m.type || 'arrive', each: !!(m.each && !solo()), pts: m.pts || 0, desc: m.desc || '', r: zone(m).r || 0,
-      lat: n(zone(m).lat), lng: n(zone(m).lng), open: m.open !== false, limit: m.limit || 0,
+      lat: n(zone(m).lat), lng: n(zone(m).lng), open: m.open !== false, limit: m.limit || 0, itHost: !!m.itHost,
     })),
   };
 }
@@ -1462,7 +1484,7 @@ async function judgeSheet(kind, who, mid) {
   const judge = ok => (kind === 'u' ? net.judgeMine(G.code, who, mid, ok) : net.judge(G.code, who, mid, ok));
   const label = solo() ? d?.name : `${teamOf(tid).name}${kind === 'u' ? ' ' + d?.name : ''}`;
   openSheet(`<p class="eyebrow">확인 요청 · ${esc(solo() ? '개인' : teamOf(tid).name)}</p><h3>${esc(m.title)}</h3><p class="fine">${esc(d?.name)} · ${clock(d?.t)}</p>
-    ${m.type === 'tag' && d?.caught ? `<div class="box">${ic('tag')} ${esc(teamOf(G.members[d.caught]?.team).name)} 술래 <b>${esc(G.members[d.caught]?.name || '?')}</b>를 찍었대요</div>` : ''}
+    ${m.type === 'tag' && d?.caught ? `<div class="box">${ic('tag')} ${m.itHost ? '진행자' : esc(teamOf(G.members[d.caught]?.team).name)} 술래 <b>${esc(G.members[d.caught]?.name || '?')}</b>${josa(G.members[d.caught]?.name || '?')} 찍었대요</div>` : ''}
     <div id="ph">${m.type === 'photo' || m.type === 'tag' ? '<p class="fine">사진을 불러오는 중…</p>' : m.type === 'voice' ? '<p class="fine">녹음을 불러오는 중…</p>' : ''}</div>
     <label class="fine">다시 하게 할 때 이유 (모두에게 알려요)<input id="jWhy" maxlength="60" placeholder="${m.type === 'voice' ? '예: 더 크게 불러 주세요' : m.type === 'tag' ? '예: 술래 얼굴이 안 보여요' : '예: 팀원 모두 나오게 찍어 주세요'}"></label>
     <div class="grid2"><button class="btn danger" id="jNo">다시 하게 하기</button><button class="btn primary" id="jOk">인정 (+${m.pts || 0}점)</button></div>`, async el => {
@@ -1470,7 +1492,7 @@ async function judgeSheet(kind, who, mid) {
       if (m.type === 'tag' && tagWinner(mid)) { toast(`이미 ${teamOf(tagWinner(mid)).name}이 이겼어요.`); return; }
       await judge(true);
       if (m.type === 'photo' || m.type === 'tag') albumPut(key + '_' + mid, mid, kind === 'u' ? who : null, tid, d).catch(() => {}); // key는 photos 앞부분(팀 또는 u_사람)
-      net.say(G.code, tid || '', m.type === 'tag' ? `${label} — ${teamOf(G.members[d?.caught]?.team).name} 술래 ${G.members[d?.caught]?.name || ''} 잡았다! '${m.title}' 승리` : `${label} — '${m.title}' 완료!`);
+      net.say(G.code, tid || '', m.type === 'tag' ? (m.itHost ? `${label} — 진행자 술래 ${G.members[d?.caught]?.name || ''} 잡았다! +${m.pts || 0}점` : `${label} — ${teamOf(G.members[d?.caught]?.team).name} 술래 ${G.members[d?.caught]?.name || ''} 잡았다! '${m.title}' 승리`) : `${label} — '${m.title}' 완료!`);
       closeSheet();
     };
     el.querySelector('#jNo').onclick = async () => { const why = el.querySelector('#jWhy').value.trim(); await judge(false); await net.delPhoto(G.code, key, mid); net.say(G.code, tid || '', `${label} — '${m.title}' 다시 해 주세요${why ? ' — ' + why : ''}`); closeSheet(); };
@@ -1664,8 +1686,12 @@ function missionForm(id, draftM, back) {
   openSheet(`${back ? `<button class="link" id="mfBack">‹ 미션 목록</button>` : ''}<h3>${id ? '미션 고치기' : '새 미션'}</h3><form class="stack" id="mf">
     <input name="title" placeholder="미션 이름 (예: 경기전 홍살문)" value="${esc(m.title || '')}" required>
     <label>종류<select name="type">${Object.entries(TYPES).filter(([k]) => k !== 'tag' || !solo() || m.type === 'tag').map(([k, [, n]]) => `<option value="${k}" ${m.type === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-    <div class="tagset stack"><p class="fine">팀마다 술래를 한 명씩 정해요. 다른 팀 술래를 찾아 게임 지역(연두색 띠) 안에서 사진을 찍어 올리면, 진행자가 확인해서 먼저 인정받은 팀이 이겨요.</p>
-      ${Object.entries(G.teams).map(([tid, t]) => `<label><span><span class="dot" style="background:${esc(t.color)}"></span> ${esc(t.name)} 술래</span><select name="it_${tid}"><option value="">정하지 않음</option>${Object.entries(G.members).filter(([, mm]) => mm.team === tid).map(([u, mm]) => `<option value="${u}" ${m.it?.[tid] === u ? 'selected' : ''}>${esc(mm.name)}</option>`).join('')}</select></label>`).join('')}</div>
+    <div class="tagset stack"><p class="fine">누가 술래인가요?</p>
+      <div class="seg" id="itSeg"><button type="button" data-v="">팀마다 한 명</button><button type="button" data-v="host">진행자</button></div><input type="hidden" name="itMode" value="${m.itHost ? 'host' : ''}">
+      <div class="ithost stack"><p class="fine">진행자 한 명이 모든 팀의 술래예요. 팀마다 진행자를 찾아 사진을 찍어 인정받으면 그 팀이 점수를 받아요(팀마다 한 번).</p>
+        <label>술래가 될 진행자<select name="itHost">${Object.keys(G.members).filter(isHostUid).map(u => `<option value="${u}" ${(m.itHost || net.me()) === u ? 'selected' : ''}>${esc(G.members[u].name)}${u === net.me() ? ' (나)' : ''}</option>`).join('')}</select></label></div>
+      <div class="itteam stack"><p class="fine">팀마다 술래를 한 명씩 정해요. 다른 팀 술래를 찾아 게임 지역(연두색 띠) 안에서 사진을 찍어 올리면, 진행자가 확인해서 먼저 인정받은 팀이 이겨요.</p>
+      ${Object.entries(G.teams).map(([tid, t]) => `<label><span><span class="dot" style="background:${esc(t.color)}"></span> ${esc(t.name)} 술래</span><select name="it_${tid}"><option value="">정하지 않음</option>${Object.entries(G.members).filter(([, mm]) => mm.team === tid).map(([u, mm]) => `<option value="${u}" ${m.it?.[tid] === u ? 'selected' : ''}>${esc(mm.name)}</option>`).join('')}</select></label>`).join('')}</div></div>
     ${solo() ? '' : `<div class="eachset"><p class="fine">누가 하나요?</p><div class="seg" id="eachSeg"><button type="button" data-v="">팀 미션 (한 명만)</button><button type="button" data-v="1">개인 미션 (각자)</button></div><input type="hidden" name="each" value="${m.each ? '1' : ''}"></div>`}
     <textarea name="desc" placeholder="설명 (무엇을 하면 되는지 — 음성 미션이면 무엇을 녹음할지: 노래 한 소절, 팀 구호, 시 낭송 등)">${esc(m.desc || '')}</textarea>
     <div class="qa stack"><input name="q" placeholder="문제" value="${esc(m.q || '')}"><input name="ans" placeholder="${m.ah ? '정답 (바꿀 때만 적기)' : '정답 — 띄어쓰기·대소문자는 무시해요'}"></div>
@@ -1684,6 +1710,11 @@ function missionForm(id, draftM, back) {
       ['.rset', '#where', '.placeset'].forEach(q => (el.querySelector(q).hidden = tag)); el.querySelector('.tagzone').hidden = !tag; // 술래잡기는 게임 지역 전체
     };
     f.type.onchange = qa; qa();
+    // 술래: 팀마다 / 진행자
+    const itSeg = el.querySelector('#itSeg');
+    const itPaint = () => { itSeg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === f.itMode.value)); el.querySelector('.ithost').hidden = f.itMode.value !== 'host'; el.querySelector('.itteam').hidden = f.itMode.value === 'host'; };
+    itSeg.querySelectorAll('button').forEach(b => (b.onclick = () => { f.itMode.value = b.dataset.v; itPaint(); }));
+    itPaint();
     const ln = () => (el.querySelector('#limitNote').hidden = !+f.limit.value);
     f.limit.onchange = ln; ln();
     // 팀 / 개인: 두 칸 중 하나를 고른다 (체크 하나로는 놓치기 쉬웠다)
@@ -1693,7 +1724,7 @@ function missionForm(id, draftM, back) {
     paint();
     // 개인전에선 개인 미션 칸이 없으니 원래 값을 둔다
     const read = () => ({ ...m, each: solo() ? m.each : f.each?.value === '1', title: f.title.value.trim(), type: f.type.value, desc: f.desc.value.trim(), q: f.q.value.trim(), r: +f.r.value || 0, pts: +f.pts.value || 0, limit: +f.limit.value || 0, _ans: f.ans.value,
-      it: Object.fromEntries(Object.keys(G.teams).map(tid => [tid, f['it_' + tid]?.value]).filter(([, u]) => u)) });
+      it: Object.fromEntries(Object.keys(G.teams).map(tid => [tid, f['it_' + tid]?.value]).filter(([, u]) => u)), _itMode: f.itMode.value, _itHost: f.itHost?.value });
     el.querySelector('#pickMap').onclick = () => {
       const cur = read();
       $('#sheet').hidden = true; $('#placing').hidden = false;
@@ -1708,8 +1739,12 @@ function missionForm(id, draftM, back) {
       if (v.type === 'quiz' && !v.ah && !v._ans.trim()) { el.querySelector('#mfMsg').textContent = '정답을 적어 주세요.'; return; }
       const ans = v._ans; delete v._ans; delete v.ans;
       if (v.type !== 'quiz') { delete v.q; delete v.ah; }
-      if (v.type === 'tag') { delete v.each; if (Object.keys(v.it).length < 2) { el.querySelector('#mfMsg').textContent = '술래를 두 팀 넘게 정해 주세요.'; return; } }
-      else delete v.it;
+      const itMode = v._itMode, itHost = v._itHost; delete v._itMode; delete v._itHost;
+      if (v.type === 'tag') {
+        delete v.each;
+        if (itMode === 'host') { if (!itHost) { el.querySelector('#mfMsg').textContent = '술래가 될 진행자를 골라 주세요.'; return; } v.itHost = itHost; v.it = {}; }
+        else { delete v.itHost; if (Object.keys(v.it).length < 2) { el.querySelector('#mfMsg').textContent = '술래를 두 팀 넘게 정해 주세요.'; return; } }
+      } else { delete v.it; delete v.itHost; }
       delete v.catchR; // 예전 GPS 잡기 거리는 이제 쓰지 않는다
       if (!v.each) delete v.each;
       // 제한 시간: 새로 정했거나 바꿨거나 이미 끝났으면 지금부터 다시 건다 (글자만 고칠 땐 시계를 그대로)
