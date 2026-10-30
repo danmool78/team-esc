@@ -51,6 +51,28 @@
   .empty{color:var(--muted);text-align:center;padding:30px 0}
   .fine{color:var(--muted);font-size:13px}
   footer{margin-top:22px;color:#8d96b3;font-size:12px;line-height:1.7;text-align:center}
+  /* 큰 글씨: 받는 분 중 40~60대가 많다 */
+  body{font-size:17.5px;line-height:1.7}
+  h1{font-size:27px}
+  .sub{font-size:15.5px}
+  h2{font-size:20px}
+  .ico{width:26px;height:26px}
+  .fact small{font-size:14.5px}
+  .fact b{font-size:21px}
+  .chip{font-size:16px;padding:5px 13px}
+  .chip i{width:12px;height:12px}
+  .join{font-size:19px;padding:15px}
+  li{margin:8px 0}
+  .type b{font-size:18.5px}
+  .type small{font-size:16px;line-height:1.6}
+  .type .ico{width:34px;height:34px}
+  .no{width:34px;height:34px;font-size:17px}
+  .m .t{font-size:19.5px}
+  .m .d{font-size:16.5px}
+  .tg{font-size:14.5px;padding:3px 9px}
+  .tags a{font-size:15px}
+  .fine{font-size:15px}
+  footer{font-size:14px}
 </style>
 </head>
 <body>
@@ -81,7 +103,7 @@ const TYPES = {
   photo: ['camera', '사진', '그 자리에서 미션대로 사진을 찍어 올려요.', '진행자가 보고 인정'],
   task: ['flag', '현장 미션', '그 자리에서 미션을 해내고 완료를 눌러요.', '진행자가 확인'],
   voice: ['mic', '음성', '그 자리에서 노래 한 소절, 구호 등을 녹음(최대 20초)해 들어 보고 보내요. 마이크 허용이 필요해요.', '진행자가 듣고 인정'],
-  tag: ['tag', '술래잡기', '팀마다 술래가 한 명 있어요(지도에 \'술래\' 표시). 다른 팀 술래를 찾아 사진을 찍어 올려요.', '진행자가 보고 먼저 인정받은 팀 승리'],
+  tag: ['tag', '술래잡기', '술래(팀마다 한 명, 또는 진행자)를 게임 지역 안에서 찾아 조준 카메라로 찍어 올려요. 지도에 \'술래\'로 보이고, 화면의 화살표가 술래 쪽을 알려 줘요.', '진행자가 보고 인정'],
 };
 
 async function load() {
