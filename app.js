@@ -367,7 +367,7 @@ function renderScores() {
   const rows = standings();
   $('#scores').innerHTML = rows.map(r => `
     <div class="score ${r.mine ? 'mine' : ''} ${lastPts[r.key] != null && r.pts > lastPts[r.key] ? 'bump' : ''}" data-${r.kind}="${r.id}">
-      <i style="background:${esc(r.color)}"></i><b>${esc(r.name)}</b><em>${r.pts}<small>점</small></em>
+      <i style="background:${esc(r.color)}"></i><div class="sv"><b>${esc(r.name)}</b><em>${r.pts}<small>점</small></em></div>
     </div>`).join('');
   lastPts = Object.fromEntries(rows.map(r => [r.key, r.pts]));
   document.querySelectorAll('.score').forEach(el => {
