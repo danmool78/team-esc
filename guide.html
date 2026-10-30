@@ -169,7 +169,7 @@ function render(g) {
         <div class="t">${ic(t[0])}${esc(m.title)}</div>
         ${m.desc ? `<div class="d">${esc(m.desc)}</div>` : ''}
         <div class="tags"><span class="tg">${t[1]}</span>${solo ? '' : m.type === 'tag' ? '<span class="tg team">팀</span>' : m.each ? '<span class="tg each">개인</span>' : '<span class="tg team">팀</span>'}
-          <span class="tg pts">${m.pts || 0}점</span>${m.type === 'tag' ? '<span class="tg">게임 지역 전체</span>' : m.r ? `<span class="tg">반경 ${m.r}m</span>` : ''}${m.limit ? `<span class="tg later">깜짝 ${m.limit}분</span>` : ''}${m.open ? '' : '<span class="tg later">나중에 열려요</span>'}
+          <span class="tg pts">${m.pts || 0}점</span>${m.type === 'tag' ? `<span class="tg">게임 지역 전체</span>${m.itHost ? '<span class="tg later">진행자가 술래</span>' : ''}` : m.r ? `<span class="tg">반경 ${m.r}m</span>` : ''}${m.limit ? `<span class="tg later">깜짝 ${m.limit}분</span>` : ''}${m.open ? '' : '<span class="tg later">나중에 열려요</span>'}
           ${map ? `<a href="${map}" target="_blank" rel="noopener">지도에서 보기 ›</a>` : ''}</div>
       </div></div>`; }).join('')}</div>` : '<p class="empty">아직 미션이 없어요.</p>'}
   </section>`;
