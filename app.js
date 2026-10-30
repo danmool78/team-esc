@@ -1187,27 +1187,42 @@ const pendings = () => [
   ...Object.entries(G.pdone).flatMap(([uid, ms]) => Object.entries(ms || {}).filter(([, d]) => d.status === 'wait').map(([mid, d]) => ({ kind: 'u', who: uid, tid: d.team, mid, d }))),
 ].sort((a, b) => (a.d.t || 0) - (b.d.t || 0));
 function hostPanel() {
-  const st = G.meta.status;
+  const st = G.meta.status, live = st === 'live', ended = st === 'ended';
   const link = `${location.origin}${location.pathname}?g=${G.code}`;
-  const waits = pendings();
-  return `<div class="code">${G.code}</div><p class="fine" style="text-align:center">참가자에게 이 코드를 알려 주세요 · <button class="link" id="hCopy" data-link="${esc(link)}">초대 링크 복사</button></p>
-    <div class="hostgrid">
-      ${st !== 'live' ? `<button class="btn primary small" id="hStart">${ic('play')} ${st === 'ended' ? '다시 시작' : '게임 시작'}</button>` : `<button class="btn small" id="hEnd">${ic('stop')} 게임 끝내기</button>`}
-      <button class="btn small" id="hAdd">${ic('flag')} 미션 관리 ${Object.keys(G.missions).length}</button>
-      <button class="btn small" id="hGuide">${ic('book')} 미션 안내 페이지</button>
-      <button class="btn small" id="hAlbum">${ic('camera')} 사진 모음 페이지</button>
-      <button class="btn small" id="hTeams">${ic('team')} ${solo() ? '방식·팀' : '팀 정하기'}</button>
-      <button class="btn small" id="hEndAt">${ic('clock')} 끝나는 시간</button>
-      <button class="btn small" id="hNotice">${ic('megaphone')} 알림 보내기</button>
-      <button class="btn small" id="hBanned">${ic('team')} 내보낸 사람</button>
-      <button class="btn small" id="hReset">${ic('stop')} 게임 리셋</button>
-      <button class="btn small" id="hArea">${ic('map')} 지역 바꾸기</button>
-      ${isOwner() ? `<button class="btn small" id="hHosts">${ic('crown')} 진행자 더하기</button>` : ''}
-    </div>
-    ${isOwner() && st === 'ended' ? `<button class="btn wide danger" id="hDel">게임 지우기 — 위치·미션 기록·사진·소식을 서버에서 모두 지워요</button>` : ''}
-    <div class="group-h">확인을 기다리는 미션 ${waits.length}</div>
+  const waits = pendings(), nM = Object.keys(G.missions).length;
+  const end = G.meta.endAt;
+  // 진행 도구는 큼직한 한 줄씩. 게임 단계(시작 전 · 진행 중 · 끝난 뒤)마다 그때 중요한 것을 위로 올리고 나머지는 '그 밖에'로
+  const R = {
+    start: [live ? 'hEnd' : 'hStart', live ? 'stop' : 'play', live ? '게임 끝내기' : ended ? '다시 시작' : '게임 시작',
+      live ? '모두에게 결과가 떠요' : ended ? '같은 미션으로 이어서 다시 시작해요' : '시작하면 모두 미션을 할 수 있어요', live ? 'danger' : 'primary'],
+    teams: ['hTeams', 'team', solo() ? '방식·팀' : '팀 정하기', solo() ? '개인전·팀전 바꾸기' : `팀 ${Object.keys(G.teams).length}개 · 사람을 팀에 넣고 빼기`],
+    missions: ['hAdd', 'flag', '미션 관리', `미션 ${nM}개 · 더하기·고치기·순서·열고 닫기`],
+    guide: ['hGuide', 'book', '미션 안내 페이지', '참가자가 미리 보는 링크 보내기'],
+    notice: ['hNotice', 'megaphone', '알림 보내기', '모두의 폰에 소식 띄우기'],
+    endAt: ['hEndAt', 'clock', '끝나는 시간', end ? `${hhmm(end)}에 끝나요` : '아직 정하지 않았어요'],
+    album: ['hAlbum', 'camera', '사진 모음 페이지', '인정된 사진을 링크로 나누기'],
+    result: ['hResult', 'trophy', '결과 보기', '시상대와 순위'],
+    area: ['hArea', 'map', '지역 바꾸기', '게임 지도의 가운데와 반경'],
+    hosts: ['hHosts', 'crown', '진행자 더하기', '함께 진행할 사람 정하기'],
+    banned: ['hBanned', 'team', '내보낸 사람', '목록 · 다시 들이기'],
+    reset: ['hReset', 'stop', '게임 리셋', '점수·사진·소식만 지우고 처음 상태로', 'danger'],
+    del: ['hDel', 'stop', '게임 지우기', '이 게임을 서버에서 통째로 지워요', 'danger'],
+  };
+  const order = ended ? [['album', 'result', 'start'], ['missions', 'notice', 'teams', 'guide', 'endAt', 'area', 'hosts', 'banned', 'reset', 'del']]
+    : live ? [['missions', 'notice', 'endAt', 'teams'], ['guide', 'album', 'area', 'hosts', 'banned', 'start', 'reset']]
+    : [['start', 'teams', 'missions', 'guide'], ['endAt', 'notice', 'area', 'hosts', 'banned', 'album', 'reset']];
+  const ok = k => (k !== 'hosts' && k !== 'del') || isOwner();
+  const row = k => { const [id, icon, t, sub, cls = ''] = R[k]; return `<button class="hrow ${cls}" id="${id}"><span class="hi">${ic(icon)}</span><span class="ht"><b>${t}</b><small>${esc(sub)}</small></span><span class="chev">›</span></button>`; };
+  const waitList = `<div class="group-h">확인을 기다리는 미션 ${waits.length}</div>
     ${waits.length ? waits.map(({ kind, who, tid, mid, d }) => `<div class="item" data-judge="${kind}|${who}|${mid}"><div class="ic wait">${tic(G.missions[mid]?.type)}</div>
       <div class="tx"><b>${esc(G.missions[mid]?.title || mid)}${kind === 'u' && !solo() ? ' (개인)' : ''}</b><small><span class="dot" style="background:${esc(kind === 'u' && solo() ? personColor(who) : teamOf(tid).color)}"></span> ${solo() ? '' : esc(teamOf(tid).name) + ' · '}${esc(d.name)} · ${clock(d.t)}</small></div><div class="rt">보기 ›</div></div>`).join('') : '<p class="empty">없어요.</p>'}`;
+  return `<div class="code">${G.code}</div><p class="fine" style="text-align:center">참가자에게 이 코드를 알려 주세요 · <button class="link" id="hCopy" data-link="${esc(link)}">초대 링크 복사</button></p>
+    <div class="group-h">${ended ? '게임이 끝났어요' : live ? '진행 중' : '시작 전'}</div>
+    <div class="hlist">${order[0].filter(ok).map(row).join('')}</div>
+    ${live || waits.length ? waitList : ''}
+    <div class="group-h">그 밖에</div>
+    <div class="hlist">${order[1].filter(ok).map(row).join('')}</div>
+    ${!live && !waits.length ? waitList : ''}`;
 }
 /* ---------- 미션 관리 ---------- */
 // 진행자가 미션 전체를 목록으로 보며 더하기·고치기·지우기·순서 바꾸기·열고 닫기를 한 곳에서 한다.
@@ -1418,6 +1433,7 @@ function bindHost(el) {
   }));
   el.querySelector('#hHosts')?.addEventListener('click', hostEditor);
   el.querySelector('#hBanned')?.addEventListener('click', bannedSheet);
+  el.querySelector('#hResult')?.addEventListener('click', showResults);
   // 게임 리셋: 연습해 본 뒤 처음부터 다시 할 때. 진행 탭은 자주 새로 그려지므로 따로 창을 띄워 묻는다
   el.querySelector('#hReset')?.addEventListener('click', () => openSheet(`<p class="eyebrow">게임 리셋</p><h3>게임을 처음 상태로 되돌릴까요?</h3>
     <div class="box"><b>지워요</b> — 점수·미션 완료 기록, 올린 사진·녹음, 사진 모음, 소식${timeUp() ? ', 이미 지난 끝나는 시간' : ''}<br><b>남아요</b> — 미션, 팀, 참가자와 팀 배정, 진행자${G.meta.endAt && !timeUp() ? ', 끝나는 시간' : ''}</div>
