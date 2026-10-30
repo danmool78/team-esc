@@ -1428,7 +1428,7 @@ function bindHost(el) {
       try {
         await net.resetGame(G.code, Object.keys(G.missions), timeUp());
         closeSheet(); toast('게임을 처음 상태로 되돌렸어요.');
-        net.say(G.code, '', '진행자가 게임을 처음 상태로 되돌렸어요. 시작하면 알려 드릴게요!');
+        net.say(G.code, '', '게임 생성');
       } catch (er) { s.querySelector('#rsMsg').className = 'msg err'; s.querySelector('#rsMsg').textContent = '되돌리지 못했어요 (' + (er.code || er.message) + ')'; }
     };
   }));
