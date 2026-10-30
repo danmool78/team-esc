@@ -469,7 +469,7 @@ function peopleList() {
     return `<div class="item" data-u="${uid}"><img class="mini" src="${thumb(m.avatar, uid)}" alt="">
       <div class="tx"><b>${solo() ? `<span class="dot" style="background:${personColor(uid)}"></span> ` : ''}${esc(m.name)}${uid === net.me() ? ' (나)' : ''}${isHostUid(uid) ? ' · 진행자' : ''}</b>
       <small><span class="dot ${live ? 'on-dot' : 'off-dot'}"></span> ${p ? (live ? '위치 공유 중' : ago(p.t) + ' 위치') : '위치 없음'}${s.n ? ` · ${solo() ? '' : '개인 '}${s.n}개 ${s.pts}점` : ''}</small></div>
-      <div class="rt">${myLL && p && uid !== net.me() ? fmtDist(dist(myLL, p)) : ''}${canKick(uid) ? `<button class="kick" data-kick="${uid}">내보내기</button>` : ''}</div></div>`;
+      <div class="rt">${myLL && p && uid !== net.me() && !hiding(uid) ? fmtDist(dist(myLL, p)) : ''}${canKick(uid) ? `<button class="kick" data-kick="${uid}">내보내기</button>` : ''}</div></div>`;
   };
   // 개인전: 점수 순으로 한 줄. 팀전: 팀별로 묶는다
   if (solo()) return Object.entries(G.members).sort(([a], [b]) => personScore(b).pts - personScore(a).pts).map(row).join('');
@@ -529,6 +529,7 @@ async function bannedSheet() {
     s.querySelectorAll('[data-unban]').forEach(b => (b.onclick = async () => { await net.unban(G.code, b.dataset.unban); toast('다시 들어올 수 있어요.'); bannedSheet(); })));
 }
 function focusPlayer(uid) {
+  if (hiding(uid)) { toast('분신술 중이라 어느 쪽이 진짜인지 알 수 없어요. 조준 카메라 화살표를 따라가 보세요!', 'tag'); return; }
   const p = G.pos[uid], m = G.members[uid];
   if (!p) { toast(`${m?.name || ''} 님은 아직 위치를 공유하지 않았어요.`); return; }
   W.flyTo(p, 110);
@@ -919,6 +920,50 @@ function tagInfo(id, m, live) {
        <label class="aim-alt">기본 카메라로 찍기<input type="file" accept="image/*" capture="environment" id="tagPhoto" hidden></label><p class="msg" id="qMsg"></p>` : '';
   return `<div class="teamrow">${its}</div>${retryNote(m)}<div class="box">${role}</div>${up}`;
 }
+/* ---------- 분신술 (진행자 술래) ----------
+   진행자 술래가 분신을 띄우면 모두의 지도에 같은 모습의 술래가 여러 명 걸어 다닌다. 분신 위치는 서버로 보내지 않고
+   미션에 적힌 씨앗(seed)·시작 시각·시작 자리(clones = {on, n, seed, at, from})로 폰마다 똑같이 계산한다 — 모두 같은 자리에 보이게.
+   시작 자리에서 흩어져 게임 지역 안을 보통 걸음(초속 1.3m)으로 돌아다니고 가끔 쉰다. 조준 카메라 화살표는 진짜만 가리킨다 */
+const CLONE_SPEED = 1.3;
+const rng = seed => () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+const clonePaths = {};
+function clonePos(m, i, now) {
+  const c = m.clones, center = G.meta.center || c.from, R = (G.meta.radius || 500) * 0.85;
+  const kx = 111320 * Math.cos(center.lat * Math.PI / 180), kz = 110574, key = `${c.seed}:${i}`;
+  const P = (clonePaths[key] ||= { r: rng(c.seed * 31 + i * 7919 + 1), segs: [], end: { x: (c.from.lng - center.lng) * kx, z: (c.from.lat - center.lat) * kz, t: c.at } });
+  const t = Math.min(now, c.at + 6 * 3600e3);
+  while (P.end.t < t) { // 다음 목적지: 게임 지역 안 아무 곳. 반쯤은 도착해서 잠깐(최대 25초) 쉰다
+    const a = P.r() * Math.PI * 2, d = Math.sqrt(P.r()) * R, x = Math.cos(a) * d, z = Math.sin(a) * d;
+    const rest = P.r() < 0.5 ? P.r() * 50000 : 0, t0 = P.end.t + rest, t1 = t0 + Math.hypot(x - P.end.x, z - P.end.z) / CLONE_SPEED * 1000;
+    P.segs.push({ x0: P.end.x, z0: P.end.z, x1: x, z1: z, ts: P.end.t, t0, t1 });
+    if (P.segs.length > 40) P.segs.shift();
+    P.end = { x, z, t: t1 };
+  }
+  const s = P.segs.find(g => t >= g.ts && t <= g.t1);
+  let x = P.end.x, z = P.end.z;
+  if (s) { const k = t < s.t0 ? 0 : (t - s.t0) / Math.max(1, s.t1 - s.t0); x = s.x0 + (s.x1 - s.x0) * k; z = s.z0 + (s.z1 - s.z0) * k; }
+  return { lat: center.lat + z / kz, lng: center.lng + x / kx };
+}
+const cloneMission = () => (isLive() ? Object.entries(G.missions).find(([, m]) => m.type === 'tag' && m.itHost && m.clones?.on && m.open !== false) : null);
+// 다른 사람에게는 분신술 중인 진행자 술래가 누군지(어디 있는지) 목록·찾기로 알려 주지 않는다
+const hiding = uid => uid !== net.me() && cloneMission()?.[1].itHost === uid;
+let shownClones = new Set();
+function syncClones() {
+  if (!G.code) return;
+  const e = cloneMission(), now = Date.now(), want = new Set();
+  if (e && W.frame()) {
+    const m = e[1], h = G.members[m.itHost];
+    if (h) for (let i = 0; i < (m.clones.n || 3); i++) {
+      const uid = 'clone:' + i;
+      want.add(uid);
+      if (!shownClones.has(uid)) W.upsertPlayer({ uid, name: h.name, avatar: h.avatar, robe: robeOf(m.itHost), color: colorOf(m.itHost), team: h.team, me: false, sub: m.itHost === net.me() ? '분신' : '술래' });
+      W.movePlayer(uid, { ...clonePos(m, i, now), acc: 5, t: now });
+    }
+  }
+  shownClones.forEach(u => !want.has(u) && W.removePlayer(u));
+  shownClones = want;
+}
+setInterval(syncClones, 1000);
 // 이름 뒤 을/를: 마지막 글자에 받침이 있으면 '을'
 const josa = s => { const c = String(s).slice(-1).charCodeAt(0) - 0xac00; return c >= 0 && c < 11172 && c % 28 ? '을' : '를'; };
 // 진행자 술래: 모든 팀이 진행자 한 명을 쫓는다. 잡은(인정받은) 팀은 점수, 다른 팀은 계속
@@ -926,7 +971,8 @@ function hostTagInfo(id, m, live) {
   const me = net.me(), t = myTeam(), d = G.done[t]?.[id], hn = G.members[m.itHost]?.name || '진행자';
   let role;
   if (!live) role = G.meta.status === 'ended' || timeUp() ? '게임이 끝났어요.' : '진행자가 게임을 시작하면 열려요.';
-  else if (me === m.itHost) role = `${ic('tag')} <b>내가 술래!</b> 모든 팀이 나를 찾아 사진을 찍으러 와요. 찍혀서 인정되면 그 팀이 ${m.pts || 0}점을 받아요.`;
+  else if (me === m.itHost) role = `${ic('tag')} <b>내가 술래!</b> 모든 팀이 나를 찾아 사진을 찍으러 와요. 찍혀서 인정되면 그 팀이 ${m.pts || 0}점을 받아요.`
+    + (m.clones?.on ? `<br>${ic('team')} 분신 ${m.clones.n}명이 돌아다니는 중이에요. 다른 사람 지도엔 모두 '술래'로 보이고, 조준 카메라 화살표만 진짜(나)를 가리켜요.` : '');
   else if (d?.status === 'ok') role = `${ic('check')} 우리 팀이 진행자 술래를 잡았어요! (+${m.pts || 0}점)`;
   else if (d?.status === 'wait') role = `${ic('wait')} 우리 팀이 올린 술래 사진을 확인하고 있어요.`;
   else if (!near(m)) role = `게임 지역(지도의 연두색 띠) 안으로 들어가면 술래 사진을 올릴 수 있어요.`;
@@ -935,7 +981,10 @@ function hostTagInfo(id, m, live) {
     ? `<select id="tagWho" hidden><option value="${esc(m.itHost)}">진행자 술래 ${esc(hn)}</option></select>
        <button class="btn wide primary" id="tagCam">${ic('aim')} 술래 조준해서 찍기</button>
        <label class="aim-alt">기본 카메라로 찍기<input type="file" accept="image/*" capture="environment" id="tagPhoto" hidden></label><p class="msg" id="qMsg"></p>` : '';
-  return `<div class="box">${ic('tag')} 진행자 술래 · <b>${esc(hn)}</b></div>${retryNote(m)}<div class="box">${role}</div>${up}`; // 팀마다 잡았는지는 미션 창 위의 팀 줄이 보여 준다
+  const clone = live && me === m.itHost
+    ? (m.clones?.on ? `<button class="btn wide" id="cloneOff">${ic('team')} 분신술 풀기</button>`
+      : `<div class="row"><select id="cloneN" style="flex:0 0 120px">${[2, 3, 4].map(n => `<option value="${n}" ${n === 3 ? 'selected' : ''}>분신 ${n}명</option>`).join('')}</select><button class="btn wide primary" id="cloneOn" style="margin-top:0">${ic('team')} 분신술 쓰기</button></div>`) : '';
+  return `<div class="box">${ic('tag')} 진행자 술래 · <b>${esc(hn)}</b></div>${retryNote(m)}<div class="box">${role}</div>${clone}${up}`; // 팀마다 잡았는지는 미션 창 위의 팀 줄이 보여 준다
 }
 function checkArrive() {
   if (!isLive() || !canPlay() || !myLL) return;
@@ -1042,6 +1091,21 @@ function openMission(id) {
       el.querySelector('#qMsg').textContent = '올리는 중…';
       try { await sendTag(await shrink(f), who); }
       catch (er) { el.querySelector('#qMsg').className = 'msg err'; el.querySelector('#qMsg').textContent = er.message === NOPE ? NOPE : '올리지 못했어요 (' + (er.code || er.message) + ')'; }
+    });
+    // 분신술: 지금 내 자리에서 분신들이 흩어진다
+    el.querySelector('#cloneOn')?.addEventListener('click', async () => {
+      const from = G.pos[net.me()] || myLL;
+      if (!from) { toast('위치 공유를 먼저 켜 주세요. 분신은 내 자리에서 흩어져요.'); return; }
+      const n = +el.querySelector('#cloneN').value || 3;
+      await net.saveMission(G.code, id, { ...m, clones: { on: true, n, seed: Math.floor(Math.random() * 1e9), at: Date.now(), from: { lat: from.lat, lng: from.lng } } });
+      net.say(G.code, '', `진행자 술래가 분신술을 썼어요! 분신 ${n}명 — 진짜를 찾아라`);
+      closeSheet(); toast(`분신 ${n}명이 흩어졌어요.`, 'team');
+    });
+    el.querySelector('#cloneOff')?.addEventListener('click', async () => {
+      const { clones, ...rest } = m;
+      await net.saveMission(G.code, id, rest);
+      net.say(G.code, '', '진행자 술래가 분신술을 풀었어요');
+      closeSheet();
     });
     el.querySelector('#tagCam')?.addEventListener('click', () => {
       startCompass();
