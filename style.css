@@ -459,3 +459,7 @@ label.btn{flex-direction:row;justify-content:center;align-items:center;gap:4px}
 .hrow.primary b{color:var(--gold2)}
 .hrow.danger b{color:var(--bad)}
 .hrow.danger{border-color:#4a2a22}
+
+/* 점수판: 이름 + 큰 점수만 */
+.score em small{display:inline;font-family:inherit;font-size:12px;color:var(--muted);margin-left:1px}
+.score em{font-variant-numeric:tabular-nums}
