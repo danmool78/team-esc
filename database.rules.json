@@ -33,6 +33,11 @@
           ".write": "auth != null && (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true)",
           "$key": { ".validate": "newData.isString() && newData.val().beginsWith('data:image/') && !newData.val().contains('\"') && !newData.val().contains('<')" }
         },
+        "banned": {
+          ".read": "auth != null && (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true)",
+          ".write": "auth != null && (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true)",
+          "$uid": { ".read": "auth != null && auth.uid === $uid" }
+        },
         "teams": {
           ".read": "auth != null && root.child('games/' + $g + '/members/' + auth.uid).exists()",
           ".write": "auth != null && (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true)"
@@ -41,14 +46,14 @@
           ".read": "auth != null && data.child(auth.uid).exists()",
           "$uid": {
             ".read": "auth != null && auth.uid === $uid",
-            ".write": "auth != null && (auth.uid === $uid || (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true)) && root.child('games/' + $g + '/meta').exists()",
+            ".write": "auth != null && ((auth.uid === $uid && !root.child('games/' + $g + '/banned/' + auth.uid).exists()) || (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true)) && root.child('games/' + $g + '/meta').exists()",
             "name": { ".validate": "newData.isString() && newData.val().length <= 12" }
           }
         },
         "pos": {
           ".read": "auth != null && root.child('games/' + $g + '/members/' + auth.uid).exists()",
           "$uid": {
-            ".write": "auth != null && auth.uid === $uid && root.child('games/' + $g + '/members/' + auth.uid).exists()",
+            ".write": "auth != null && ((auth.uid === $uid && root.child('games/' + $g + '/members/' + auth.uid).exists() && !root.child('games/' + $g + '/banned/' + auth.uid).exists()) || (!newData.exists() && (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true)))",
             ".validate": "newData.child('lat').isNumber() && newData.child('lng').isNumber()"
           }
         },

@@ -42,6 +42,11 @@ const feed = (code, team, text) => { const f = { id: 'f' + now() + Math.random()
 export const writePos = async (code, p) => { S.games[code].pos[ME] = { ...p, t: now() }; fire(code); };
 export const clearPos = async code => { delete S.games[code].pos[ME]; fire(code); };
 export const deleteGame = async code => { subs.delete(code); delete S.games[code]; };
+export const kick = async (code, who, name) => { const g = S.games[code]; delete g.members[who]; delete g.pos[who]; (g.banned ||= {})[who] = { name, t: now() }; fire(code); };
+export const unban = async (code, who) => { delete S.games[code].banned?.[who]; };
+export const bannedList = async code => ({ ...(S.games[code]?.banned || {}) });
+export const amBanned = async code => !!S.games[code]?.banned?.[ME];
+export const dropPresence = async () => {};
 export const setCohost = async (code, who, on) => { const m = S.games[code].meta; m.hosts ||= {}; if (on) m.hosts[who] = true; else delete m.hosts[who]; fire(code); };
 export const setStatus = async (code, s) => { const m = S.games[code].meta; m.status = s; if (s === 'ended') m.endedAt = now(); else delete m.endedAt; fire(code); };
 export const saveMeta = async (code, p) => { Object.assign(S.games[code].meta, p); fire(code); };
@@ -119,6 +124,7 @@ function seed() {
     moveExtras();
     BOTS.forEach(([id, name, , team]) => {
       const p = g.pos[id];
+      if (!p || !g.members[id]) return; // 진행자가 내보낸 가짜 참가자는 쉰다
       let mid = goals[id];
       if (!mid || !g.missions[mid] || g.done[team]?.[mid]) { // 지운 미션이면 새로 고른다
         const left = Object.keys(g.missions).filter(k => !g.missions[k].each && g.missions[k].type !== 'tag' && !g.done[team]?.[k]); // 가짜 참가자는 팀 미션만 (술래잡기는 빼고)

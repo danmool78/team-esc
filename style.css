@@ -441,3 +441,6 @@ label.btn{flex-direction:row;justify-content:center;align-items:center;gap:4px}
 .aim-nav small{display:block;font-size:12px;color:#ffcfcf}
 .aim-nav.near{background:rgba(255,77,77,.75);animation:aimNear .8s ease-in-out infinite}
 @keyframes aimNear{50%{box-shadow:0 0 0 8px rgba(255,77,77,.25)}}
+
+/* 사람 탭: 진행자의 내보내기 단추 */
+.kick{display:block;margin-top:4px;margin-left:auto;border:1px solid #5a2a22;background:none;color:var(--bad);border-radius:8px;padding:3px 8px;font-size:11.5px;cursor:pointer}

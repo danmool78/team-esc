@@ -16,6 +16,7 @@
      games/{code}/feed/{push}    { t, team, text }
      games/{code}/guide          { name, mode, endAt, teams[{name,color}], missions[{title,type,each,pts,desc,r,lat,lng,open}], at }
                                  미션 안내 페이지(guide.html?g=코드)용 요약 — 진행자 화면이 미션이 바뀔 때마다 써 둔다. 링크만 있으면 로그인 없이 읽는다(퀴즈 문제·정답은 뺀다)
+     games/{code}/banned/{uid}   { name, t } — 진행자가 내보낸 사람. 같은 코드로 다시 들어오지 못한다(본인은 자기 것만 읽어 내보내진 걸 안다)
      games/{code}/albumIdx/{key} { mid, title, who, color, t } — 사진 모음 페이지(album.html?g=코드): 진행자가 인정한 사진(사진·술래잡기)만
      games/{code}/album/{key}    그 사진(JPEG data URL) — key는 photos와 같다. 목록을 먼저 받고 사진은 하나씩 받게 따로 둔다. 둘 다 누구나 읽기 */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js';
@@ -92,6 +93,8 @@ export function watch(code, h) {
   const offs = ['meta', 'teams', 'members', 'pos', 'missions', 'done', 'pdone'].map(k => onValue(G(code, k), s => h[k]?.(s.val() || {})));
   let primed = false;
   offs.push(onChildAdded(query(G(code, 'feed'), limitToLast(40)), s => h.feed?.({ id: s.key, ...s.val() }, primed)));
+  // 내보내졌는지: 내 회원 자리가 지워지면 members를 읽을 권한도 사라지므로 따로 본다
+  offs.push(onValue(G(code, 'banned/' + uid()), s => s.exists() && h.kicked?.(), () => {}));
   get(G(code, 'feed')).then(() => setTimeout(() => (primed = true), 300));
   return () => offs.forEach(f => f());
 }
@@ -105,6 +108,13 @@ export async function deleteGame(code) {
   await remove(G(code));
 }
 // 진행자 더하기·빼기: 게임을 만든 진행자만 (규칙이 막는다)
+// 내보내기 (진행자): 회원·위치를 지우고 내보낸 명단에. 해낸 미션 기록은 남긴다(팀 점수)
+export const kick = (code, who, name) => update(G(code), { [`members/${who}`]: null, [`pos/${who}`]: null, [`banned/${who}`]: { name: name || '', t: serverTimestamp() } });
+export const unban = (code, who) => remove(G(code, 'banned/' + who));
+export const bannedList = async code => (await get(G(code, 'banned'))).val() || {};
+export const amBanned = async code => (await get(G(code, 'banned/' + uid())).catch(() => null))?.exists() || false;
+// 내보내져 나갈 때: 접속이 끊길 때 서버가 online=false를 써서 회원 자리를 되살리지 않게 미리 거둔다
+export const dropPresence = code => onDisconnect(G(code, `members/${uid()}/online`)).cancel().catch(() => {});
 export const setCohost = (code, who, on) => set(G(code, `meta/hosts/${who}`), on ? true : null);
 // 끝낸 시각(endedAt)을 함께 적는다 — 7일 지난 끝난 게임은 GitHub Actions가 매일 지운다(_src/cleanup.mjs)
 export const setStatus = (code, status) => update(G(code, 'meta'), { status, endedAt: status === 'ended' ? serverTimestamp() : null });
