@@ -255,6 +255,7 @@ async function enter(code) {
   const msg = $('#lobbyMsg');
   const meta = await net.gameMeta(code).catch(() => null);
   if (!meta) { msg.className = 'msg err'; msg.textContent = `'${code}' 게임을 찾지 못했어요.`; return; }
+  if (await net.amBanned(code)) { msg.className = 'msg err'; msg.textContent = '진행자가 이 게임에서 내보냈어요. 다시 들어가려면 진행자에게 말해 주세요.'; store.set('lastGame', null); return; }
   msg.className = 'msg'; msg.textContent = '들어가는 중…';
   try { await net.joinGame(code, profile); }
   catch (er) { msg.className = 'msg err'; msg.textContent = `들어가지 못했어요 (${er.code || er.message}). 진행자에게 알려 주세요.`; return; }
@@ -272,7 +273,9 @@ async function enter(code) {
   G.off = net.watch(code, {
     meta: v => { if (!v.host && G.meta.host) { leaveGame('진행자가 게임을 지웠어요.'); return; } G.meta = v; onMeta(); }, // 게임이 지워지면 로비로
     teams: v => { G.teams = v; refresh(); },
-    members: v => { G.members = v; refresh(); },
+    // 이름 없는 자리는 거른다 (내보낸 사람의 접속 표시가 늦게 되살아나는 경우)
+    members: v => { G.members = Object.fromEntries(Object.entries(v).filter(([, m]) => m?.name)); refresh(); },
+    kicked: () => { net.dropPresence(code); leaveGame('진행자가 게임에서 내보냈어요.'); },
     pos: v => { G.pos = v; syncPlayers(); if (tab === 'people') renderPanel(); },
     missions: v => { G.missions = v; refresh(); checkArrive(); },
     done: v => { G.done = v; refresh(); },
@@ -428,6 +431,7 @@ function renderPanel() {
   el.querySelector('#seeResult')?.addEventListener('click', showResults);
   el.querySelectorAll('[data-m]').forEach(n => (n.onclick = () => openMission(n.dataset.m)));
   el.querySelectorAll('[data-u]').forEach(n => (n.onclick = () => focusPlayer(n.dataset.u)));
+  el.querySelectorAll('[data-kick]').forEach(n => (n.onclick = e => { e.stopPropagation(); kickSheet(n.dataset.kick); }));
   el.querySelectorAll('[data-t]').forEach(n => (n.onclick = () => focusTeam(n.dataset.t)));
   if (tab === 'host') bindHost(el);
 }
@@ -457,7 +461,7 @@ function peopleList() {
     return `<div class="item" data-u="${uid}"><img class="mini" src="${thumb(m.avatar, uid)}" alt="">
       <div class="tx"><b>${solo() ? `<span class="dot" style="background:${personColor(uid)}"></span> ` : ''}${esc(m.name)}${uid === net.me() ? ' (나)' : ''}${isHostUid(uid) ? ' · 진행자' : ''}</b>
       <small><span class="dot ${live ? 'on-dot' : 'off-dot'}"></span> ${p ? (live ? '위치 공유 중' : ago(p.t) + ' 위치') : '위치 없음'}${s.n ? ` · ${solo() ? '' : '개인 '}${s.n}개 ${s.pts}점` : ''}</small></div>
-      <div class="rt">${myLL && p && uid !== net.me() ? fmtDist(dist(myLL, p)) : ''}</div></div>`;
+      <div class="rt">${myLL && p && uid !== net.me() ? fmtDist(dist(myLL, p)) : ''}${canKick(uid) ? `<button class="kick" data-kick="${uid}">내보내기</button>` : ''}</div></div>`;
   };
   // 개인전: 점수 순으로 한 줄. 팀전: 팀별로 묶는다
   if (solo()) return Object.entries(G.members).sort(([a], [b]) => personScore(b).pts - personScore(a).pts).map(row).join('');
@@ -492,6 +496,30 @@ findEl.onkeydown = e => { if (e.key === 'Enter') { const r = finds(findEl.value)
 const closeFind = () => { findsEl.hidden = true; findEl.value = ''; findEl.blur(); };
 document.addEventListener('pointerdown', e => { if (!e.target.closest('.finder')) findsEl.hidden = true; });
 
+/* ---------- 내보내기 (진행자) ---------- */
+// 진행자는 진행자가 아닌 참가자를 내보낼 수 있다(진행자는 먼저 진행자에서 빼야). 해낸 미션 기록은 팀 점수로 남는다
+const canKick = uid => isHost() && uid !== net.me() && !isHostUid(uid);
+function kickSheet(uid) {
+  const m = G.members[uid];
+  if (!m) return;
+  const it = Object.values(G.missions).some(x => x.type === 'tag' && Object.values(x.it || {}).includes(uid));
+  openSheet(`<p class="eyebrow">내보내기</p><h3>${esc(m.name)} 님을 게임에서 내보낼까요?</h3>
+    <p class="fine">지도와 사람 목록에서 사라지고, 같은 코드로 다시 들어오지 못해요. 이미 해낸 미션 점수는 팀에 남아요. 실수였다면 진행 탭 '내보낸 사람'에서 다시 들일 수 있어요.</p>
+    ${it ? `<div class="box warn">${ic('tag')} 술래잡기의 술래예요. 내보낸 뒤 미션 관리에서 술래를 다시 정해 주세요.</div>` : ''}
+    <div class="row"><button class="btn wide danger" id="kickYes">내보내기</button><button class="btn wide" id="kickNo">그만두기</button></div><p class="msg" id="kickMsg"></p>`, s => {
+    s.querySelector('#kickNo').onclick = closeSheet;
+    s.querySelector('#kickYes').onclick = async () => {
+      try { await net.kick(G.code, uid, m.name); closeSheet(); toast(`${m.name} 님을 내보냈어요.`); }
+      catch (er) { s.querySelector('#kickMsg').className = 'msg err'; s.querySelector('#kickMsg').textContent = '내보내지 못했어요 (' + (er.code || er.message) + ')'; }
+    };
+  });
+}
+async function bannedSheet() {
+  const list = Object.entries(await net.bannedList(G.code).catch(() => ({})));
+  openSheet(`<p class="eyebrow">내보낸 사람</p><h3>${list.length ? `${list.length}명` : '내보낸 사람이 없어요'}</h3>
+    ${list.length ? `<p class="fine">다시 들이면 같은 코드로 들어올 수 있어요. 팀은 들어와서 다시 골라요.</p>` + list.map(([u, b]) => `<div class="item"><div class="tx"><b>${esc(b.name || '이름 없음')}</b><small>${clock(b.t)}에 내보냄</small></div><div class="rt"><button class="btn small" data-unban="${u}">다시 들이기</button></div></div>`).join('') : ''}`, s =>
+    s.querySelectorAll('[data-unban]').forEach(b => (b.onclick = async () => { await net.unban(G.code, b.dataset.unban); toast('다시 들어올 수 있어요.'); bannedSheet(); })));
+}
 function focusPlayer(uid) {
   const p = G.pos[uid], m = G.members[uid];
   if (!p) { toast(`${m?.name || ''} 님은 아직 위치를 공유하지 않았어요.`); return; }
@@ -1165,6 +1193,7 @@ function hostPanel() {
       <button class="btn small" id="hTeams">${ic('team')} ${solo() ? '방식·팀' : '팀 정하기'}</button>
       <button class="btn small" id="hEndAt">${ic('clock')} 끝나는 시간</button>
       <button class="btn small" id="hNotice">${ic('megaphone')} 알림 보내기</button>
+      <button class="btn small" id="hBanned">${ic('team')} 내보낸 사람</button>
       <button class="btn small" id="hArea">${ic('map')} 지역 바꾸기</button>
       ${isOwner() ? `<button class="btn small" id="hHosts">${ic('crown')} 진행자 더하기</button>` : ''}
     </div>
@@ -1381,6 +1410,7 @@ function bindHost(el) {
     };
   }));
   el.querySelector('#hHosts')?.addEventListener('click', hostEditor);
+  el.querySelector('#hBanned')?.addEventListener('click', bannedSheet);
   el.querySelector('#hNotice')?.addEventListener('click', () => openSheet(`<h3>모두에게 알림</h3><form class="stack" id="nf"><input id="nt" placeholder="예: 10분 뒤 광장에 모여요" required><button class="btn primary">보내기</button></form>`,
     s => (s.querySelector('#nf').onsubmit = async e => { e.preventDefault(); await net.say(G.code, '', s.querySelector('#nt').value.trim()); closeSheet(); })));
   el.querySelectorAll('[data-judge]').forEach(n => (n.onclick = () => judgeSheet(...n.dataset.judge.split('|'))));
