@@ -8,7 +8,7 @@ export const SAMPLES = {
     missions: [
       { title: '전주공예품전시관', type: 'arrive', each: true, lat: 35.814682, lng: 127.153026, r: 30, pts: 10, desc: '도착하면 저절로 완료돼요.' },
       { title: '경기전 홍살문 단체 사진', type: 'photo', lat: 35.814521, lng: 127.149845, r: 25, pts: 20, desc: '홍살문 앞에서 팀원 모두 나오게 찍어 올려요.' },
-      { title: '경기전 퀴즈', type: 'quiz', each: true, lat: 35.81547, lng: 127.149856, r: 50, pts: 10, open: false, desc: '경기전 안에서 문제를 맞혀요.', q: '경기전에 모신 어진(왕의 초상화)의 주인공은? (두 글자 묘호)', ans: '태조' },
+      { title: '경기전 퀴즈', type: 'quiz', each: true, lat: 35.81547, lng: 127.149856, r: 50, pts: 10, open: false, desc: '경기전 안에서 문제를 맞혀요.', q: '경기전에 있는 어진(왕의 초상화)의 주인공은? (두 글자 묘호)', ans: '태조' },
       { title: '전동성당 팀 구호', type: 'photo', lat: 35.81333, lng: 127.14946, r: 25, pts: 30, desc: '성당을 배경으로 팀 포즈를 찍어 올려요.' },
       { title: '전주한옥마을 역사관 퀴즈', type: 'quiz', lat: 35.815959, lng: 127.153015, r: 30, pts: 20, desc: '', q: '풍남동, 교동 일대가 한옥보존지구로 지정된 년도는? (4자)', ans: '1977' },
       { title: '오목대 팀 응원가', type: 'voice', lat: 35.814383, lng: 127.154502, r: 40, pts: 50, desc: '정자에 올라 팀 응원가를 한 소절 녹음해 보내요.' },
