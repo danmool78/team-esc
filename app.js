@@ -362,11 +362,12 @@ function standings() {
   rows.forEach((r, i) => (r.rank = i && r.pts === rows[i - 1].pts && r.n === rows[i - 1].n ? rows[i - 1].rank : i + 1));
   return rows;
 }
+// 점수판: 팀(개인전은 사람)마다 점수만 — 'n/전체' 미션 수는 팀 인원으로 읽히고 개인 미션이 빠져 헷갈렸다
 function renderScores() {
   const rows = standings();
   $('#scores').innerHTML = rows.map(r => `
     <div class="score ${r.mine ? 'mine' : ''} ${lastPts[r.key] != null && r.pts > lastPts[r.key] ? 'bump' : ''}" data-${r.kind}="${r.id}">
-      <i style="background:${esc(r.color)}"></i><div><b>${esc(r.name)}</b><small>${r.pts}점</small></div><em>${r.n}</em><small>/${r.total}</small>
+      <i style="background:${esc(r.color)}"></i><b>${esc(r.name)}</b><em>${r.pts}<small>점</small></em>
     </div>`).join('');
   lastPts = Object.fromEntries(rows.map(r => [r.key, r.pts]));
   document.querySelectorAll('.score').forEach(el => {
