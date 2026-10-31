@@ -31,6 +31,12 @@
   figcaption{display:flex;align-items:center;gap:6px;padding:6px 9px;font-size:12.5px;color:#dfe4f2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   figcaption i{width:9px;height:9px;border-radius:50%;flex:none}
   .empty{color:var(--muted);text-align:center;padding:30px 0}
+  .recs{display:grid;gap:10px}
+  .rec{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;background:rgba(255,255,255,.05);border-radius:12px;padding:10px 12px}
+  .rec .who{display:flex;align-items:center;gap:6px;font-size:15px;min-width:90px}
+  .rec .who i{width:10px;height:10px;border-radius:50%;flex:none}
+  .rec audio{flex:1;min-width:200px;height:40px}
+  .rec .st{color:var(--muted);font-size:13px}
   #lb{position:fixed;inset:0;background:rgba(4,6,14,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px;z-index:9}
   #lb[hidden]{display:none}
   #lb img{max-width:100%;max-height:calc(100vh - 140px);border-radius:10px;object-fit:contain}
@@ -50,7 +56,7 @@
   </header>
   <nav class="jump" id="jump"></nav>
   <div id="body"></div>
-  <footer>진행자가 인정한 사진만 모았어요. 게임이 끝나고 7일 뒤 서버에서 지워지니, 남기고 싶은 사진은 저장해 두세요.<br>© 2026 SSSOFT · <a href="privacy.html" style="color:inherit">개인정보처리방침</a></footer>
+  <footer>진행자가 인정한 사진과 녹음만 모았어요. 게임이 끝나고 7일 뒤 서버에서 지워지니, 남기고 싶은 사진은 저장해 두세요.<br>© 2026 SSSOFT · <a href="privacy.html" style="color:inherit">개인정보처리방침</a></footer>
 </main>
 <div id="lb" hidden><img alt=""><div class="cap"></div><div class="bar"><button id="lbPrev">‹ 이전</button><a id="lbSave" download>저장</a><button id="lbNext">다음 ›</button><button id="lbX">닫기</button></div></div>
 <script type="module">
@@ -65,6 +71,7 @@ const DEMO = q.has('demo');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const $ = s => document.querySelector(s);
 const safe = u => (typeof u === 'string' && /^data:image\/[\w.+-]+;base64,[A-Za-z0-9+/=]+$/.test(u) ? u : ''); // 그림 data URL만 (저장 링크·배경으로 쓰므로)
+const safeAudio = u => (typeof u === 'string' && /^data:audio\/[\w.+-]+(;[\w.+=-]+)*;base64,[A-Za-z0-9+/=]+$/.test(u) ? u : ''); // 음성 녹음
 let src; // { name, idx, photo(key) }
 
 async function load() {
@@ -74,8 +81,15 @@ async function load() {
     const idx = {};
     ms.forEach((title, i) => teams.forEach(([n, c], j) => { if ((i + j) % 4 !== 3) idx[`t${j}_m${i}`] = { mid: 'm' + i, title, who: n, color: c, t: Date.now() - (i * 3 + j) * 6e5 }; }));
     idx.u_a_m2 = { mid: 'm2', title: ms[2], who: '청팀 · 다윗', color: '#4f8de8', t: Date.now() };
+    ['청팀', '홍팀'].forEach((n, j) => (idx[`t${j}_mv`] = { mid: 'mv', title: '오목대 팀 응원가', who: n, color: ['#4f8de8', '#e8574f'][j], t: Date.now(), kind: 'audio' }));
     // 미션·팀마다 다른 색 그림 (실제 사진 대신)
     const photo = async key => {
+      if (idx[key].kind === 'audio') { // 0.6초 삐 소리 WAV
+        const sr = 8000, n = sr * 0.6, b = new Uint8Array(44 + n), v = new DataView(b.buffer), w = (o, s) => [...s].forEach((c, i) => (b[o + i] = c.charCodeAt(0)));
+        w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, sr, true); v.setUint32(28, sr, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true); w(36, 'data'); v.setUint32(40, n, true);
+        for (let i = 0; i < n; i++) b[44 + i] = 128 + Math.round(40 * Math.sin(i / sr * 2 * Math.PI * 523));
+        let s = ''; b.forEach(c => (s += String.fromCharCode(c))); return 'data:audio/wav;base64,' + btoa(s);
+      }
       const x = idx[key], cv = Object.assign(document.createElement('canvas'), { width: 480, height: 480 }), g = cv.getContext('2d');
       const gr = g.createLinearGradient(0, 0, 480, 480); gr.addColorStop(0, x.color); gr.addColorStop(1, '#1b2340');
       g.fillStyle = gr; g.fillRect(0, 0, 480, 480);
@@ -95,16 +109,19 @@ function render() {
   const items = Object.entries(src.idx).map(([key, x]) => ({ key, ...x }));
   $('#gName').textContent = src.name ? `${src.name} 사진 모음` : '사진 모음';
   if (src.name) document.title = `${src.name} 사진 모음 · 비전 퀘스트`;
-  $('#gSub').textContent = `${code ? `게임 코드 ${code} · ` : ''}사진 ${items.length}장`;
-  if (!items.length) { $('#body').innerHTML = '<section><p class="empty">아직 인정된 사진이 없어요.</p></section>'; return; }
+  const nA = items.filter(x => x.kind === 'audio').length, nP = items.length - nA;
+  $('#gSub').textContent = `${code ? `게임 코드 ${code} · ` : ''}사진 ${nP}장${nA ? ` · 녹음 ${nA}개` : ''}`;
+  if (!items.length) { $('#body').innerHTML = '<section><p class="empty">아직 인정된 사진·녹음이 없어요.</p></section>'; return; }
   // 미션별로 묶고, 미션 순서는 안내 페이지 순서(없으면 처음 올라온 순)
   const groups = new Map();
   items.sort((a, b) => a.t - b.t).forEach(x => { if (!groups.has(x.mid)) groups.set(x.mid, []); groups.get(x.mid).push(x); });
   const pos = t => { const i = src.order?.indexOf(t); return i >= 0 ? i : 1e3; };
   const list = [...groups.values()].sort((a, b) => pos(a[0].title) - pos(b[0].title));
   $('#jump').innerHTML = list.map((g, i) => `<a href="#s${i}">${esc(g[0].title)}<b>${g.length}</b></a>`).join('');
-  $('#body').innerHTML = list.map((g, i) => `<section id="s${i}"><h2>${ic(g[0].title.startsWith('술래') ? 'tag' : 'camera')}${esc(g[0].title)}<small>${g.length}장</small></h2>
-    <div class="grid">${g.map(x => `<figure data-k="${esc(x.key)}"><div class="ph">불러오는 중…</div><figcaption><i style="background:${esc(x.color)}"></i>${esc(x.who)}</figcaption></figure>`).join('')}</div></section>`).join('');
+  // 녹음(kind audio)은 재생 막대로, 사진은 격자로
+  $('#body').innerHTML = list.map((g, i) => { const aud = g[0].kind === 'audio'; return `<section id="s${i}"><h2>${ic(aud ? 'mic' : g[0].title.startsWith('술래') ? 'tag' : 'camera')}${esc(g[0].title)}<small>${g.length}${aud ? '개' : '장'}</small></h2>
+    ${aud ? `<div class="recs">${g.map(x => `<div class="rec" data-a="${esc(x.key)}"><span class="who"><i style="background:${esc(x.color)}"></i>${esc(x.who)}</span><audio controls preload="none"></audio><small class="st">불러오는 중…</small></div>`).join('')}</div>`
+      : `<div class="grid">${g.map(x => `<figure data-k="${esc(x.key)}"><div class="ph">불러오는 중…</div><figcaption><i style="background:${esc(x.color)}"></i>${esc(x.who)}</figcaption></figure>`).join('')}</div>`}</section>`; }).join('');
   // 화면 가까이 온 사진만 받는다
   const urls = {};
   const io = new IntersectionObserver(es => es.forEach(e => {
@@ -116,6 +133,15 @@ function render() {
   }), { rootMargin: '400px' });
   const figs = [...document.querySelectorAll('figure')];
   figs.forEach(f => io.observe(f));
+  // 녹음: 화면 가까이 오면 받아 재생 막대에 넣는다
+  const ia = new IntersectionObserver(es => es.forEach(e => {
+    if (!e.isIntersecting) return;
+    ia.unobserve(e.target);
+    const k = e.target.dataset.a, st = e.target.querySelector('.st');
+    Promise.resolve(src.photo(k)).then(u => { u = safeAudio(u); if (!u) { st.textContent = '녹음이 없어요'; return; } e.target.querySelector('audio').src = u; st.remove(); })
+      .catch(() => (st.textContent = '불러오지 못했어요'));
+  }), { rootMargin: '400px' });
+  document.querySelectorAll('.rec[data-a]').forEach(r => ia.observe(r));
   // 크게 보기: 이전·다음·저장
   let cur = -1;
   const open = i => {

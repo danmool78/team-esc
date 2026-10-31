@@ -31,7 +31,7 @@
         "album": {
           ".read": true,
           ".write": "auth != null && (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true)",
-          "$key": { ".validate": "newData.isString() && newData.val().beginsWith('data:image/') && !newData.val().contains('\"') && !newData.val().contains('<')" }
+          "$key": { ".validate": "newData.isString() && newData.val().length < 400000 && (newData.val().beginsWith('data:image/') || newData.val().beginsWith('data:audio/')) && !newData.val().contains('\"') && !newData.val().contains('<')" }
         },
         "banned": {
           ".read": "auth != null && (root.child('games/' + $g + '/meta/host').val() === auth.uid || root.child('games/' + $g + '/meta/hosts/' + auth.uid).val() === true)",

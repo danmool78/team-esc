@@ -1459,13 +1459,14 @@ const albumLink = () => `${location.origin}${location.pathname.replace(/[^/]*$/,
 const approvedPhotos = () => [
   ...Object.entries(G.done).flatMap(([tid, ms]) => Object.entries(ms || {}).map(([mid, d]) => [tid + '_' + mid, mid, null, tid, d])),
   ...Object.entries(G.pdone).flatMap(([uid, ms]) => Object.entries(ms || {}).map(([mid, d]) => ['u_' + uid + '_' + mid, mid, uid, d.team, d])),
-].filter(([, mid, , , d]) => d?.status === 'ok' && ['photo', 'tag'].includes(G.missions[mid]?.type));
+].filter(([, mid, , , d]) => d?.status === 'ok' && ['photo', 'tag', 'voice'].includes(G.missions[mid]?.type)); // 음성(노래·구호) 녹음도 함께
 async function albumPut(key, mid, uid, tid, d) {
   const url = safeData(await net.getPhoto(G.code, key.slice(0, -(mid.length + 1)), mid));
-  if (!url.startsWith('data:image/')) return false;
+  const audio = url.startsWith('data:audio/');
+  if (!url.startsWith('data:image/') && !audio) return false;
   const m = G.missions[mid] || {};
   const who = solo() ? d?.name || '' : `${teamOf(tid).name}${uid ? ' · ' + (d?.name || '') : ''}`;
-  await net.albumAdd(G.code, key, { mid, title: m.title || '', who, color: solo() && uid ? personColor(uid) : teamOf(tid).color, t: d?.t || Date.now() }, url);
+  await net.albumAdd(G.code, key, { mid, title: m.title || '', who, color: solo() && uid ? personColor(uid) : teamOf(tid).color, t: d?.t || Date.now(), ...(audio ? { kind: 'audio' } : {}) }, url);
   return true;
 }
 // 이 기능 전에 인정한 사진도 모으고, 지운 미션·취소된 사진은 뺀다
@@ -1478,13 +1479,13 @@ async function albumSync() {
 }
 function albumSheet() {
   const link = albumLink();
-  openSheet(`<p class="eyebrow">사진 모음 페이지</p><h3>인정된 사진을 미션별로 한눈에</h3>
-    <p class="fine">진행자가 인정한 사진(사진·술래잡기 미션)이 미션마다 모여요. 링크만 있으면 로그인 없이 볼 수 있고, 새로 인정하는 사진도 저절로 더해져요.</p>
+  openSheet(`<p class="eyebrow">사진 모음 페이지</p><h3>인정된 사진·녹음을 미션별로 한눈에</h3>
+    <p class="fine">진행자가 인정한 사진(사진·술래잡기 미션)과 음성 녹음(노래·구호)이 미션마다 모여요. 링크만 있으면 로그인 없이 볼 수 있고, 새로 인정하는 사진도 저절로 더해져요.</p>
     <div class="box" id="alN">사진을 모으는 중…</div>
     <input readonly value="${esc(link)}" onclick="this.select()">
     <div class="row"><button class="btn wide primary" id="aShare">${ic('megaphone')} 보내기</button><button class="btn wide" id="aCopy">링크 복사</button></div>
     <a class="btn wide" style="display:block;text-align:center;text-decoration:none;color:inherit" href="${esc(link)}" target="_blank" rel="noopener">사진 모음 열어 보기</a>`, s => {
-    albumSync().then(n => { s.querySelector('#alN').innerHTML = `${ic('camera')} 인정된 사진 ${n}장`; })
+    albumSync().then(n => { s.querySelector('#alN').innerHTML = `${ic('camera')} 인정된 사진·녹음 ${n}개`; })
       .catch(er => { s.querySelector('#alN').textContent = '사진을 모으지 못했어요 (' + (er.code || er.message) + ')'; });
     s.querySelector('#aCopy').onclick = () => { navigator.clipboard?.writeText(link); toast('사진 모음 링크를 복사했어요.'); };
     s.querySelector('#aShare').onclick = () => navigator.share ? navigator.share({ title: `${G.meta.name || '비전 퀘스트'} 사진 모음`, url: link }).catch(() => {})
@@ -1556,7 +1557,7 @@ async function judgeSheet(kind, who, mid) {
     el.querySelector('#jOk').onclick = async () => {
       if (m.type === 'tag' && tagWinner(mid)) { toast(`이미 ${teamOf(tagWinner(mid)).name}이 이겼어요.`); return; }
       await judge(true);
-      if (m.type === 'photo' || m.type === 'tag') albumPut(key + '_' + mid, mid, kind === 'u' ? who : null, tid, d).catch(() => {}); // key는 photos 앞부분(팀 또는 u_사람)
+      if (m.type === 'photo' || m.type === 'tag' || m.type === 'voice') albumPut(key + '_' + mid, mid, kind === 'u' ? who : null, tid, d).catch(() => {}); // key는 photos 앞부분(팀 또는 u_사람)
       net.say(G.code, tid || '', m.type === 'tag' ? (m.itHost ? `${label} — 진행자 술래 ${G.members[d?.caught]?.name || ''} 잡았다! +${m.pts || 0}점` : `${label} — ${teamOf(G.members[d?.caught]?.team).name} 술래 ${G.members[d?.caught]?.name || ''} 잡았다! '${m.title}' 승리`) : `${label} — '${m.title}' 완료!`);
       closeSheet();
     };
