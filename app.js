@@ -1489,7 +1489,8 @@ function albumSheet() {
     <div class="box" id="alN">사진을 모으는 중…</div>
     <input readonly value="${esc(link)}" onclick="this.select()">
     <div class="row"><button class="btn wide primary" id="aShare">${ic('megaphone')} 보내기</button><button class="btn wide" id="aCopy">링크 복사</button></div>
-    <a class="btn wide" style="display:block;text-align:center;text-decoration:none;color:inherit" href="${esc(link)}" target="_blank" rel="noopener">사진 모음 열어 보기</a>`, s => {
+    <a class="btn wide" style="display:block;text-align:center;text-decoration:none;color:inherit" href="${esc(link)}" target="_blank" rel="noopener">사진 모음 열어 보기 · 전부 내려받기</a>
+    <p class="fine">게임을 지우거나 끝나고 7일이 지나면 사진 모음도 사라져요. 남길 것은 사진 모음 페이지의 '전부 내려받기'로 zip 파일 하나에 받아 두세요.</p>`, s => {
     albumSync().then(n => { s.querySelector('#alN').innerHTML = `${ic('camera')} 인정된 사진·녹음 ${n}개`; })
       .catch(er => { s.querySelector('#alN').textContent = '사진을 모으지 못했어요 (' + (er.code || er.message) + ')'; });
     s.querySelector('#aCopy').onclick = () => { navigator.clipboard?.writeText(link); toast('사진 모음 링크를 복사했어요.'); };

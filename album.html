@@ -31,6 +31,10 @@
   figcaption{display:flex;align-items:center;gap:6px;padding:6px 9px;font-size:12.5px;color:#dfe4f2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   figcaption i{width:9px;height:9px;border-radius:50%;flex:none}
   .empty{color:var(--muted);text-align:center;padding:30px 0}
+  .dlbar{text-align:center;margin:0 0 14px}
+  .dlbar button{border:0;border-radius:12px;padding:13px 22px;font:inherit;font-size:17px;font-weight:700;background:linear-gradient(#f6d684,#d9a440);color:#2a1d08;cursor:pointer}
+  .dlbar button:disabled{opacity:.6;cursor:default}
+  .dlbar p{margin:8px 0 0;color:var(--muted);font-size:14px;min-height:1em}
   .recs{display:grid;gap:10px}
   .rec{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;background:rgba(255,255,255,.05);border-radius:12px;padding:10px 12px}
   .rec .who{display:flex;align-items:center;gap:6px;font-size:15px;min-width:90px}
@@ -54,6 +58,7 @@
     <h1 id="gName">사진 모음</h1>
     <div class="sub" id="gSub">불러오는 중…</div>
   </header>
+  <div class="dlbar" id="dlbar" hidden><button id="dlAll">전부 내려받기</button><p id="dlMsg"></p></div>
   <nav class="jump" id="jump"></nav>
   <div id="body"></div>
   <footer>진행자가 인정한 사진과 녹음만 모았어요. 게임이 끝나고 7일 뒤 서버에서 지워지니, 남기고 싶은 사진은 저장해 두세요.<br>© 2026 SSSOFT · <a href="privacy.html" style="color:inherit">개인정보처리방침</a></footer>
@@ -112,6 +117,8 @@ function render() {
   const nA = items.filter(x => x.kind === 'audio').length, nP = items.length - nA;
   $('#gSub').textContent = `${code ? `게임 코드 ${code} · ` : ''}사진 ${nP}장${nA ? ` · 녹음 ${nA}개` : ''}`;
   if (!items.length) { $('#body').innerHTML = '<section><p class="empty">아직 인정된 사진·녹음이 없어요.</p></section>'; return; }
+  $('#dlbar').hidden = false;
+  $('#dlAll').onclick = () => downloadAll(items);
   // 미션별로 묶고, 미션 순서는 안내 페이지 순서(없으면 처음 올라온 순)
   const groups = new Map();
   items.sort((a, b) => a.t - b.t).forEach(x => { if (!groups.has(x.mid)) groups.set(x.mid, []); groups.get(x.mid).push(x); });
@@ -158,6 +165,57 @@ function render() {
   $('#lbX').onclick = () => ($('#lb').hidden = true);
   $('#lb').onclick = e => { if (e.target.id === 'lb') $('#lb').hidden = true; };
   addEventListener('keydown', e => { if ($('#lb').hidden) return; if (e.key === 'Escape') $('#lb').hidden = true; if (e.key === 'ArrowLeft') open(cur - 1); if (e.key === 'ArrowRight') open(cur + 1); });
+}
+
+/* ---------- 전부 내려받기: 사진·녹음을 zip 하나로 ----------
+   라이브러리 없이 '그대로 담기(stored)' zip을 만든다 — JPEG·녹음은 이미 압축돼 있어 더 줄지 않는다.
+   파일 이름은 '미션/팀·이름 (n).jpg', 한글 이름이 깨지지 않게 UTF-8 표시(bit 11)를 켠다 */
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = b => { let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+function makeZip(files) {
+  const enc = new TextEncoder(), parts = [], dir = [];
+  let off = 0;
+  const d = new Date(), dt = ((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)), dd = (((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate());
+  for (const f of files) {
+    const name = enc.encode(f.name), crc = crc32(f.data), n = f.data.length;
+    const h = new DataView(new ArrayBuffer(30));
+    [[0, 0x04034b50, 4], [4, 20, 2], [6, 0x0800, 2], [8, 0, 2], [10, dt, 2], [12, dd, 2], [14, crc, 4], [18, n, 4], [22, n, 4], [26, name.length, 2], [28, 0, 2]].forEach(([o, v, s]) => (s === 4 ? h.setUint32(o, v, true) : h.setUint16(o, v, true)));
+    parts.push(new Uint8Array(h.buffer), name, f.data);
+    const c = new DataView(new ArrayBuffer(46));
+    [[0, 0x02014b50, 4], [4, 20, 2], [6, 20, 2], [8, 0x0800, 2], [10, 0, 2], [12, dt, 2], [14, dd, 2], [16, crc, 4], [20, n, 4], [24, n, 4], [28, name.length, 2], [30, 0, 2], [32, 0, 2], [34, 0, 2], [36, 0, 2], [38, 0, 4], [42, off, 4]].forEach(([o, v, s]) => (s === 4 ? c.setUint32(o, v, true) : c.setUint16(o, v, true)));
+    dir.push(new Uint8Array(c.buffer), name);
+    off += 30 + name.length + n;
+  }
+  const size = dir.reduce((a, p) => a + p.length, 0), e = new DataView(new ArrayBuffer(22));
+  [[0, 0x06054b50, 4], [8, files.length, 2], [10, files.length, 2], [12, size, 4], [16, off, 4], [20, 0, 2]].forEach(([o, v, s]) => (s === 4 ? e.setUint32(o, v, true) : e.setUint16(o, v, true)));
+  return new Blob([...parts, ...dir, new Uint8Array(e.buffer)], { type: 'application/zip' });
+}
+const fromDataUrl = u => { const [head, b64] = u.split(','), bin = atob(b64), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return { mime: head.slice(5).split(';')[0], data: a }; };
+const EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'audio/webm': 'webm', 'audio/mp4': 'm4a', 'audio/ogg': 'ogg', 'audio/wav': 'wav', 'audio/mpeg': 'mp3' };
+const clean = s => String(s || '').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 60) || '이름 없음';
+async function downloadAll(items) {
+  const btn = $('#dlAll'), msg = $('#dlMsg');
+  btn.disabled = true;
+  const files = [], used = new Set();
+  let i = 0, miss = 0;
+  for (const x of items) {
+    msg.textContent = `모으는 중… ${++i} / ${items.length}`;
+    let u = await Promise.resolve(src.photo(x.key)).catch(() => null);
+    u = x.kind === 'audio' ? safeAudio(u) : safe(u);
+    if (!u) { miss++; continue; }
+    const { mime, data } = fromDataUrl(u);
+    let base = `${clean(x.title)}/${clean(x.who)}`, name = `${base}.${EXT[mime] || 'bin'}`, k = 2;
+    while (used.has(name)) name = `${base} (${k++}).${EXT[mime] || 'bin'}`;
+    used.add(name); files.push({ name, data });
+  }
+  if (!files.length) { msg.textContent = '내려받을 사진·녹음이 없어요.'; btn.disabled = false; return; }
+  const blob = makeZip(files), a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `vision-quest-album-${code || 'demo'}.zip`; // 영문 이름: 일부 브라우저가 한글 파일 이름을 바꿔 버린다
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  msg.textContent = `${files.length}개를 zip 파일 하나로 내려받았어요 (${(blob.size / 1048576).toFixed(1)}MB)${miss ? ` · ${miss}개는 불러오지 못했어요` : ''}. 카카오톡 안에서 안 되면 바깥 브라우저로 열어 주세요.`;
+  btn.disabled = false;
 }
 
 load().then(s => {
