@@ -450,6 +450,8 @@ function missionList() {
   const banner = isOver() ? `<button class="banner" id="seeResult">${ic('trophy')} 게임이 끝났어요 — 결과 보기</button>` : '';
   return banner + missionItems(list);
 }
+// 목록의 팀·개인 표시. 술래잡기는 누가 술래인지(진행자 / 팀마다) — 진행자 술래로 바꿔도 '팀'으로 남던 것을 고쳤다
+const kindBadge = m => (solo() ? '' : m.type === 'tag' ? `<span class="kind team">${m.itHost ? '진행자 술래' : '팀마다 술래'}</span> ` : `<span class="kind ${m.each ? 'each' : 'team'}">${m.each ? '개인' : '팀'}</span> `);
 function missionItems(list) {
   if (!list.length) return `<p class="empty">아직 미션이 없어요.${isHost() ? '<br>진행 탭 「미션 관리」에서 미션을 더해 주세요.' : ''}</p>`;
   return list.map(([id, m]) => {
@@ -459,7 +461,7 @@ function missionItems(list) {
     const dots = isEach(m) ? (eachDone(id).length ? ` · ${ic('check')} ${eachDone(id).length}명` : '') : Object.entries(G.teams).filter(([t]) => G.done[t]?.[id]?.status === 'ok').map(([, t]) => `<i style="background:${esc(t.color)}"></i>`).join('');
     return `<div class="item" data-m="${id}">
       <div class="ic ${st || ''}">${ic(st === 'ok' ? 'check' : st === 'wait' ? 'wait' : TYPES[m.type]?.[0] || 'pin')}</div>
-      <div class="tx"><b>${esc(m.title)}</b><small>${solo() ? '' : `<span class="kind ${m.each ? 'each' : 'team'}">${m.each ? '개인' : '팀'}</span> `}${TYPES[m.type]?.[1] || ''} · ${m.pts || 0}점${m.open === false ? ' · 닫힘' : m.until ? ` · ${ic('clock')}${cd(m)}` : ''}<span class="dots">${dots}</span></small></div>
+      <div class="tx"><b>${esc(m.title)}</b><small>${kindBadge(m)}${TYPES[m.type]?.[1] || ''} · ${m.pts || 0}점${m.open === false ? ' · 닫힘' : m.until ? ` · ${ic('clock')}${cd(m)}` : ''}<span class="dots">${dots}</span></small></div>
       <div class="rt">${d}</div></div>`;
   }).join('');
 }
@@ -1051,7 +1053,7 @@ function openMission(id) {
   // 테스트 모드: 미션 자리로 바로 옮겨 가 본다
   if (sim && !d) act += `<button class="btn wide" id="simGo">${ic('flask')} 여기로 이동 (테스트)</button>`;
   const host = isHost() ? `<div class="hostgrid"><button class="btn small" id="mEdit">수정</button><button class="btn small" id="mToggle">${m.open === false ? '열기' : '닫기'}</button><button class="btn small danger" id="mDel">삭제</button></div>` : '';
-  openSheet(`<p class="eyebrow">${tic(m.type)} ${TYPES[m.type]?.[1]}${solo() ? '' : m.each ? ' · 개인 미션 — 팀원 각자 해서 팀 점수에 보태요' : m.type === 'tag' ? '' : ' · 팀 미션 — 팀에서 한 명만 하면 돼요'} · ${m.pts || 0}점</p><h3>${esc(m.title)}</h3>
+  openSheet(`<p class="eyebrow">${tic(m.type)} ${TYPES[m.type]?.[1]}${solo() ? '' : m.each ? ' · 개인 미션 — 팀원 각자 해서 팀 점수에 보태요' : m.type === 'tag' ? (m.itHost ? ' · 진행자가 술래' : ' · 팀마다 술래') : ' · 팀 미션 — 팀에서 한 명만 하면 돼요'} · ${m.pts || 0}점</p><h3>${esc(m.title)}</h3>
     ${m.desc ? `<p class="fine">${esc(m.desc)}</p>` : ''}${m.until && m.open !== false && !expired(m) && !d ? `<div class="box warn">${ic('clock')} 깜짝 미션 — 남은 시간 <b>${cd(m)}</b></div>` : ''}<div class="teamrow">${others}</div>${act}${host}`, el => {
     el.querySelector('#qForm')?.addEventListener('submit', async e => {
       e.preventDefault();
@@ -1307,9 +1309,10 @@ function hostPanel() {
     ${waits.length ? waits.map(({ kind, who, tid, mid, d }) => `<div class="item" data-judge="${kind}|${who}|${mid}"><div class="ic wait">${tic(G.missions[mid]?.type)}</div>
       <div class="tx"><b>${esc(G.missions[mid]?.title || mid)}${kind === 'u' && !solo() ? ' (개인)' : ''}</b><small><span class="dot" style="background:${esc(kind === 'u' && solo() ? personColor(who) : teamOf(tid).color)}"></span> ${solo() ? '' : esc(teamOf(tid).name) + ' · '}${esc(d.name)} · ${clock(d.t)}</small></div><div class="rt">보기 ›</div></div>`).join('') : '<p class="empty">없어요.</p>'}`;
   return `<div class="code">${G.code}</div><p class="fine" style="text-align:center">참가자에게 이 코드를 알려 주세요 · <button class="link" id="hCopy" data-link="${esc(link)}">초대 링크 복사</button></p>
+    ${live ? waitList : ''}
     <div class="group-h">${ended ? '게임이 끝났어요' : live ? '진행 중' : '시작 전'}</div>
     <div class="hlist">${order[0].filter(ok).map(row).join('')}</div>
-    ${live || waits.length ? waitList : ''}
+    ${!live && waits.length ? waitList : ''}
     <div class="group-h">그 밖에</div>
     <div class="hlist">${order[1].filter(ok).map(row).join('')}</div>
     ${!live && !waits.length ? waitList : ''}`;
@@ -1324,7 +1327,7 @@ function missionManager() {
     <div class="hostgrid"><button class="btn small primary" id="mgAdd">${ic('plus')} 미션 더하기</button><button class="btn small" id="mgSample">${ic('flag')} 샘플 넣기</button><button class="btn small" id="mgExport">${ic('down')} 표 내려받기</button></div>
     ${list.length ? `<div class="mgr">${list.map(([id, m], i) => `<div class="mrow${m.open === false ? ' off' : ''}" data-id="${id}">
       <span class="no">${i + 1}</span><div class="ic">${tic(m.type)}</div>
-      <div class="tx" data-edit><b>${esc(m.title)}</b><small>${solo() ? '' : m.type === 'tag' ? '<span class="kind team">팀</span> ' : `<span class="kind ${m.each ? 'each' : 'team'}">${m.each ? '개인' : '팀'}</span> `}${TYPES[m.type]?.[1] || ''} · ${m.pts || 0}점${m.limit ? ` · 깜짝 ${m.limit}분` : ''}${m.open === false ? ' · 닫힘' : m.until ? ' · ' + cd(m) : ''}</small></div>
+      <div class="tx" data-edit><b>${esc(m.title)}</b><small>${kindBadge(m)}${TYPES[m.type]?.[1] || ''} · ${m.pts || 0}점${m.limit ? ` · 깜짝 ${m.limit}분` : ''}${m.open === false ? ' · 닫힘' : m.until ? ' · ' + cd(m) : ''}</small></div>
       <div class="acts"><button class="mb" data-up ${i ? '' : 'disabled'} aria-label="위로">${ic('up')}</button><button class="mb" data-down ${i < list.length - 1 ? '' : 'disabled'} aria-label="아래로">${ic('down')}</button>
         <button class="mb txt" data-open>${m.open === false ? '열기' : '닫기'}</button><button class="mb txt del" data-del>삭제</button></div></div>`).join('')}</div>
       <p class="fine">이름을 누르면 고쳐요. 닫은 미션은 참가자에게 안 보여요.</p>` : '<p class="empty">아직 미션이 없어요. 더하거나 샘플을 넣어 보세요.</p>'}`, el => {
@@ -1357,7 +1360,7 @@ function missionManager() {
 function sampleSheet() {
   const opts = Object.entries(SAMPLES);
   const c = G.meta.center;
-  const row = s => s.missions.filter(x => x.type !== 'tag' || !solo()).map(x => `<li>${esc(x.title)} <small class="fine">· ${TYPES[x.type][1]}${solo() ? '' : x.type === 'tag' ? '' : x.each ? ' · 개인' : ' · 팀'} · ${x.pts}점</small></li>`).join('');
+  const row = s => s.missions.filter(x => x.type !== 'tag' || !solo()).map(x => `<li>${esc(x.title)} <small class="fine">· ${TYPES[x.type][1]}${solo() ? '' : x.type === 'tag' ? (x.itHost ? ' · 진행자 술래(넣는 사람)' : '') : x.each ? ' · 개인' : ' · 팀'} · ${x.pts}점</small></li>`).join('');
   openSheet(`<p class="eyebrow">샘플 미션 넣기</p><h3>지역 샘플을 한 번에 넣어요</h3>
     <label>지역<select id="smpWhich">${opts.map(([k, s]) => `<option value="${k}">${esc(s.name)} (${s.missions.length}개)</option>`).join('')}</select></label>
     <div id="smpInfo"></div><ul class="smp" id="smpList"></ul>
@@ -1384,6 +1387,7 @@ function sampleSheet() {
           const mv = { ...v, order: order++, open: x.open !== false };
           if (solo()) delete mv.each;
           if (x.type === 'tag') Object.assign(mv, { it: {} }, zone(mv)); // 구역은 이 게임의 지역 전체
+          if (x.type === 'tag' && x.itHost) mv.itHost = net.me(); // 진행자 술래: 샘플을 넣는 진행자가 술래 (미션 관리에서 바꿀 수 있다)
           if (ans) mv.ah = await answerHash(id, ans);
           await net.saveMission(G.code, id, mv);
         }
@@ -1399,9 +1403,9 @@ function exportMissions() {
   if (!list.length) { toast('아직 미션이 없어요.'); return; }
   const cell = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   const head = ['순서', '미션', '종류', '팀/개인', '점수', '반경(m)', '위도', '경도', '설명', '퀴즈 문제', '술래', '상태', '해낸 팀·사람'];
-  const rows = list.map(([id, m], i) => [i + 1, m.title, TYPES[m.type]?.[1] || m.type, solo() ? '개인전' : m.type === 'tag' ? '팀' : m.each ? '개인' : '팀', m.pts || 0, zone(m).r || 0,
+  const rows = list.map(([id, m], i) => [i + 1, m.title, TYPES[m.type]?.[1] || m.type, solo() ? '개인전' : m.type === 'tag' ? (m.itHost ? '진행자 술래' : '팀마다 술래') : m.each ? '개인' : '팀', m.pts || 0, zone(m).r || 0,
     zone(m).lat?.toFixed(6), zone(m).lng?.toFixed(6), m.desc || '', m.q || '',
-    Object.entries(m.it || {}).map(([tid, u]) => `${teamOf(tid).name} ${G.members[u]?.name || '?'}`).join(' / '),
+    m.itHost ? `진행자 ${G.members[m.itHost]?.name || '?'}` : Object.entries(m.it || {}).map(([tid, u]) => `${teamOf(tid).name} ${G.members[u]?.name || '?'}`).join(' / '),
     m.open === false ? '닫힘' : '열림',
     isEach(m) ? eachDone(id).map(([u]) => G.members[u]?.name || '?').join(' / ') : Object.keys(G.teams).filter(t => G.done[t]?.[id]?.status === 'ok').map(t => teamOf(t).name).join(' / ')]);
   const csv = '\ufeff' + [head, ...rows].map(r => r.map(cell).join(',')).join('\r\n');
