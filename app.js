@@ -40,6 +40,7 @@ const TEAM_PRESET = [['청팀', '#3d7be0'], ['홍팀', '#e0503d'], ['녹팀', '#
 // 개인전: 사람마다 색 (uid로 늘 같은 색)
 const PERSON_COLORS = ['#3d7be0', '#e0503d', '#3dae6a', '#d9a520', '#8e5bd6', '#e8862e', '#3fbfd9', '#e06aa8', '#7fae3a', '#c0763f', '#5a6fd6', '#d6455f'];
 const personColor = uid => PERSON_COLORS[[...uid].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % PERSON_COLORS.length];
+// 현장 미션(task)은 증거가 남지 않아 새로 만들 수 없게 했다(사진·음성으로) — 예전에 만든 것은 그대로 돈다
 const TYPES = { arrive: ['pin', '도착'], quiz: ['quiz', '퀴즈'], photo: ['camera', '사진'], task: ['flag', '현장 미션'], voice: ['mic', '음성'], tag: ['tag', '술래잡기'] };
 const tic = type => ic(TYPES[type]?.[0] || 'pin');
 // 알림(팀 없는 소식)은 확성기 아이콘으로 — 예전 소식 앞의 이모티콘은 떼어 낸다
@@ -1755,7 +1756,7 @@ function missionForm(id, draftM, back) {
   const m = draftM || (id ? { ...G.missions[id] } : { type: 'arrive', r: 25, pts: 10, open: true, order: Object.keys(G.missions).length });
   openSheet(`${back ? `<button class="link" id="mfBack">‹ 미션 목록</button>` : ''}<h3>${id ? '미션 고치기' : '새 미션'}</h3><form class="stack" id="mf">
     <input name="title" placeholder="미션 이름 (예: 경기전 홍살문)" value="${esc(m.title || '')}" required>
-    <label>종류<select name="type">${Object.entries(TYPES).filter(([k]) => k !== 'tag' || !solo() || m.type === 'tag').map(([k, [, n]]) => `<option value="${k}" ${m.type === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+    <label>종류<select name="type">${Object.entries(TYPES).filter(([k]) => (k !== 'tag' || !solo() || m.type === 'tag') && (k !== 'task' || m.type === 'task')).map(([k, [, n]]) => `<option value="${k}" ${m.type === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
     <div class="tagset stack"><p class="fine">누가 술래인가요?</p>
       <div class="seg" id="itSeg"><button type="button" data-v="">팀마다 한 명</button><button type="button" data-v="host">진행자</button></div><input type="hidden" name="itMode" value="${m.itHost ? 'host' : ''}">
       <div class="ithost stack"><p class="fine">진행자 한 명이 모든 팀의 술래예요. 팀마다 진행자를 찾아 사진을 찍어 인정받으면 그 팀이 점수를 받아요(팀마다 한 번).</p>
