@@ -121,6 +121,11 @@ function label(text, color = '#1d1813', sub = '', icon = null) {
   s.renderOrder = 10;
   return s;
 }
+// 장면에서 뺀 묶음의 도형을 버린다(그래픽 메모리). 도형은 물체마다 새로 만들어 저마다 가지므로 버려도 다른 것에 탈이 없고,
+// 재질은 여럿이 함께 쓰니(vmat·인형 재질 등) 그대로 둔다. 이름표(Sprite)는 그것만의 그림·재질이라 함께 버린다(Sprite 도형은 three가 함께 쓴다)
+function freeObj(o) {
+  o?.traverse(n => { if (n.isSprite) { n.material.map?.dispose(); n.material.dispose(); } else n.geometry?.dispose(); });
+}
 function relabel(holder, key, ...args) {
   const old = holder[key];
   const s = label(...args);
@@ -153,7 +158,7 @@ export function upsertPlayer(info) {
   let p = players.get(info.uid);
   const look = outfit(info.avatar, info.robe || info.color, info.uid); // 겉옷은 각자 고른 색, 팀은 이름표·고리 색으로
   if (!p || p.look !== look) {
-    if (p) scene.remove(p.g);
+    if (p) { scene.remove(p.g); freeObj(p.g); } // 옛 인형·이름표·차는 새로 만든다
     const g = new THREE.Group();
     const actor = new Actor(look, 0, 0, 0);
     actor.settle();
@@ -205,6 +210,7 @@ export function removePlayer(uid) {
   const p = players.get(uid);
   if (!p) return;
   scene.remove(p.g);
+  freeObj(p.g);
   players.delete(uid);
   buses.forEach(b => (b.members = b.members.filter(m => m !== p)));
 }
@@ -350,7 +356,7 @@ function drapeMission(o) {
 }
 export function removeMission(id) {
   const o = missions.get(id);
-  if (o) { scene.remove(o.g); missions.delete(id); }
+  if (o) { scene.remove(o.g); freeObj(o.g); missions.delete(id); }
 }
 
 /* ---------- 탈것: 빠르면 자동차, 여럿이 함께 움직이면 오픈버스 ----------
@@ -473,7 +479,7 @@ const avgV = list => [list.reduce((s, p) => s + p.vx, 0) / list.length, list.red
 //  2) 버스에 안 탄 움직이는 사람 — 다니는 버스 곁(25m)에서 같이 가면 바로 타고, 아니면 가깝고(25m) 속도가 비슷한(1.5m/s)
 //     사람끼리 묶어 4명 넘게 20초 넘게 같이 다니면 새 버스에 태운다
 function updateGroups(now) {
-  const drop = (id, b) => { if (b.g) scene.remove(b.g); if (b.tag) scene.remove(b.tag); b.members.forEach(p => p.bus === id && (p.bus = null)); buses.delete(id); };
+  const drop = (id, b) => { if (b.g) { scene.remove(b.g); freeObj(b.g); } if (b.tag) { scene.remove(b.tag); freeObj(b.tag); } b.members.forEach(p => p.bus === id && (p.bus = null)); buses.delete(id); };
   buses.forEach((b, id) => {
     b.members = b.members.filter(p => players.get(p.uid) === p && alive(p) && Math.hypot(p.cur.x - b.x, p.cur.y - b.z) < 35);
     players.forEach(p => { if (p.bus === id && !b.members.includes(p)) p.bus = null; });
@@ -533,7 +539,7 @@ function placeBuses(dt) {
     const m = b.members.filter(p => p.cur);
     if (!m.length) return;
     const lay = seating(m.length);
-    if (lay.key !== b.key) { if (b.g) scene.remove(b.g); b.g = makeBus(lay.L); b.key = lay.key; scene.add(b.g); }
+    if (lay.key !== b.key) { if (b.g) { scene.remove(b.g); freeObj(b.g); } b.g = makeBus(lay.L); b.key = lay.key; scene.add(b.g); } // 탄 사람 수가 바뀌면 버스를 새로 — 옛 버스 도형은 버린다
     const cx = m.reduce((s, p) => s + p.cur.x, 0) / m.length, cz = m.reduce((s, p) => s + p.cur.y, 0) / m.length;
     b.x = damp(b.x, cx, 3, dt); b.z = damp(b.z, cz, 3, dt);
     const vx = m.reduce((s, p) => s + p.vx, 0), vz = m.reduce((s, p) => s + p.vz, 0);
