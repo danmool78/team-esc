@@ -131,8 +131,8 @@ function freeObj(o) {
     if (n.material?.userData?.own) n.material.dispose(); // 가벼운 인형은 흐리게 하려고 재질을 사람마다 따로 가진다
   });
 }
-// 가벼운 3D 인형(toy.js) 시험: 주소에 ?toy면 그 길 인형 대신 (한 사람에 그리기 5번)
-const TOY = typeof location !== 'undefined' && new URLSearchParams(location.search).has('toy');
+// 인형은 가벼운 3D 인형(toy.js — 한 사람에 그리기 5번, 그 길 인형은 수십 번)이 기본. 주소에 ?classic이면 그 길 인형
+const TOY = !(typeof location !== 'undefined' && new URLSearchParams(location.search).has('classic'));
 const newActor = (look, face = 0) => (TOY ? Object.assign(new ToyActor(look), { face, faceT: face }) : new Actor(look, 0, 0, face));
 function relabel(holder, key, ...args) {
   const old = holder[key];
@@ -810,7 +810,8 @@ export function avatarThumb(type, color, seed) {
     s.add(new THREE.HemisphereLight(0xfff4dc, 0x6b6250, 2));
     const l = new THREE.DirectionalLight(0xffffff, 1.6); l.position.set(-1, 2, 2); s.add(l);
     const c = new THREE.PerspectiveCamera(26, 120 / 150, 0.1, 20);
-    c.position.set(0, 0.75, 3.1); c.lookAt(0, 0.5, 0);
+    // 가벼운 인형은 머리가 커서 같은 틀이면 작아 보인다 — 몸 전체가 틀에 꽉 차게 가까이
+    if (TOY) { c.position.set(0, 0.62, 2.5); c.lookAt(0, 0.54, 0); } else { c.position.set(0, 0.75, 3.1); c.lookAt(0, 0.5, 0); }
     thumbR = { r, s, c };
   }
   const a = newActor(type, 0.35);
