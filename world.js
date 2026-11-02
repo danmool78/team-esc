@@ -6,6 +6,7 @@
    인형은 실제 크기로는 점처럼 작아 보여서, 카메라가 멀어질수록 함께 키운다 (자리는 그대로, 크기만) */
 import { THREE, damp, glowTexture } from './stage/kit.js';
 import { Actor, TYPES } from './stage/people.js';
+import { ToyActor } from './toy.js';
 import { buildTerrain } from './terrain.js';
 import { setBuildingsOn } from './buildings.js';
 import { iconImage } from './icons.js';
@@ -124,8 +125,15 @@ function label(text, color = '#1d1813', sub = '', icon = null) {
 // 장면에서 뺀 묶음의 도형을 버린다(그래픽 메모리). 도형은 물체마다 새로 만들어 저마다 가지므로 버려도 다른 것에 탈이 없고,
 // 재질은 여럿이 함께 쓰니(vmat·인형 재질 등) 그대로 둔다. 이름표(Sprite)는 그것만의 그림·재질이라 함께 버린다(Sprite 도형은 three가 함께 쓴다)
 function freeObj(o) {
-  o?.traverse(n => { if (n.isSprite) { n.material.map?.dispose(); n.material.dispose(); } else n.geometry?.dispose(); });
+  o?.traverse(n => {
+    if (n.isSprite) { n.material.map?.dispose(); n.material.dispose(); return; }
+    if (!n.geometry?.userData.shared) n.geometry?.dispose(); // 가벼운 인형(toy.js)의 도형은 같은 옷차림끼리 함께 쓰니 두고
+    if (n.material?.userData?.own) n.material.dispose(); // 가벼운 인형은 흐리게 하려고 재질을 사람마다 따로 가진다
+  });
 }
+// 가벼운 3D 인형(toy.js) 시험: 주소에 ?toy면 그 길 인형 대신 (한 사람에 그리기 5번)
+const TOY = typeof location !== 'undefined' && new URLSearchParams(location.search).has('toy');
+const newActor = (look, face = 0) => (TOY ? Object.assign(new ToyActor(look), { face, faceT: face }) : new Actor(look, 0, 0, face));
 function relabel(holder, key, ...args) {
   const old = holder[key];
   const s = label(...args);
@@ -160,7 +168,7 @@ export function upsertPlayer(info) {
   if (!p || p.look !== look) {
     if (p) { scene.remove(p.g); freeObj(p.g); } // 옛 인형·이름표·차는 새로 만든다
     const g = new THREE.Group();
-    const actor = new Actor(look, 0, 0, 0);
+    const actor = newActor(look);
     actor.settle();
     g.add(actor.p.root);
     // 발밑 고리: 팀 색. 멀리서도 누가 어느 팀인지 보이게
@@ -805,7 +813,7 @@ export function avatarThumb(type, color, seed) {
     c.position.set(0, 0.75, 3.1); c.lookAt(0, 0.5, 0);
     thumbR = { r, s, c };
   }
-  const a = new Actor(type, 0, 0, 0.35);
+  const a = newActor(type, 0.35);
   a.settle();
   thumbR.s.add(a.p.root);
   thumbR.r.render(thumbR.s, thumbR.c);
